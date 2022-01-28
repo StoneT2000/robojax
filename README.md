@@ -6,6 +6,9 @@ Features:
 - Reproducible: Reproducibility plagues every field, especially RL where results are often very unstable. So **everything** is not only seeded, it's also made obvious how things are seeded, initialized, randomly generated etc.
 - Paper references: This repository intends to reference papers / articles / equations etc. directly as much as possible. This can help you learn from code and text, not just text, and / or help you write your own RL code using all the tricks papers use without telling you about them.
 
+relies on mpi4py for any kind of multiprocessing
+
+
 ## Setup
 
 I highly recommend using conda. Otherwise you can try and install all the packages yourself (at your own risk of not getting reproducible results)
