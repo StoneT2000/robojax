@@ -1,11 +1,18 @@
 import torch.nn as nn
 
+
+def count_vars(module):
+    return sum([np.prod(p.shape) for p in module.parameters()])
+
+
 def mlp(sizes, activation, output_activation=nn.Identity):  # TODO
     layers = []
     for j in range(len(sizes) - 1):
         act = activation if j < len(sizes) - 2 else output_activation
         layers += [nn.Linear(sizes[j], sizes[j + 1]), act()]
     return nn.Sequential(*layers)
+
+
 class Actor(nn.Module):
     def _distribution(self, obs):
         raise NotImplementedError
@@ -22,3 +29,17 @@ class Actor(nn.Module):
         if act is not None:
             logp_a = self._log_prob_from_distribution(pi, act)
         return pi, logp_a
+
+
+class ActorCritic(nn.Module):
+    pi: Actor
+    v: nn.Module
+
+    def __init__(self):
+        super().__init__()
+
+    def step(self, obs):
+        raise NotImplementedError
+
+    def act(self, obs, deterministic=False):
+        raise NotImplementedError

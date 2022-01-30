@@ -1,13 +1,9 @@
 import box_pusher.models.core as core
 import numpy as np
 import torch
-from box_pusher.agents.utils.mpi_tools import (
-    mpi_avg,
-    mpi_fork,
-    mpi_statistics_scalar,
-    num_procs,
-    proc_id,
-)
+from box_pusher.agents.utils.mpi_tools import (mpi_avg, mpi_fork,
+                                               mpi_statistics_scalar,
+                                               num_procs, proc_id)
 
 
 class PPOBuffer:

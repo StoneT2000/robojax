@@ -21,11 +21,10 @@ import joblib
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils import tensorboard
-from torch.utils.tensorboard import SummaryWriter
-
 from box_pusher.agents.utils.mpi_tools import mpi_statistics_scalar, proc_id
 from box_pusher.agents.utils.serialization_utils import convert_json
+from torch.utils import tensorboard
+from torch.utils.tensorboard import SummaryWriter
 
 color2num = dict(
     gray=30,

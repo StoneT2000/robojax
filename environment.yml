@@ -49,7 +49,11 @@ dependencies:
     # Exp tracking
     - tensorboard
     - wandb
+
     # More Deep Learning
     - tensorflow
     - huggingface_hub
     - pyglet>=1.4.0
+
+    # More RL
+    - stable-baselines3

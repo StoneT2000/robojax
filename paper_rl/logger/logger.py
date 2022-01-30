@@ -1,17 +1,20 @@
-from collections import defaultdict
-from typing import Dict
 import json
 import os
 import os.path as osp
-from pathlib import Path
 import shutil
 import sys
 import time
+from collections import defaultdict
+from pathlib import Path
+from typing import Dict
+
 import numpy as np
 import pandas as pd
 import torch
+
 from paper_rl.common.mpi.mpi_tools import mpi_statistics_scalar, proc_id
 from paper_rl.common.mpi.serialization_utils import convert_json
+
 color2num = dict(
     gray=30,
     red=31,
@@ -23,6 +26,8 @@ color2num = dict(
     white=37,
     crimson=38,
 )
+
+
 def colorize(string, color, bold=False, highlight=False):
     """
     Colorize a string.
@@ -39,14 +44,15 @@ def colorize(string, color, bold=False, highlight=False):
     return "\x1b[%sm%s\x1b[0m" % (";".join(attr), string)
 
 
-class Logger():
+class Logger:
     """
     Logging tool
     """
+
     def __init__(
         self,
-        wandb = False,
-        tensorboard = False,
+        wandb=False,
+        tensorboard=False,
         workspace: str = "default_workspace",
         exp_name: str = "default_exp",
         clear_out: bool = True,
@@ -69,25 +75,24 @@ class Logger():
             if clear_out:
                 if osp.exists(self.exp_path):
                     shutil.rmtree(self.exp_path, ignore_errors=True)
-        
+
         Path(self.log_path).mkdir(parents=True, exist_ok=True)
 
         # set up external loggers
         if self.tensorboard:
             from torch.utils.tensorboard import SummaryWriter
+
             self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
             pass
 
-
         self.data = defaultdict(dict)
         self.stats = {}
 
-        
     def close(self):
         if self.tensorboard:
             self.tb_writer.close()
-    
+
     def save_config(self, config: Dict, verbose=2):
         """
         save configuration of experiments to the experiment directory
@@ -102,6 +107,7 @@ class Logger():
                 self.print(output)
             with open(config_path, "w") as out:
                 out.write(output)
+
     def print(self, msg, file=sys.stdout, color="", bold=False):
         """
         print to terminal, stdout by default. Ensures only the main process ever prints.
@@ -133,14 +139,16 @@ class Logger():
                     self.data[tag][k] = [v]
             else:
                 self.data[tag][k] = v
+
     def get_data(self, tag=None):
         if tag is None:
-            data_dict ={}
+            data_dict = {}
             for tag in self.data.keys():
                 for k, v in self.data[tag].items():
                     data_dict[f"{tag}/{k}"] = v
             return data_dict
         return self.data[tag]
+
     def pretty_print_table(self, data):
         if proc_id() == 0:
             vals = []
@@ -156,7 +164,7 @@ class Logger():
                 print(fmt % (key, valstr))
                 vals.append(val)
             print("-" * n_slashes, flush=True)
-    
+
     def log(self, step):
         """
         log accumulated data to tensorboard if enabled and to the terminal and locally. Also syncs collected data across processes
@@ -189,6 +197,7 @@ class Logger():
                             self.tb_writer.add_scalar(name, scalar, step)
                         self.stats[name] = scalar
         return self.stats
+
     def reset(self):
         """
         call this each time after log is called

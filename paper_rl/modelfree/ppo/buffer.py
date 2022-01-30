@@ -2,11 +2,11 @@ from typing import Any, Dict, Generator, List, Optional, Union
 
 import numpy as np
 import torch
-from paper_rl.common.mpi.mpi_tools import mpi_statistics_scalar
-from paper_rl.common.stats import discount_cumsum
 from gym import spaces
 
 from paper_rl.common.buffer import BaseBuffer
+from paper_rl.common.mpi.mpi_tools import mpi_statistics_scalar
+from paper_rl.common.stats import discount_cumsum
 
 
 class PPOBuffer(BaseBuffer):

@@ -6,7 +6,7 @@ from gym.spaces import Box, Discrete
 from torch.distributions.categorical import Categorical
 from torch.distributions.normal import Normal
 
-from paper_rl.architecture.ac.core import Actor, mlp
+from paper_rl.architecture.ac.core import Actor, ActorCritic, mlp
 
 
 class MLPCategoricalActor(Actor):
@@ -20,7 +20,7 @@ class MLPCategoricalActor(Actor):
 
     def _log_prob_from_distribution(self, pi, act):
         return pi.log_prob(act)
-    
+
     def act(self, obs):
         logits = self.logits_net(obs)
         return logits.argmax()
@@ -42,7 +42,7 @@ class MLPGaussianActor(Actor):
         return pi.log_prob(act).sum(
             axis=-1
         )  # Last axis sum needed for Torch Normal distribution
-    
+
     def act(self, obs):
         mu = self.mu_net(obs)
         return mu
@@ -59,7 +59,7 @@ class MLPCritic(nn.Module):
         )  # Critical to ensure v has right shape.
 
 
-class MLPActorCritic(nn.Module):
+class MLPActorCritic(ActorCritic):
     def __init__(
         self,
         observation_space,
