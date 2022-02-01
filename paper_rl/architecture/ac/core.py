@@ -1,5 +1,5 @@
 import torch.nn as nn
-
+import numpy as np
 
 def count_vars(module):
     return sum([np.prod(p.shape) for p in module.parameters()])
@@ -20,11 +20,11 @@ class Actor(nn.Module):
     def _log_prob_from_distribution(self, pi, act):
         raise NotImplementedError
 
-    def forward(self, obs, act=None, device=None):
+    def forward(self, obs, act=None):
         # Produce action distributions for given observations, and
         # optionally compute the log likelihood of given actions under
         # those distributions.
-        pi = self._distribution(obs, device=device)
+        pi = self._distribution(obs)
         logp_a = None
         if act is not None:
             logp_a = self._log_prob_from_distribution(pi, act)

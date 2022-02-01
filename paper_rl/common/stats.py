@@ -1,3 +1,4 @@
+import scipy.signal
 def discount_cumsum(x, discount):
     """
     magic from rllab for computing discounted cumulative sums of vectors.

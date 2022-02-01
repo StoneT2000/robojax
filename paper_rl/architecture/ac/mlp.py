@@ -54,8 +54,9 @@ class MLPCritic(nn.Module):
         self.v_net = mlp([obs_dim] + list(hidden_sizes) + [1], activation)
 
     def forward(self, obs):
+        out = self.v_net(obs)
         return torch.squeeze(
-            self.v_net(obs), -1
+            out, -1
         )  # Critical to ensure v has right shape.
 
 
