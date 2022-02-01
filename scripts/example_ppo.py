@@ -14,8 +14,8 @@ from stable_baselines3.common.env_util import make_vec_env
 # or use stable baselines vecenv style. - which also makes it easy to utilize the GPU.
 
 if __name__ == "__main__":
-    env_id = "Pendulum-v0"
-    # env_id = "CartPole-v1"
+    # env_id = "Pendulum-v0"
+    env_id = "CartPole-v1"
     num_cpu = 4
     seed = 1
     # def make_env(gym_id, seed, idx):
@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # torch.set_num_threads(1)
 
     logger = Logger(tensorboard=True)
-    steps_per_epoch=2000 // num_cpu
+    steps_per_epoch=2048 // num_cpu
     batch_size=512
     algo = PPO(
         ac=model,
@@ -57,9 +57,12 @@ if __name__ == "__main__":
         vf_coef=.5,
         train_iters=20,#80 // (steps_per_epoch * num_cpu // batch_size)
     )
-    algo.train(max_ep_len=1000, n_epochs=200, 
-    optim=optim,
-    batch_size=batch_size)
+    algo.train(max_ep_len=1000,start_epoch=0, n_epochs=4, optim=optim, batch_size=batch_size)
+    # for epoch in range(4):
+        # algo.train(max_ep_len=1000,start_epoch=epoch, n_epochs=1, optim=optim, batch_size=batch_size)
+    # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)
+    # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)
+    # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)
 
     env.close()
     # eval_env = gym.vector.AsyncVectorEnv(

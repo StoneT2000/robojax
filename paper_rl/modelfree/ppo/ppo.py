@@ -99,7 +99,8 @@ class PPO:
 
     def train(
         self, 
-        train_callback=None, 
+        train_callback=None,
+        rollout_callback=None,
         max_ep_len=None,
         start_epoch: int = 0,
         n_epochs: int = 10,
@@ -211,10 +212,10 @@ class PPO:
                 )
 
 
-        # observations, ep_returns, ep_lengths = env.reset(), 0, 0
-        observations, ep_returns, ep_lengths = env.reset(), np.zeros(self.n_envs), np.zeros(self.n_envs)
+        
         # to tweak, just copy the code below
         for epoch in range(start_epoch, start_epoch + n_epochs):
+            observations, ep_returns, ep_lengths = env.reset(), np.zeros(self.n_envs), np.zeros(self.n_envs)
             rollout_start_time = time.time_ns()
             for t in range(self.steps_per_epoch):
                 a, v, logp = ac.step(torch.as_tensor(observations, dtype=torch.float32))
@@ -224,6 +225,7 @@ class PPO:
                 ep_returns += rewards
                 ep_lengths += 1
                 buf.store(observations, a, rewards, v, logp)
+                if rollout_callback is not None: rollout_callback(observations=observations, next_observations=next_os, actions=a, rewards=rewards, infos=infos, dones=dones)
                 logger.store(tag="train", VVals=v)
 
                 observations = next_os
@@ -254,7 +256,6 @@ class PPO:
                             logger.store("train", EpRet=ep_ret, EpLen=ep_len)
                         ep_returns[idx] = 0
                         ep_lengths[idx] = 0
-                        # observations, ep_ret, ep_len = env.reset(), np.zeros(self.n_envs), np.zeros(self.n_envs)
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
             logger.store("train", RolloutTime=rollout_delta_time, append=False)
