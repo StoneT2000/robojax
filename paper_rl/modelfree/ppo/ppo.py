@@ -65,8 +65,8 @@ class PPO:
         self.gae_lambda = gae_lambda
         self.gamma = gamma
 
-        self.pi_optimizer = optim.Adam(ac.pi.parameters(), lr=pi_lr)
-        self.vf_optimizer = optim.Adam(ac.v.parameters(), lr=vf_lr)
+        # self.pi_optimizer = optim.Adam(ac.pi.parameters(), lr=pi_lr)
+        # self.vf_optimizer = optim.Adam(ac.v.parameters(), lr=vf_lr)
 
         # exp params
         self.train_iters = train_iters
@@ -75,10 +75,10 @@ class PPO:
 
         self.logger = logger
         self.buffer = PPOBuffer(
-            size=self.steps_per_epoch,
+            buffer_size=self.steps_per_epoch,
             observation_space=self.env.observation_space,
             action_space=self.env.action_space,
-            # n_envs=self.n_envs,
+            n_envs=self.n_envs,
             gamma=self.gamma,
             lam=self.gae_lambda,
         )
@@ -117,60 +117,36 @@ class PPO:
         target_kl = self.target_kl
 
         # Set up function for computing PPO policy loss
-        # def compute_loss_pi(data):
-        #     obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
-        #     # if isinstance(self.env.action_space, spaces.Discrete):
-        #         # Convert discrete action from float to long
-        #         # print(act.shape, act[:2])
-        #         # act = act.long().flatten()
-        #         # print(act.shape, act[:2])
-
-        #     # Policy loss
-        #     pi, logp = ac.pi(obs, act)
-        #     ratio = torch.exp(logp - logp_old)
-        #     clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
-        #     loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
-
-        #     # Entropy loss for some basic extra exploration
-        #     entropy = pi.entropy()
-
-        #     # Useful extra info
-        #     approx_kl = (logp_old - logp).mean().item()
-            
-        #     clipped = ratio.gt(1+clip_ratio) | ratio.lt(1-clip_ratio)
-        #     clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
-        #     pi_info = dict(kl=approx_kl, ent=entropy.mean().item(), cf=clipfrac)
-
-        #     return loss_pi, logp, entropy, pi_info
-
-        # # Set up function for computing value loss
-        # def compute_loss_v(data):
-        #     obs, ret = data['obs'], data['ret']
-        #     return ((ac.v(obs) - ret)**2).mean()
-
         def compute_loss_pi(data):
-            obs, act, adv, logp_old = data["obs"], data["act"], data["adv"], data["logp"]
+            obs, act, adv, logp_old = data['obs'], data['act'], data['adv'], data['logp']
+            # if isinstance(self.env.action_space, spaces.Discrete):
+                # Convert discrete action from float to long
+                # print(act.shape, act[:2])
+                # act = act.long().flatten()
+                # print(act.shape, act[:2])
 
             # Policy loss
             pi, logp = ac.pi(obs, act)
             ratio = torch.exp(logp - logp_old)
-            clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
+            clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
             loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
 
-            # Useful extra info
-            # TODO swap this with http://joschu.net/blog/kl-approx.html ?
-            approx_kl = (logp_old - logp).mean().item()
-            ent = pi.entropy().mean().item()
-            clipped = ratio.gt(1 + clip_ratio) | ratio.lt(1 - clip_ratio)
-            clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
-            pi_info = dict(kl=approx_kl, ent=ent, cf=clipfrac)
+            # Entropy loss for some basic extra exploration
+            entropy = pi.entropy()
 
-            return loss_pi, pi_info
+            # Useful extra info
+            approx_kl = (logp_old - logp).mean().item()
+            
+            clipped = ratio.gt(1+clip_ratio) | ratio.lt(1-clip_ratio)
+            clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
+            pi_info = dict(kl=approx_kl, ent=entropy.mean().item(), cf=clipfrac)
+
+            return loss_pi, logp, entropy, pi_info
 
         # Set up function for computing value loss
         def compute_loss_v(data):
-            obs, ret = data["obs"], data["ret"]
-            return ((ac.v(obs) - ret) ** 2).mean()
+            obs, ret = data['obs'], data['ret']
+            return ((ac.v(obs) - ret)**2).mean()
         def update():
             data = buf.get()
             pi_l_old, v_l_old=None, None
@@ -191,7 +167,7 @@ class PPO:
                     batch_data = dict()
                     for k, v in data.items():
                         batch_data[k] = v[max(0, (batch_idx) * batch_size): (batch_idx+1) * batch_size]
-                    loss_pi, pi_info = compute_loss_pi(batch_data)
+                    loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
                     loss_v = compute_loss_v(batch_data)
                     kl = pi_info['kl']
                     if target_kl is not None:
@@ -200,22 +176,16 @@ class PPO:
                             early_stop_update = True
                             break
 
-                    # if entropy is None:
-                    #     # Approximate entropy when no analytical form
-                    #     entropy_loss = -torch.mean(-logp)
-                    # else:
-                    #     entropy_loss = -torch.mean(entropy)
-                    # # vf_optimizer.zero_grad()
-                    # # pi_optimizer.zero_grad()
-                    # # loss = loss_pi + self.ent_coef * entropy_loss
-                    # # loss_v.backward()
-                    # # loss.backward()
+                    if entropy is None:
+                        # Approximate entropy when no analytical form
+                        entropy_loss = -torch.mean(-logp)
+                    else:
+                        entropy_loss = -torch.mean(entropy)
                     # # torch.nn.utils.clip_grad.clip_grad_norm_() # TODO
                     # # pi_optimizer.step()
                     # # vf_optimizer.step()
                     optim.zero_grad()
-                    loss = loss_pi + self.vf_coef * loss_v
-                    # loss = loss_pi + self.ent_coef * entropy_loss + self.vf_coef * loss_v
+                    loss = loss_pi + self.ent_coef * entropy_loss + self.vf_coef * loss_v
                     loss.backward()
                     optim.step()
                     update_step += 1
@@ -238,8 +208,8 @@ class PPO:
                 )
 
 
-        observations, ep_returns, ep_lengths = env.reset(), 0, 0
-        # observations, ep_returns, ep_lengths = env.reset(), np.zeros(self.n_envs), np.zeros(self.n_envs)
+        # observations, ep_returns, ep_lengths = env.reset(), 0, 0
+        observations, ep_returns, ep_lengths = env.reset(), np.zeros(self.n_envs), np.zeros(self.n_envs)
         # to tweak, just copy the code below
         for epoch in range(start_epoch, start_epoch + n_epochs):
             rollout_start_time = time.time_ns()
