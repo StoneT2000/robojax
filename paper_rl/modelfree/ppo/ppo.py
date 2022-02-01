@@ -26,6 +26,8 @@ class PPO:
         ac: ActorCritic,
         env: gym.Env,
         num_envs: int,
+        observation_space,
+        action_space,
         pi_lr: float = 3e-4,
         vf_lr: float = 3e-4,
         steps_per_epoch: int = 10000,
@@ -56,6 +58,8 @@ class PPO:
         self.n_envs = num_envs
         self.env = env  # should be vectorized
         self.device = device
+        self.observation_space = observation_space
+        self.action_space = action_space
 
         # hparams
         self.target_kl = target_kl
@@ -76,8 +80,8 @@ class PPO:
         self.logger = logger
         self.buffer = PPOBuffer(
             buffer_size=self.steps_per_epoch,
-            observation_space=self.env.observation_space,
-            action_space=self.env.action_space,
+            observation_space=observation_space,
+            action_space=action_space,
             n_envs=self.n_envs,
             gamma=self.gamma,
             lam=self.gae_lambda,
@@ -125,7 +129,7 @@ class PPO:
                 # act = act.long().flatten()
                 # print(act.shape, act[:2])
 
-            # Policy loss
+            # Policy loss)
             pi, logp = ac.pi(obs, act)
             ratio = torch.exp(logp - logp_old)
             clip_adv = torch.clamp(ratio, 1-clip_ratio, 1+clip_ratio) * adv
@@ -181,9 +185,8 @@ class PPO:
                         entropy_loss = -torch.mean(-logp)
                     else:
                         entropy_loss = -torch.mean(entropy)
-                    # # torch.nn.utils.clip_grad.clip_grad_norm_() # TODO
-                    # # pi_optimizer.step()
-                    # # vf_optimizer.step()
+                    # torch.nn.utils.clip_grad.clip_grad_norm_() # TODO
+
                     optim.zero_grad()
                     loss = loss_pi + self.ent_coef * entropy_loss + self.vf_coef * loss_v
                     loss.backward()

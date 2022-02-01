@@ -23,7 +23,7 @@ class MLPCategoricalActor(Actor):
 
     def act(self, obs):
         logits = self.logits_net(obs)
-        return logits.argmax()
+        return logits.argmax(1)
 
 
 class MLPGaussianActor(Actor):

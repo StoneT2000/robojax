@@ -134,8 +134,6 @@ class PPOBuffer(BaseBuffer):
         if isinstance(self.action_space, spaces.Discrete):
             data["act"] = self.act_buf.reshape(-1)
         else:
-            data["act"] = self.act_buf.reshape((-1, self.action_dim)),
-        # print("RET???", self.ret_buf[:4])
-        # print("RET",data["ret"][:4])
-        # print("ADV",data["adv"][:4])
+            data["act"] = self.act_buf.reshape((-1, self.action_dim))
+
         return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in data.items()}
