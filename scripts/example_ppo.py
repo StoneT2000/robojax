@@ -31,14 +31,21 @@ if __name__ == "__main__":
     # env = gym.vector.AsyncVectorEnv(
     #     [make_env(env_id, seed + i, i) for i in range(num_cpu)]
     # )
-    env = make_vec_env(env_id, num_cpu, seed=seed)
+    def make_env(seed):
+        def _init():
+            env = gym.make(env_id)
+            env.seed()
+            return env
+        return _init
+    env = SubprocVecEnv([make_env(i) for i in range(num_cpu)])
+    # env = make_vec_env(env_id, num_cpu, seed=seed)
     
     torch.manual_seed(seed)
     np.random.seed(seed)
     model = MLPActorCritic(env.observation_space, env.action_space, hidden_sizes=(64, 64))
     optim = torch.optim.Adam(model.parameters(), lr=3e-4)
-    # vf_optimizer = torch.optim.Adam(model.v.parameters(), lr=3e-4)
-    # pi_optimizer = torch.optim.Adam(model.pi.parameters(), lr=3e-4)
+    
+    
 
     # torch.set_num_threads(1)
 
@@ -53,11 +60,11 @@ if __name__ == "__main__":
         observation_space=env.observation_space,
         logger=logger,
         steps_per_epoch=steps_per_epoch,
-        ent_coef=0.01,
+        ent_coef=0.00,
         vf_coef=.5,
-        train_iters=20,#80 // (steps_per_epoch * num_cpu // batch_size)
+        train_iters=10,#80 // (steps_per_epoch * num_cpu // batch_size)
     )
-    algo.train(max_ep_len=1000,start_epoch=0, n_epochs=4, optim=optim, batch_size=batch_size)
+    algo.train(max_ep_len=1000,start_epoch=0, n_epochs=10, optim=optim, batch_size=batch_size, rollout_callback=None)
     # for epoch in range(4):
         # algo.train(max_ep_len=1000,start_epoch=epoch, n_epochs=1, optim=optim, batch_size=batch_size)
     # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)

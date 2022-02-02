@@ -167,6 +167,8 @@ class PPO:
                 if early_stop_update: break
                 N = len(data["obs"])
                 # print(data["obs"].shape, data["adv"].shape)
+                pi_optimizer.zero_grad()
+                vf_optimizer.zero_grad()
                 steps_per_train_iter = int(math.ceil(N / batch_size))
                 for batch_idx in range(steps_per_train_iter):
                     batch_data = dict()
@@ -187,13 +189,27 @@ class PPO:
                     else:
                         entropy_loss = -torch.mean(entropy)
                     # torch.nn.utils.clip_grad.clip_grad_norm_() # TODO
+                    if optim is not None:
+                        optim.zero_grad()
+                        loss = loss_pi + self.ent_coef * entropy_loss + self.vf_coef * loss_v
+                        loss.backward()
+                        optim.step()
+                    else:
+                       
+                        loss_pi.backward()
+                        loss_v.backward()
+                if early_stop_update: break
+                for p in ac.parameters():
+                    if p.requires_grad:
+                        p_grad_numpy = p.grad.numpy()  # numpy view of tensor data
+                        avg_p_grad = p.grad / steps_per_train_iter
+                        p_grad_numpy[:] = avg_p_grad[:]
+                update_step += 1
+                pi_optimizer.step()
+                vf_optimizer.step()
 
-                    optim.zero_grad()
-                    loss = loss_pi + self.ent_coef * entropy_loss + self.vf_coef * loss_v
-                    loss.backward()
-                    optim.step()
-                    update_step += 1
-
+                # use accumulated
+                
             logger.store(tag="train", StopIter=update_step, append=False)
             kl, ent, cf = pi_info["kl"], pi_info["ent"], pi_info["cf"]
             logger.store(
@@ -263,11 +279,10 @@ class PPO:
             update()
             update_end_time = time.time_ns()
             logger.store("train", UpdateTime=(update_end_time - update_start_time) * 1e-9, append=False)
-            logger.store("train", Epoch=(epoch), append=False)
+            logger.store("train", Epoch=epoch, append=False)
+            logger.store("train", TotalEnvInteractions=self.steps_per_epoch * self.n_envs * (epoch+1), append=False)
             stats = logger.log(step=epoch)
-            filtered_stats = {"epoch": epoch}
-            for k in stats.keys():
-                if "Ret" in k or "Len" in k:
-                    filtered_stats[k] = stats[k]
-            logger.pretty_print_table(filtered_stats)
+            logger.reset()
+            if train_callback is not None: train_callback(epoch=epoch, stats=stats)
+
 

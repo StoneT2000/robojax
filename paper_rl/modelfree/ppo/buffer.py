@@ -120,9 +120,8 @@ class PPOBuffer(BaseBuffer):
         assert self.ptr == self.max_size  # buffer has to be full before you can get
         N = self.buffer_size * self.n_envs
         self.ptr, self.path_start_idx = 0, [0] * self.n_envs
-        # the next two lines implement the advantage normalization trick
-        # print(self.adv_buf)
-        # self.adv_buf = (self.adv_buf - self.adv_buf.mean()) / (self.adv_buf.std())
+        # the next line implement the advantage normalization trick
+        self.adv_buf = (self.adv_buf - self.adv_buf.mean()) / (self.adv_buf.std())
         
         data = dict(
             obs=self.obs_buf.reshape((-1, ) + self.obs_shape),

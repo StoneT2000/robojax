@@ -153,7 +153,7 @@ class Logger:
         fmt = "| " + keystr + "s | %15s |"
         n_slashes = 22 + max_key_len
         print("-" * n_slashes)
-        for key in data.keys():
+        for key in sorted(data.keys()):
             val = data[key]
             valstr = "%8.3g" % val if hasattr(val, "__float__") else val
             print(fmt % (key, valstr))
@@ -196,5 +196,5 @@ class Logger:
         """
         call this each time after log is called
         """
-        self.data = {}
+        self.data = defaultdict(dict)
         self.stats = {}
