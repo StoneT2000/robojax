@@ -2,8 +2,8 @@ import gym
 
 from stable_baselines3 import PPO
 
-# env = gym.make("CartPole-v1")
-env = gym.make("Pendulum-v0")
+env = gym.make("CartPole-v1")
+# env = gym.make("Pendulum-v0")
 
 model = PPO("MlpPolicy", env, verbose=1, learning_rate=3e-4)
 model.learn(total_timesteps=10000)

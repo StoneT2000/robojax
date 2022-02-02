@@ -167,8 +167,7 @@ class PPO:
                 if early_stop_update: break
                 N = len(data["obs"])
                 # print(data["obs"].shape, data["adv"].shape)
-                pi_optimizer.zero_grad()
-                vf_optimizer.zero_grad()
+
                 steps_per_train_iter = int(math.ceil(N / batch_size))
                 for batch_idx in range(steps_per_train_iter):
                     batch_data = dict()
@@ -195,18 +194,22 @@ class PPO:
                         loss.backward()
                         optim.step()
                     else:
-                       
+                        pi_optimizer.zero_grad()
+                        vf_optimizer.zero_grad()
                         loss_pi.backward()
                         loss_v.backward()
+                        pi_optimizer.step()
+                        vf_optimizer.step()
+                    update_step += 1
                 if early_stop_update: break
-                for p in ac.parameters():
-                    if p.requires_grad:
-                        p_grad_numpy = p.grad.numpy()  # numpy view of tensor data
-                        avg_p_grad = p.grad / steps_per_train_iter
-                        p_grad_numpy[:] = avg_p_grad[:]
-                update_step += 1
-                pi_optimizer.step()
-                vf_optimizer.step()
+                # for p in ac.parameters():
+                #     if p.requires_grad:
+                #         p_grad_numpy = p.grad.numpy()  # numpy view of tensor data
+                #         avg_p_grad = p.grad / steps_per_train_iter
+                #         p_grad_numpy[:] = avg_p_grad[:]
+                
+                # pi_optimizer.step()
+                # vf_optimizer.step()
 
                 # use accumulated
                 

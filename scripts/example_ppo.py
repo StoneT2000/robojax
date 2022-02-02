@@ -16,7 +16,7 @@ from stable_baselines3.common.env_util import make_vec_env
 if __name__ == "__main__":
     # env_id = "Pendulum-v0"
     env_id = "CartPole-v1"
-    num_cpu = 4
+    num_cpu = 2
     seed = 1
     # def make_env(gym_id, seed, idx):
     #     def thunk():
@@ -64,7 +64,24 @@ if __name__ == "__main__":
         vf_coef=.5,
         train_iters=10,#80 // (steps_per_epoch * num_cpu // batch_size)
     )
-    algo.train(max_ep_len=1000,start_epoch=0, n_epochs=10, optim=optim, batch_size=batch_size, rollout_callback=None)
+    def train_callback(epoch, stats):
+        filtered = {}
+        for k in stats.keys():
+            if (
+                "Epoch" in k
+                or "TotalEnvInteractions" in k
+                or "EpRet" in k
+                or "EpLen" in k
+                # or "VVals" in k
+                or "LossPi_avg" in k
+                or "KL_avg" in k
+                or "ClipFrac_avg" in k
+                or "UpdateTime_avg" in k
+                or "RolloutTime_avg" in k
+            ):
+                filtered[k] = stats[k]
+        logger.pretty_print_table(filtered)
+    algo.train(max_ep_len=1000,start_epoch=0, n_epochs=10, optim=optim, batch_size=batch_size, rollout_callback=None, train_callback=train_callback)
     # for epoch in range(4):
         # algo.train(max_ep_len=1000,start_epoch=epoch, n_epochs=1, optim=optim, batch_size=batch_size)
     # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)

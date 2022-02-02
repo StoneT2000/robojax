@@ -122,7 +122,6 @@ class PPOBuffer(BaseBuffer):
         self.ptr, self.path_start_idx = 0, [0] * self.n_envs
         # the next line implement the advantage normalization trick
         self.adv_buf = (self.adv_buf - self.adv_buf.mean()) / (self.adv_buf.std())
-        
         data = dict(
             obs=self.obs_buf.reshape((-1, ) + self.obs_shape),
             
