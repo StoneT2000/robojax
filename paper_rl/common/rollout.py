@@ -1,3 +1,79 @@
+import time
+
+import gym
+import numpy as np
+import torch
+
+from paper_rl.common.buffer import BaseBuffer
+
+
 class Rollout:
     def __init__(self) -> None:
         pass
+
+    def collect(
+        self,
+        policy,
+        env: gym.Env,
+        buf: BaseBuffer,
+        steps,
+        n_envs,
+        rollout_callback=None,
+        max_ep_len=1000,
+        custom_reward=None,
+        logger=None,
+    ):
+        # policy should return a, v, logp
+        observations, ep_returns, ep_lengths = env.reset(), np.zeros(n_envs), np.zeros(n_envs)
+        rollout_start_time = time.time_ns()
+        for t in range(steps):
+            a, v, logp = policy(observations)
+            next_os, rewards, dones, infos = env.step(a)
+            if custom_reward is not None: rewards = custom_reward(rewards, observations, a)
+            # for idx, d in enumerate(dones):
+            #     ep_returns[idx] += returns[idx]
+            ep_returns += rewards
+            ep_lengths += 1
+            buf.store(observations, a, rewards, v, logp)
+            if rollout_callback is not None:
+                rollout_callback(
+                    observations=observations,
+                    next_observations=next_os,
+                    actions=a,
+                    rewards=rewards,
+                    infos=infos,
+                    dones=dones,
+                )
+            if logger is not None: logger.store(tag="train", VVals=v)
+
+            observations = next_os
+
+            timeouts = ep_lengths == max_ep_len
+            terminals = dones | timeouts  # terminated means done or reached max ep length
+            epoch_ended = t == steps - 1
+
+            for idx, terminal in enumerate(terminals):
+                if terminal or epoch_ended:
+                    if "terminal_observation" in infos[idx]:
+                        o = infos[idx]["terminal_observation"]
+                    else:
+                        o = observations[idx]
+                    ep_ret = ep_returns[idx]
+                    ep_len = ep_lengths[idx]
+                    timeout = timeouts[idx]
+                    if epoch_ended and not terminal:
+                        print("Warning: trajectory cut off by epoch at %d steps." % ep_lengths[idx], flush=True)
+                    # if trajectory didn't reach terminal state, bootstrap value target
+                    if timeout or epoch_ended:
+                        _, v, _ = policy(o)
+                    else:
+                        v = 0
+                    buf.finish_path(idx, v)
+                    if terminal:
+                        # only save EpRet / EpLen if trajectory finished
+                        if logger is not None: logger.store("train", EpRet=ep_ret, EpLen=ep_len)
+                    ep_returns[idx] = 0
+                    ep_lengths[idx] = 0
+        rollout_end_time = time.time_ns()
+        rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
+        if logger is not None: logger.store("train", RolloutTime=rollout_delta_time, append=False)

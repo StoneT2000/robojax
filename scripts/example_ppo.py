@@ -9,6 +9,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.utils import set_random_seed
 
 from stable_baselines3.common.env_util import make_vec_env
+
 # 2 ways to work with envs
 # mpi it and have one env per process, each process has its own copy
 # or use stable baselines vecenv style. - which also makes it easy to utilize the GPU.
@@ -34,24 +35,25 @@ if __name__ == "__main__":
     def make_env(seed):
         def _init():
             env = gym.make(env_id)
-            env.seed()
+            env.seed(seed)
             return env
+
         return _init
+
     env = SubprocVecEnv([make_env(i) for i in range(num_cpu)])
     # env = make_vec_env(env_id, num_cpu, seed=seed)
-    
+
     torch.manual_seed(seed)
     np.random.seed(seed)
     model = MLPActorCritic(env.observation_space, env.action_space, hidden_sizes=(64, 64))
-    optim = torch.optim.Adam(model.parameters(), lr=3e-4)
-    
-    
+    pi_optimizer = torch.optim.Adam(model.pi.parameters(), lr=1e-4)
+    vf_optimizer = torch.optim.Adam(model.v.parameters(), lr=3e-4)
 
     # torch.set_num_threads(1)
 
     logger = Logger(tensorboard=True)
-    steps_per_epoch=2048 // num_cpu
-    batch_size=512
+    steps_per_epoch = 2048 // num_cpu
+    batch_size = 512
     algo = PPO(
         ac=model,
         env=env,
@@ -61,9 +63,11 @@ if __name__ == "__main__":
         logger=logger,
         steps_per_epoch=steps_per_epoch,
         ent_coef=0.00,
-        vf_coef=.5,
-        train_iters=10,#80 // (steps_per_epoch * num_cpu // batch_size)
+        vf_coef=0.5,
+        gamma=0.95,
+        train_iters=10,  # 80 // (steps_per_epoch * num_cpu // batch_size)
     )
+
     def train_callback(epoch, stats):
         filtered = {}
         for k in stats.keys():
@@ -81,9 +85,19 @@ if __name__ == "__main__":
             ):
                 filtered[k] = stats[k]
         logger.pretty_print_table(filtered)
-    algo.train(max_ep_len=1000,start_epoch=0, n_epochs=10, optim=optim, batch_size=batch_size, rollout_callback=None, train_callback=train_callback)
+
+    algo.train(
+        max_ep_len=1000,
+        start_epoch=0,
+        n_epochs=10,
+        pi_optimizer=pi_optimizer,
+        vf_optimizer=vf_optimizer,
+        batch_size=batch_size,
+        rollout_callback=None,
+        train_callback=train_callback,
+    )
     # for epoch in range(4):
-        # algo.train(max_ep_len=1000,start_epoch=epoch, n_epochs=1, optim=optim, batch_size=batch_size)
+    # algo.train(max_ep_len=1000,start_epoch=epoch, n_epochs=1, optim=optim, batch_size=batch_size)
     # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)
     # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)
     # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)
@@ -94,7 +108,7 @@ if __name__ == "__main__":
     # )
     eval_env = make_vec_env(env_id, 1, seed=seed)
     obs = eval_env.reset()
-    
+
     for i in range(1000):
         with torch.no_grad():
             action = model.act(torch.tensor(obs), deterministic=True)
@@ -103,4 +117,3 @@ if __name__ == "__main__":
         if done.any():
             print(info)
     eval_env.close()
-    

@@ -124,7 +124,6 @@ class PPOBuffer(BaseBuffer):
         self.adv_buf = (self.adv_buf - self.adv_buf.mean()) / (self.adv_buf.std())
         data = dict(
             obs=self.obs_buf.reshape((-1, ) + self.obs_shape),
-            
             ret=self.ret_buf.reshape(-1),
             adv=self.adv_buf.reshape(-1),
             logp=self.logp_buf.reshape(-1),
