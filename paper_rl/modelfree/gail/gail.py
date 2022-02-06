@@ -135,7 +135,7 @@ class GAIL():
                 expert_trajectories = sample_expert_trajectories(batch_size)
                 # expert_trajectories["observations"] - (B, obs_space)
                 # expert_trajectories["actions"] - (B, act_dim)
-                g_o = discriminator(to_torch(rollout_obs, device=self.device), to_torch(rollout_act, device=self.device))
+                g_o = discriminator(rollout_obs, rollout_act)
                 # TODO bug here
                 e_o = discriminator(expert_trajectories["observations"], expert_trajectories["actions"])
                 discrim_optimizer.zero_grad()

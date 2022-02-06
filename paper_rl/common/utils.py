@@ -64,6 +64,14 @@ def to_torch(x, device=torch.device("cpu"), copy=False):
     """
     converts x to a torch tensor
     """
+    if isinstance(x, list):
+        # if list, and items are dicts
+        if len(x) == 0: return x
+        if isinstance(x[0], dict):
+            # leave alone as a list if its a list of dicts
+            return [to_torch(e, device=device, copy=copy) for e in x]
+        else:
+            raise NotImplementedError("not implemented")
     if isinstance(x, dict):
         data = {}
         for k, v in x.items():

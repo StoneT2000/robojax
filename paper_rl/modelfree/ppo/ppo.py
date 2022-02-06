@@ -241,7 +241,7 @@ def ppo_update(
         for batch_idx in range(steps_per_train_iter):
             batch_data = dict()
             for k, v in data.items():
-                batch_data[k] = to_torch(v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size], device=device)
+                batch_data[k] = v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
             loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
             loss_v = compute_loss_v(batch_data)
             kl = pi_info["kl"]
