@@ -115,6 +115,7 @@ class PPO:
         train_iters = self.train_iters
         target_kl = self.target_kl
         n_envs = self.n_envs
+        device = self.device
         rollout = Rollout()
         def policy(o):
             o = torch.as_tensor(o, dtype=torch.float32)
@@ -133,6 +134,7 @@ class PPO:
                 target_kl=target_kl,
                 logger=logger,
                 compute_old=compute_delta_loss,
+                device=device
             )
             pi_info, loss_pi, loss_v, pi_l_old, v_l_old, update_step = (
                 update_res["pi_info"],
@@ -192,7 +194,7 @@ def ppo_update(
     device=torch.device("cpu")
 ):
     def compute_loss_pi(data):
-        obs, act, adv, logp_old = data["obs"], data["act"], data["adv"], data["logp"]
+        obs, act, adv, logp_old = data["obs"], data["act"], data["adv"].to(device), data["logp"].to(device)
         # if isinstance(self.env.action_space, spaces.Discrete):
         # Convert discrete action from float to long
         # print(act.shape, act[:2])
@@ -219,7 +221,7 @@ def ppo_update(
 
     # Set up function for computing value loss
     def compute_loss_v(data):
-        obs, ret = data["obs"], data["ret"]
+        obs, ret = data["obs"], data["ret"].to(device)
         return ((ac.v(obs) - ret) ** 2).mean()
 
     pi_l_old, v_l_old, entropy_old = None, None, None

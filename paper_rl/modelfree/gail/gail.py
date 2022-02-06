@@ -105,6 +105,7 @@ class GAIL():
         discriminator = self.discriminator
         train_iters = self.train_iters
         n_envs = self.n_envs
+        device = self.device
 
         discriminator_criterion = nn.BCELoss()
         rollout = Rollout()
@@ -159,6 +160,7 @@ class GAIL():
                 target_kl=target_kl,
                 logger=logger,
                 compute_old=False,
+                device=device,
             )
             ppo_update_end_time = time.time_ns()
             pi_info, loss_pi, loss_v, pi_l_old, v_l_old, update_step = (
