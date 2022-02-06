@@ -112,7 +112,7 @@ class GAIL():
             # o = torch.as_tensor(o, dtype=torch.float32)
             # print(type(o), o.shape)
             # print(o[0])
-            o = to_torch(o, device=self.device)
+            # o = to_torch(o, device=self.device)
             return ac.step(o)
         for epoch in range(start_epoch, n_epochs + start_epoch):
             # sample trajectories T_i
@@ -135,11 +135,11 @@ class GAIL():
                 expert_trajectories = sample_expert_trajectories(batch_size)
                 # expert_trajectories["observations"] - (B, obs_space)
                 # expert_trajectories["actions"] - (B, act_dim)
-                g_o = discriminator(rollout_obs, rollout_act)
+                g_o = discriminator(rollout_obs[:100], rollout_act[:100])
                 # TODO bug here
                 e_o = discriminator(expert_trajectories["observations"], expert_trajectories["actions"])
                 discrim_optimizer.zero_grad()
-                discrim_loss = discriminator_criterion(g_o, torch.ones((len(rollout_obs), 1), device=self.device)) + \
+                discrim_loss = discriminator_criterion(g_o, torch.ones((100, 1), device=self.device)) + \
                     discriminator_criterion(e_o, torch.zeros((len(expert_trajectories["observations"]), 1), device=self.device))
                 discrim_loss.backward()
                 discrim_optimizer.step()
