@@ -2,3 +2,4 @@ __pycache__
 *.egg-info
 *_workspace
 paper_rl/architecture/ac/transformer
+.ipynb_checkpoints
