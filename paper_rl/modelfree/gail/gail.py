@@ -13,6 +13,7 @@ from torch.nn import functional as F
 
 from paper_rl.architecture.ac.core import ActorCritic, count_vars
 from paper_rl.common.rollout import Rollout
+from paper_rl.common.utils import to_torch
 from paper_rl.logger.logger import Logger
 from paper_rl.modelfree.ppo.buffer import PPOBuffer
 from paper_rl.modelfree.ppo.ppo import ppo_update
@@ -46,6 +47,7 @@ class GAIL():
     ) -> None:
         self.n_envs = n_envs
         self.env = env  # should be vectorized
+        if isinstance(device, str): device = torch.device(device)
         self.device = device
         self.observation_space = observation_space
         self.action_space = action_space
@@ -110,6 +112,7 @@ class GAIL():
             # o = torch.as_tensor(o, dtype=torch.float32)
             # print(type(o), o.shape)
             # print(o[0])
+            o = to_torch(o, device=self.device)
             return ac.step(o)
         for epoch in range(start_epoch, n_epochs + start_epoch):
             # sample trajectories T_i
@@ -117,12 +120,13 @@ class GAIL():
             rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger,custom_reward=expert_reward)
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
-            print(f"===rollout out done ({rollout_delta_time}s)===")
+            
             logger.store("train", RolloutTime=rollout_delta_time, append=False)
 
             data = buf.get()
             rollout_obs = data["obs"]
             rollout_act = data["act"]
+            print(f"===rollout out done ({rollout_delta_time}s), collected {len(rollout_obs)} steps===")
 
             # update discriminator
             disc_update_start_time = time.time_ns()
@@ -131,7 +135,7 @@ class GAIL():
                 expert_trajectories = sample_expert_trajectories(batch_size)
                 # expert_trajectories["observations"] - (B, obs_space)
                 # expert_trajectories["actions"] - (B, act_dim)
-                g_o = discriminator(rollout_obs, rollout_act)
+                g_o = discriminator(to_torch(rollout_obs, device=self.device), to_torch(rollout_act, device=self.device))
                 # TODO bug here
                 e_o = discriminator(expert_trajectories["observations"], expert_trajectories["actions"])
                 discrim_optimizer.zero_grad()

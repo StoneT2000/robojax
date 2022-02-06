@@ -12,6 +12,7 @@ from torch.nn import functional as F
 
 from paper_rl.architecture.ac.core import ActorCritic, count_vars
 from paper_rl.common.rollout import Rollout
+from paper_rl.common.utils import to_torch
 from paper_rl.logger.logger import Logger
 from paper_rl.modelfree.ppo.buffer import PPOBuffer
 
@@ -145,8 +146,8 @@ class PPO:
             kl, ent, cf = pi_info["kl"], pi_info["ent"], pi_info["cf"]
             logger.store(
                 tag="train",
-                LossPi=loss_pi.item(),
-                LossV=loss_v.item(),
+                LossPi=loss_pi.cpu().item(),
+                LossV=loss_v.cpu().item(),
                 KL=kl,
                 Entropy=ent,
                 ClipFrac=cf,
@@ -154,8 +155,8 @@ class PPO:
             if compute_delta_loss:
                 logger.store(
                     tag="train",
-                    DeltaLossPi=(loss_pi.item() - pi_l_old),
-                    DeltaLossV=(loss_v.item() - v_l_old),
+                    DeltaLossPi=(loss_pi.cpu().item() - pi_l_old),
+                    DeltaLossV=(loss_v.cpu().item() - v_l_old),
                 )
 
         # to tweak, just copy the code below
@@ -188,6 +189,7 @@ def ppo_update(
     target_kl,
     logger=None,
     compute_old=False,
+    device=torch.device("cpu")
 ):
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data["obs"], data["act"], data["adv"], data["logp"]
@@ -239,7 +241,7 @@ def ppo_update(
         for batch_idx in range(steps_per_train_iter):
             batch_data = dict()
             for k, v in data.items():
-                batch_data[k] = v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
+                batch_data[k] = to_torch(v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size], device=device)
             loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
             loss_v = compute_loss_v(batch_data)
             kl = pi_info["kl"]

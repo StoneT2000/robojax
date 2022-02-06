@@ -2,11 +2,12 @@
 Adapted from SB3
 """
 
+from cmath import isinf
 import warnings
 from typing import Dict, Tuple, Union
 
 import numpy as np
-import torch as th
+import torch
 from gym import spaces
 from torch.nn import functional as F
 
@@ -57,3 +58,25 @@ def get_action_dim(action_space: spaces.Space) -> int:
         return int(action_space.n)
     else:
         raise NotImplementedError(f"{action_space} action space is not supported")
+
+
+def to_torch(x, device=torch.device("cpu"), copy=False):
+    """
+    converts x to a torch tensor
+    """
+    if isinstance(x, dict):
+        data = {}
+        for k, v in x.items():
+            data[k] = to_torch(v, device=device, copy=copy)
+    else:
+        if (isinstance(x, torch.tensor)):
+            if copy:
+                return x.clone().to(device)
+            else:
+                return x.to(device)
+        elif isinstance(x, np.ndarray):
+            data = torch.from_numpy(x)
+            if copy:
+                return data.clone().to(device)
+            else:
+                return data.to(device)
