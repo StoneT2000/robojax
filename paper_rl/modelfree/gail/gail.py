@@ -26,11 +26,9 @@ class GAIL():
         ac: ActorCritic,
         discriminator: nn.Module,
         env: gym.Env,
-        num_envs: int,
+        n_envs: int,
         observation_space,
         action_space,
-        pi_lr: float = 3e-4,
-        vf_lr: float = 3e-4,
         steps_per_epoch: int = 10000,
         train_iters: int = 80,
         gamma: float = 0.99,
@@ -46,7 +44,7 @@ class GAIL():
         seed: Optional[int] = None,
         device: Union[torch.device, str] = "cpu",
     ) -> None:
-        self.n_envs = num_envs
+        self.n_envs = n_envs
         self.env = env  # should be vectorized
         self.device = device
         self.observation_space = observation_space
@@ -71,6 +69,7 @@ class GAIL():
         )
         self.logger = logger
         self.ac = ac.to(self.device)
+        self.discriminator = discriminator.to(self.device)
         var_counts = tuple(count_vars(module) for module in [ac.pi, ac.v])
         self.logger.print(
             "\nNumber of parameters: \t pi: %d, \t v: %d\n" % var_counts,
@@ -108,7 +107,9 @@ class GAIL():
         discriminator_criterion = nn.BCELoss()
         rollout = Rollout()
         def policy(o):
-            o = torch.as_tensor(o, dtype=torch.float32)
+            # o = torch.as_tensor(o, dtype=torch.float32)
+            # print(type(o), o.shape)
+            # print(o[0])
             return ac.step(o)
         for epoch in range(start_epoch, n_epochs + start_epoch):
             # sample trajectories T_i
@@ -116,6 +117,7 @@ class GAIL():
             rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger,custom_reward=expert_reward)
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
+            print(f"===rollout out done ({rollout_delta_time}s)===")
             logger.store("train", RolloutTime=rollout_delta_time, append=False)
 
             data = buf.get()
@@ -130,10 +132,11 @@ class GAIL():
                 # expert_trajectories["observations"] - (B, obs_space)
                 # expert_trajectories["actions"] - (B, act_dim)
                 g_o = discriminator(rollout_obs, rollout_act)
+                # TODO bug here
                 e_o = discriminator(expert_trajectories["observations"], expert_trajectories["actions"])
                 discrim_optimizer.zero_grad()
-                discrim_loss = discriminator_criterion(g_o, torch.ones((rollout_obs.shape[0], 1), device=self.device)) + \
-                    discriminator_criterion(e_o, torch.zeros((expert_trajectories["observations"].shape[0], 1), device=self.device))
+                discrim_loss = discriminator_criterion(g_o, torch.ones((len(rollout_obs), 1), device=self.device)) + \
+                    discriminator_criterion(e_o, torch.zeros((len(expert_trajectories["observations"]), 1), device=self.device))
                 discrim_loss.backward()
                 discrim_optimizer.step()
             disc_update_end_time = time.time_ns()

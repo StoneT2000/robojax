@@ -32,14 +32,16 @@ class PPOBuffer(BaseBuffer):
             device=device,
             n_envs=n_envs,
         )
-
+        self.obs_is_dict = False
         if isinstance(self.obs_shape, dict):
-            raise NotImplementedError("Can't handle dict observations yet!")
-
-        self.obs_buf = np.zeros(
-            (self.buffer_size, self.n_envs) + self.obs_shape, dtype=np.float32,
-            # device=self.device
-        )
+            # raise NotImplementedError("Can't handle dict observations yet!")
+            self.obs_is_dict = True
+            self.obs_buf = []
+        else:
+            self.obs_buf = np.zeros(
+                (self.buffer_size, self.n_envs) + self.obs_shape, dtype=np.float32,
+                # device=self.device
+            )
         self.act_buf = np.zeros(
             (self.buffer_size, self.n_envs, self.action_dim), dtype=np.float32,
             # device=self.device
@@ -68,7 +70,10 @@ class PPOBuffer(BaseBuffer):
         Append one timestep of agent-environment interaction to the buffer.
         """
         assert self.ptr < self.max_size  # buffer has to have room so you can store
-        self.obs_buf[self.ptr] = np.array(obs).copy()
+        if self.obs_is_dict:
+            self.obs_buf.append(np.array(obs).copy())
+        else:
+            self.obs_buf[self.ptr] = np.array(obs).copy()
         if isinstance(self.action_space, spaces.Discrete):
             act = act.reshape((self.n_envs, self.action_dim))
         self.act_buf[self.ptr] = np.array(act).copy()
@@ -123,14 +128,27 @@ class PPOBuffer(BaseBuffer):
         # the next line implement the advantage normalization trick
         self.adv_buf = (self.adv_buf - self.adv_buf.mean()) / (self.adv_buf.std())
         data = dict(
-            obs=self.obs_buf.reshape((-1, ) + self.obs_shape),
+            # obs=
             ret=self.ret_buf.reshape(-1),
             adv=self.adv_buf.reshape(-1),
             logp=self.logp_buf.reshape(-1),
         )
+        if self.obs_is_dict:
+            flattened = [item for sublist in self.obs_buf for item in sublist]
+            # print("OBSBUF", len(self.obs_buf), len(flattened))
+            data["obs"] = flattened
+            self.obs_buf = []
+        else:
+            data["obs"] = self.obs_buf.reshape((-1, ) + self.obs_shape),
         if isinstance(self.action_space, spaces.Discrete):
             data["act"] = self.act_buf.reshape(-1)
         else:
             data["act"] = self.act_buf.reshape((-1, self.action_dim))
 
-        return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in data.items()}
+        tensored_data = {k: torch.as_tensor(data[k], dtype=torch.float32) for k in ["ret", "adv", "logp", "act"]}
+        if self.obs_is_dict:
+            # tensored_data["obs"] = torch.as_tensor(data["obs"], dtype=torch.float32)
+            tensored_data["obs"] = data["obs"]
+        else:
+            tensored_data["obs"] = torch.as_tensor(data["obs"], dtype=torch.float32)
+        return tensored_data

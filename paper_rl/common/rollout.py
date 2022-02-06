@@ -27,6 +27,9 @@ class Rollout:
         observations, ep_returns, ep_lengths = env.reset(), np.zeros(n_envs), np.zeros(n_envs)
         rollout_start_time = time.time_ns()
         for t in range(steps):
+            # print(observations.keys())
+            # print(observations["teacher_trajectory"].shape)
+            # print(observations)
             a, v, logp = policy(observations)
             next_os, rewards, dones, infos = env.step(a)
             if custom_reward is not None: rewards = custom_reward(rewards, observations, a)
