@@ -63,8 +63,8 @@ class GAIL():
         self.steps_per_epoch = steps_per_epoch
         self.buffer = PPOBuffer(
             buffer_size=self.steps_per_epoch,
-            observation_space=observation_space,
-            action_space=action_space,
+            observation_space=self.observation_space,
+            action_space=self.action_space,
             n_envs=self.n_envs,
             gamma=self.gamma,
             lam=self.gae_lambda,
@@ -90,6 +90,7 @@ class GAIL():
         discrim_optimizer: torch.optim.Optimizer = None,
         batch_size=32,
         ppo_batch_size=128,
+        disc_mini_batch_size=32,
         compute_delta_loss=False,
         expert_reward=None,
         sample_expert_trajectories=None,
@@ -118,7 +119,7 @@ class GAIL():
         for epoch in range(start_epoch, n_epochs + start_epoch):
             # sample trajectories T_i
             rollout_start_time = time.time_ns()
-            rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger,custom_reward=expert_reward)
+            rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger,custom_reward=None)
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
             
@@ -136,12 +137,35 @@ class GAIL():
                 expert_trajectories = sample_expert_trajectories(batch_size)
                 # expert_trajectories["observations"] - (B, obs_space)
                 # expert_trajectories["actions"] - (B, act_dim)
-                g_o = discriminator(rollout_obs[:100], rollout_act[:100])
-                # TODO bug here
-                e_o = discriminator(expert_trajectories["observations"], expert_trajectories["actions"])
+                # measure space use of rollout_obs
+                # g_o = discriminator(rollout_obs[:100], rollout_act[:100])
+                
+                disc_iters = int(math.ceil(len(rollout_obs) / disc_mini_batch_size))
+                g_o = []
+                for batch_idx in range(disc_iters):
+                    batch_slice = slice(max(0, (batch_idx) * disc_mini_batch_size), (batch_idx + 1) * disc_mini_batch_size)
+                    b_rollout_obs = rollout_obs[batch_slice]
+                    b_rollout_act = rollout_act[batch_slice]
+                    b_g_o = discriminator(b_rollout_obs, b_rollout_act)
+                    g_o.append(b_g_o)
+                g_o = torch.vstack(g_o)
+                
+                e_o = []
+                disc_iters = int(math.ceil(len(expert_trajectories["observations"]) / disc_mini_batch_size))
+                for batch_idx in range(disc_iters):
+                    batch_slice = slice(max(0, (batch_idx) * disc_mini_batch_size), (batch_idx + 1) * disc_mini_batch_size)
+                    b_expert_obs = expert_trajectories["observations"][batch_slice]
+                    b_expert_act = expert_trajectories["actions"][batch_slice]
+                    
+                    b_e_o = discriminator(b_expert_obs, b_expert_act)
+                    e_o.append(b_e_o)
+                
+                # e_o = discriminator(expert_trajectories["observations"], expert_trajectories["actions"])
+                e_o = torch.vstack(e_o)
+                
                 discrim_optimizer.zero_grad()
-                discrim_loss = discriminator_criterion(g_o, torch.ones((100, 1), device=self.device)) + \
-                    discriminator_criterion(e_o, torch.zeros((len(expert_trajectories["observations"]), 1), device=self.device))
+                discrim_loss = discriminator_criterion(g_o, torch.ones((len(g_o), 1), device=self.device)) + \
+                    discriminator_criterion(e_o, torch.zeros((len(e_o), 1), device=self.device))
                 discrim_loss.backward()
                 discrim_optimizer.step()
             disc_update_end_time = time.time_ns()
