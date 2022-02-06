@@ -132,44 +132,33 @@ class GAIL():
 
             # update discriminator
             disc_update_start_time = time.time_ns()
-            for _ in range(1):
+            disc_iters = int(math.ceil(len(rollout_obs) / disc_mini_batch_size))
+            discrim_loss_avg = 0
+            for batch_idx in range(disc_iters):
                 # sample some expert trajectories
-                expert_trajectories = sample_expert_trajectories(batch_size)
+                expert_trajectories = sample_expert_trajectories(disc_mini_batch_size)
                 # expert_trajectories["observations"] - (B, obs_space)
                 # expert_trajectories["actions"] - (B, act_dim)
-                # measure space use of rollout_obs
-                # g_o = discriminator(rollout_obs[:100], rollout_act[:100])
                 
-                disc_iters = int(math.ceil(len(rollout_obs) / disc_mini_batch_size))
-                g_o = []
-                for batch_idx in range(disc_iters):
-                    batch_slice = slice(max(0, (batch_idx) * disc_mini_batch_size), (batch_idx + 1) * disc_mini_batch_size)
-                    b_rollout_obs = rollout_obs[batch_slice]
-                    b_rollout_act = rollout_act[batch_slice]
-                    b_g_o = discriminator(b_rollout_obs, b_rollout_act)
-                    g_o.append(b_g_o)
-                g_o = torch.vstack(g_o)
+                batch_slice = slice(max(0, (batch_idx) * disc_mini_batch_size), (batch_idx + 1) * disc_mini_batch_size)
+                b_rollout_obs = rollout_obs[batch_slice]
+                b_rollout_act = rollout_act[batch_slice]
+                g_o = discriminator(b_rollout_obs, b_rollout_act)
                 
-                e_o = []
-                disc_iters = int(math.ceil(len(expert_trajectories["observations"]) / disc_mini_batch_size))
-                for batch_idx in range(disc_iters):
-                    batch_slice = slice(max(0, (batch_idx) * disc_mini_batch_size), (batch_idx + 1) * disc_mini_batch_size)
-                    b_expert_obs = expert_trajectories["observations"][batch_slice]
-                    b_expert_act = expert_trajectories["actions"][batch_slice]
-                    
-                    b_e_o = discriminator(b_expert_obs, b_expert_act)
-                    e_o.append(b_e_o)
-                
-                # e_o = discriminator(expert_trajectories["observations"], expert_trajectories["actions"])
-                e_o = torch.vstack(e_o)
+                b_expert_obs = expert_trajectories["observations"][:]
+                b_expert_act = expert_trajectories["actions"][:]
+                e_o = discriminator(b_expert_obs, b_expert_act)
                 
                 discrim_optimizer.zero_grad()
                 discrim_loss = discriminator_criterion(g_o, torch.ones((len(g_o), 1), device=self.device)) + \
                     discriminator_criterion(e_o, torch.zeros((len(e_o), 1), device=self.device))
                 discrim_loss.backward()
+                discrim_loss_avg += discrim_loss.item()
                 discrim_optimizer.step()
+            discrim_loss_avg /= disc_iters
             disc_update_end_time = time.time_ns()
             logger.store("train", DiscriminatorUpdateTime=(disc_update_end_time - disc_update_start_time) * 1e-9, append=False)
+            logger.store("train", DiscriminatorLoss=discrim_loss_avg, append=False)
             
             # update via ppo
             ppo_update_start_time = time.time_ns()
