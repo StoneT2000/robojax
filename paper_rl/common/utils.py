@@ -77,7 +77,7 @@ def to_torch(x, device=torch.device("cpu"), copy=False):
         for k, v in x.items():
             data[k] = to_torch(v, device=device, copy=copy)
     else:
-        if (isinstance(x, torch.tensor)):
+        if (isinstance(x, torch.Tensor)):
             if copy:
                 return x.clone().to(device)
             else:
