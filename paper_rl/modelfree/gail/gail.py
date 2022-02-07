@@ -159,7 +159,7 @@ class GAIL():
                 
                 discrim_optimizer.zero_grad()
                 discrim_loss = discriminator_criterion(g_o, torch.ones((len(g_o), 1), device=self.device)) + \
-                    discriminator_criterion(e_o, torch.zeros((len(e_o), 1), device=self.device))
+                    discriminator_criterion(e_o, torch.zeros((len(e_o), 1), device=self.device)) # expert
                 discrim_loss.backward()
                 discrim_loss_avg += discrim_loss.item()
                 discrim_optimizer.step()
