@@ -40,7 +40,6 @@ class GAIL():
         # sde_sample_freq: int = -1,
         target_kl: Optional[float] = 0.01,
         logger: Logger = None,
-        create_eval_env: bool = False,
         verbose: int = 0,
         seed: Optional[int] = None,
         device: Union[torch.device, str] = "cpu",
@@ -80,6 +79,8 @@ class GAIL():
         )
     def train(
         self, 
+        obs_to_tensor=None,
+        act_to_tensor=None,
         train_callback=None,
         rollout_callback=None,
         max_ep_len=None,
@@ -114,12 +115,15 @@ class GAIL():
             # o = torch.as_tensor(o, dtype=torch.float32)
             # print(type(o), o.shape)
             # print(o[0])
-            # o = to_torch(o, device=self.device)
+            if obs_to_tensor is None:
+                o = torch.as_tensor(o, device=device, dtype=torch.float32)
+            else:
+                o = obs_to_tensor(o)
             return ac.step(o)
         for epoch in range(start_epoch, n_epochs + start_epoch):
             # sample trajectories T_i
             rollout_start_time = time.time_ns()
-            rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger,custom_reward=None)
+            rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger,custom_reward=expert_reward)
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
             
@@ -141,8 +145,12 @@ class GAIL():
                 # expert_trajectories["actions"] - (B, act_dim)
                 
                 batch_slice = slice(max(0, (batch_idx) * disc_mini_batch_size), (batch_idx + 1) * disc_mini_batch_size)
+                
                 b_rollout_obs = rollout_obs[batch_slice]
                 b_rollout_act = rollout_act[batch_slice]
+                b_rollout_obs = torch.as_tensor(b_rollout_obs, device=device, dtype=torch.float32) if obs_to_tensor is None else obs_to_tensor(b_rollout_obs)
+                b_rollout_act = torch.as_tensor(b_rollout_act, device=device, dtype=torch.float32) if act_to_tensor is None else act_to_tensor(b_rollout_obs)
+
                 g_o = discriminator(b_rollout_obs, b_rollout_act)
                 
                 b_expert_obs = expert_trajectories["observations"][:]

@@ -139,12 +139,11 @@ class PPOBuffer(BaseBuffer):
             data["obs"] = flattened
             self.obs_buf = []
         else:
-            data["obs"] = self.obs_buf.reshape((-1, ) + self.obs_shape),
+            data["obs"] = self.obs_buf.reshape((-1, ) + self.obs_shape)
         if isinstance(self.action_space, spaces.Discrete):
             data["act"] = self.act_buf.reshape(-1)
         else:
             data["act"] = self.act_buf.reshape((-1, self.action_dim))
-
         tensored_data = {k: torch.as_tensor(data[k], dtype=torch.float32) for k in ["ret", "adv", "logp", "act"]}
         if self.obs_is_dict:
             # tensored_data["obs"] = torch.as_tensor(data["obs"], dtype=torch.float32)

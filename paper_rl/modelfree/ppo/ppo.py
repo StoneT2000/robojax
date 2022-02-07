@@ -95,6 +95,7 @@ class PPO:
         self,
         train_callback=None,
         rollout_callback=None,
+        obs_to_tensor=None,
         max_ep_len=None,
         start_epoch: int = 0,
         n_epochs: int = 10,
@@ -118,7 +119,8 @@ class PPO:
         device = self.device
         rollout = Rollout()
         def policy(o):
-            # o = torch.as_tensor(o, dtype=torch.float32)
+            if obs_to_tensor is None:
+                o = torch.as_tensor(o, dtype=torch.float32)
             return ac.step(o)
 
         def update():
