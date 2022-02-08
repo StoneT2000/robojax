@@ -1,6 +1,7 @@
 import gym
 import numpy as np
 import torch
+from paper_rl.common.rollout import Rollout
 from paper_rl.logger.logger import Logger
 
 from paper_rl.modelfree.ppo import PPO
@@ -19,35 +20,13 @@ if __name__ == "__main__":
     env_id = "CartPole-v1"
     num_cpu = 2
     seed = 1
-    # def make_env(gym_id, seed, idx):
-    #     def thunk():
-    #         env = gym.make(gym_id)
-    #         if idx == 0:
-    #             env = gym.wrappers.RecordVideo(env, f"videos/{0}")
-    #         env.seed(seed)
-    #         env.action_space.seed(seed)
-    #         env.observation_space.seed(seed)
-    #         return env
-    #     return thunk
-    # env = gym.vector.AsyncVectorEnv(
-    #     [make_env(env_id, seed + i, i) for i in range(num_cpu)]
-    # )
-    def make_env(seed):
-        def _init():
-            env = gym.make(env_id)
-            env.seed(seed)
-            return env
-
-        return _init
-
-    env = SubprocVecEnv([make_env(i) for i in range(num_cpu)])
-    # env = make_vec_env(env_id, num_cpu, seed=seed)
+    env = make_vec_env(env_id, num_cpu, seed=seed)
 
     torch.manual_seed(seed)
     np.random.seed(seed)
     model = MLPActorCritic(env.observation_space, env.action_space, hidden_sizes=(64, 64))
     pi_optimizer = torch.optim.Adam(model.pi.parameters(), lr=1e-4)
-    vf_optimizer = torch.optim.Adam(model.v.parameters(), lr=3e-4)
+    vf_optimizer = torch.optim.Adam(model.v.parameters(), lr=4e-4)
 
     # torch.set_num_threads(1)
 
@@ -86,26 +65,18 @@ if __name__ == "__main__":
                 filtered[k] = stats[k]
         logger.pretty_print_table(filtered)
 
-    algo.train(
-        max_ep_len=1000,
-        start_epoch=0,
-        n_epochs=10,
-        pi_optimizer=pi_optimizer,
-        vf_optimizer=vf_optimizer,
-        batch_size=batch_size,
-        rollout_callback=None,
-        train_callback=train_callback,
-    )
-    # for epoch in range(4):
-    # algo.train(max_ep_len=1000,start_epoch=epoch, n_epochs=1, optim=optim, batch_size=batch_size)
-    # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)
-    # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)
-    # algo.train(max_ep_len=1000, n_epochs=1, optim=optim, batch_size=batch_size)
-
-    env.close()
-    # eval_env = gym.vector.AsyncVectorEnv(
-    #     [make_env(env_id, seed + i, i) for i in range(2)]
+    # algo.train(
+    #     max_ep_len=1000,
+    #     start_epoch=0,
+    #     n_epochs=10,
+    #     pi_optimizer=pi_optimizer,
+    #     vf_optimizer=vf_optimizer,
+    #     batch_size=batch_size,
+    #     rollout_callback=None,
+    #     train_callback=train_callback,
     # )
+    env.close()
+
     eval_env = make_vec_env(env_id, 1, seed=seed)
     obs = eval_env.reset()
 
@@ -117,3 +88,17 @@ if __name__ == "__main__":
         if done.any():
             print(info)
     eval_env.close()
+
+    eval_env = make_vec_env(env_id, 2, seed=seed)
+    obs = eval_env.reset()
+    
+    rollout = Rollout()
+    def policy(o):
+        o = torch.as_tensor(o, dtype=torch.float32)
+        return model.act(o, deterministic=True)
+    expert_trajectories = rollout.collect_trajectories(policy, eval_env, n_trajectories=10, n_envs=2,)
+    eval_env.close()
+    for e in expert_trajectories:
+        print(len(e["observations"]))
+    print(f"Collected {len(expert_trajectories)} trajectories")
+    np.save("weak_cartpole.npy", expert_trajectories)

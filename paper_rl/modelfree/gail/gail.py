@@ -30,7 +30,7 @@ class GAIL():
         n_envs: int,
         observation_space,
         action_space,
-        steps_per_epoch: int = 10000,
+        steps_per_epoch: int = 10000, # steps per epoch per env
         train_iters: int = 80,
         gamma: float = 0.99,
         gae_lambda: float = 0.95,
