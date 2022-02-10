@@ -286,8 +286,9 @@ def ppo_update(
             if average_accumulate_grads:
                 loss_pi.backward()
                 loss_v.backward()
-        average_kl /= steps_per_train_iter
+        
         if average_accumulate_grads and target_kl is not None:
+            average_kl /= steps_per_train_iter
             if average_kl > 1.5 * target_kl:
                 logger.print("Early stopping at step %d due to reaching max kl." % update_step)
                 early_stop_update = True
