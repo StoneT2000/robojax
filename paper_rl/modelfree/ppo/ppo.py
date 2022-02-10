@@ -104,6 +104,7 @@ class PPO:
         optim=None,
         batch_size=1000,
         compute_delta_loss=False,
+        average_accumulate_grads=False,
     ):
         if max_ep_len is None:
             # TODO: infer this
@@ -136,7 +137,8 @@ class PPO:
                 target_kl=target_kl,
                 logger=logger,
                 compute_old=compute_delta_loss,
-                device=device
+                device=device,
+                average_accumulate_grads=average_accumulate_grads
             )
             pi_info, loss_pi, loss_v, pi_l_old, v_l_old, update_step = (
                 update_res["pi_info"],
@@ -193,7 +195,8 @@ def ppo_update(
     target_kl,
     logger=None,
     compute_old=False,
-    device=torch.device("cpu")
+    device=torch.device("cpu"),
+    average_accumulate_grads=False,
 ):
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data["obs"], data["act"], data["adv"].to(device), data["logp"].to(device)
@@ -211,12 +214,14 @@ def ppo_update(
 
         # Entropy loss for some basic extra exploration
         entropy = pi.entropy()
-
-        # Useful extra info
-        approx_kl = (logp_old - logp).mean().item()
-
-        clipped = ratio.gt(1 + clip_ratio) | ratio.lt(1 - clip_ratio)
-        clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
+        with torch.no_grad():
+            # Useful extra info
+            logr = logp - logp_old
+            approx_kl = (torch.exp(logr) - 1 - logr).mean().cpu().item()
+            
+            # approx_kl = (logp_old - logp).mean().item()
+            clipped = ratio.gt(1 + clip_ratio) | ratio.lt(1 - clip_ratio)
+            clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
         pi_info = dict(kl=approx_kl, ent=entropy.mean().item(), cf=clipfrac)
 
         return loss_pi, logp, entropy, pi_info
@@ -242,6 +247,11 @@ def ppo_update(
         # print(data["obs"].shape, data["adv"].shape)
 
         steps_per_train_iter = int(math.ceil(N / batch_size))
+        if average_accumulate_grads:
+            pi_optimizer.zero_grad()
+            vf_optimizer.zero_grad()
+            average_kl = 0
+        print("STEPS", steps_per_train_iter)
         for batch_idx in range(steps_per_train_iter):
             batch_data = dict()
             for k, v in data.items():
@@ -249,7 +259,10 @@ def ppo_update(
             loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
             loss_v = compute_loss_v(batch_data)
             kl = pi_info["kl"]
-            if target_kl is not None:
+            if average_accumulate_grads:
+                print("KL HERE", kl)
+                average_kl += kl
+            if not average_accumulate_grads and target_kl is not None:
                 if kl > 1.5 * target_kl:
                     logger.print("Early stopping at step %d due to reaching max kl." % update_step)
                     early_stop_update = True
@@ -262,11 +275,26 @@ def ppo_update(
             # else:
             #     entropy_loss = -torch.mean(entropy)
             # torch.nn.utils.clip_grad.clip_grad_norm_() # TODO
-            pi_optimizer.zero_grad()
-            vf_optimizer.zero_grad()
-            loss_pi.backward()
+            if not average_accumulate_grads:
+                pi_optimizer.zero_grad()
+                vf_optimizer.zero_grad()
+                loss_pi.backward()
+                pi_optimizer.step()
+                loss_v.backward()
+                vf_optimizer.step()
+                update_step += 1
+            if average_accumulate_grads:
+                loss_pi.backward()
+                loss_v.backward()
+        average_kl /= steps_per_train_iter
+        if average_accumulate_grads and target_kl is not None:
+            if average_kl > 1.5 * target_kl:
+                logger.print("Early stopping at step %d due to reaching max kl." % update_step)
+                early_stop_update = True
+                break
+        if average_accumulate_grads:
+            # average grads
             pi_optimizer.step()
-            loss_v.backward()
             vf_optimizer.step()
             update_step += 1
         if early_stop_update:
