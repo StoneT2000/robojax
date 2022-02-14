@@ -183,7 +183,7 @@ class PPO:
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
             logger.store("train", RolloutTime=rollout_delta_time, critic_warmup_epochs=critic_warmup_epochs, append=False)
             update_start_time = time.time_ns()
-            update_pi = critic_warmup_epochs <= 0
+            update_pi = epoch >= critic_warmup_epochs
             update(update_pi = update_pi)
             update_end_time = time.time_ns()
             logger.store("train", UpdateTime=(update_end_time - update_start_time) * 1e-9, append=False)
@@ -193,7 +193,6 @@ class PPO:
             logger.reset()
             if train_callback is not None:
                 train_callback(epoch=epoch, stats=stats)
-            critic_warmup_epochs -= 1
 
 
 def ppo_update(
