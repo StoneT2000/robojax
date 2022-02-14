@@ -227,7 +227,6 @@ def ppo_update(
             clipped = ratio.gt(1 + clip_ratio) | ratio.lt(1 - clip_ratio)
             clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
         pi_info = dict(kl=approx_kl, ent=entropy.mean().item(), cf=clipfrac)
-        print("KL", approx_kl)
         return loss_pi, logp, entropy, pi_info
 
     # Set up function for computing value loss
