@@ -99,6 +99,7 @@ class PPO:
         max_ep_len=None,
         start_epoch: int = 0,
         n_epochs: int = 10,
+        critic_warmup_epochs: int = 0, # number of epochs to collect rollouts and update critic only, freezing policy
         pi_optimizer: torch.optim.Optimizer = None,
         vf_optimizer: torch.optim.Optimizer = None,
         optim=None,
@@ -124,7 +125,7 @@ class PPO:
                 o = torch.as_tensor(o, dtype=torch.float32)
             return ac.step(o)
 
-        def update():
+        def update(update_pi=True):
             data = buf.get()
             update_res = ppo_update(
                 data=data,
@@ -138,7 +139,8 @@ class PPO:
                 logger=logger,
                 compute_old=compute_delta_loss,
                 device=device,
-                accumulate_grads=accumulate_grads
+                accumulate_grads=accumulate_grads,
+                update_pi=update_pi
             )
             pi_info, loss_pi, loss_v, pi_l_old, v_l_old, update_step = (
                 update_res["pi_info"],
@@ -149,15 +151,21 @@ class PPO:
                 update_res["update_step"],
             )
             logger.store(tag="train", StopIter=update_step, append=False)
-            kl, ent, cf = pi_info["kl"], pi_info["ent"], pi_info["cf"]
-            logger.store(
-                tag="train",
-                LossPi=loss_pi.cpu().item(),
-                LossV=loss_v.cpu().item(),
-                KL=kl,
-                Entropy=ent,
-                ClipFrac=cf,
-            )
+            
+            if loss_v is not None:
+                logger.store(
+                    tag="train",
+                    LossV=loss_v.cpu().item(),
+                )
+            if pi_info is not None:
+                kl, ent, cf = pi_info["kl"], pi_info["ent"], pi_info["cf"]
+                logger.store(
+                    tag="train",
+                    LossPi=loss_pi.cpu().item(),
+                    KL=kl,
+                    Entropy=ent,
+                    ClipFrac=cf,
+                )
             if compute_delta_loss:
                 logger.store(
                     tag="train",
@@ -173,9 +181,10 @@ class PPO:
             ac.pi.train()
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
-            logger.store("train", RolloutTime=rollout_delta_time, append=False)
+            logger.store("train", RolloutTime=rollout_delta_time, critic_warmup_epochs=critic_warmup_epochs, append=False)
             update_start_time = time.time_ns()
-            update()
+            update_pi = critic_warmup_epochs <= 0
+            update(update_pi = update_pi)
             update_end_time = time.time_ns()
             logger.store("train", UpdateTime=(update_end_time - update_start_time) * 1e-9, append=False)
             logger.store("train", Epoch=epoch, append=False)
@@ -184,6 +193,7 @@ class PPO:
             logger.reset()
             if train_callback is not None:
                 train_callback(epoch=epoch, stats=stats)
+            critic_warmup_epochs -= 1
 
 
 def ppo_update(
@@ -199,6 +209,7 @@ def ppo_update(
     compute_old=False,
     device=torch.device("cpu"),
     accumulate_grads=False,
+    update_pi=True,
 ):
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data["obs"], data["act"], data["adv"].to(device), data["logp"].to(device)
@@ -243,6 +254,8 @@ def ppo_update(
     # Train policy with multiple steps of gradient descent
     update_step = 0
     early_stop_update = False
+    loss_pi = None
+    pi_info = None
     for _ in range(train_iters):
         if early_stop_update:
             break
@@ -251,24 +264,24 @@ def ppo_update(
 
         steps_per_train_iter = int(math.ceil(N / batch_size))
         if accumulate_grads:
-            pi_optimizer.zero_grad()
+            if update_pi: pi_optimizer.zero_grad()
             vf_optimizer.zero_grad()
             average_kl = 0
         for batch_idx in range(steps_per_train_iter):
             batch_data = dict()
             for k, v in data.items():
                 batch_data[k] = v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
-            loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
+            if update_pi:
+                loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
+                kl = pi_info["kl"]
+                if accumulate_grads:
+                    average_kl += kl
+                if not accumulate_grads and target_kl is not None:
+                    if kl > 1.5 * target_kl:
+                        logger.print("Early stopping at step %d due to reaching max kl." % update_step)
+                        early_stop_update = True
+                        break
             loss_v = compute_loss_v(batch_data)
-            kl = pi_info["kl"]
-            if accumulate_grads:
-                average_kl += kl
-            if not accumulate_grads and target_kl is not None:
-                if kl > 1.5 * target_kl:
-                    logger.print("Early stopping at step %d due to reaching max kl." % update_step)
-                    early_stop_update = True
-                    break
-            
             # TODO - entropy loss
             # if entropy is None:
             #     # Approximate entropy when no analytical form
@@ -277,18 +290,20 @@ def ppo_update(
             #     entropy_loss = -torch.mean(entropy)
             # torch.nn.utils.clip_grad.clip_grad_norm_() # TODO
             if not accumulate_grads:
-                pi_optimizer.zero_grad()
+                if update_pi:
+                    pi_optimizer.zero_grad()
                 vf_optimizer.zero_grad()
-                loss_pi.backward()
-                pi_optimizer.step()
+                if update_pi:
+                    loss_pi.backward()
+                    pi_optimizer.step()
                 loss_v.backward()
                 vf_optimizer.step()
                 update_step += 1
             if accumulate_grads:
                 # scale loss down
-                loss_pi /= steps_per_train_iter
+                if update_pi: loss_pi /= steps_per_train_iter
                 loss_v /= steps_per_train_iter
-                loss_pi.backward()
+                if update_pi: loss_pi.backward()
                 loss_v.backward()
         
         if accumulate_grads and target_kl is not None:
@@ -298,7 +313,7 @@ def ppo_update(
                 early_stop_update = True
                 break
         if accumulate_grads:
-            pi_optimizer.step()
+            if update_pi: pi_optimizer.step()
             vf_optimizer.step()
             update_step += 1
         if early_stop_update:
