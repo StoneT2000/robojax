@@ -104,7 +104,7 @@ class PPO:
         optim=None,
         batch_size=1000,
         compute_delta_loss=False,
-        average_accumulate_grads=False,
+        accumulate_grads=False,
     ):
         if max_ep_len is None:
             # TODO: infer this
@@ -138,7 +138,7 @@ class PPO:
                 logger=logger,
                 compute_old=compute_delta_loss,
                 device=device,
-                average_accumulate_grads=average_accumulate_grads
+                accumulate_grads=accumulate_grads
             )
             pi_info, loss_pi, loss_v, pi_l_old, v_l_old, update_step = (
                 update_res["pi_info"],
@@ -168,7 +168,9 @@ class PPO:
         # to tweak, just copy the code below
         for epoch in range(start_epoch, start_epoch + n_epochs):
             rollout_start_time = time.time_ns()
+            ac.pi.eval()
             rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger)
+            ac.pi.train()
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
             logger.store("train", RolloutTime=rollout_delta_time, append=False)
@@ -196,7 +198,7 @@ def ppo_update(
     logger=None,
     compute_old=False,
     device=torch.device("cpu"),
-    average_accumulate_grads=False,
+    accumulate_grads=False,
 ):
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data["obs"], data["act"], data["adv"].to(device), data["logp"].to(device)
@@ -207,7 +209,9 @@ def ppo_update(
         # print(act.shape, act[:2])
 
         # Policy loss)
+        ac.pi.eval()
         pi, logp = ac.pi(obs, act)
+        ac.pi.train()
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
@@ -223,7 +227,7 @@ def ppo_update(
             clipped = ratio.gt(1 + clip_ratio) | ratio.lt(1 - clip_ratio)
             clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
         pi_info = dict(kl=approx_kl, ent=entropy.mean().item(), cf=clipfrac)
-
+        print("KL", approx_kl)
         return loss_pi, logp, entropy, pi_info
 
     # Set up function for computing value loss
@@ -247,11 +251,10 @@ def ppo_update(
         # print(data["obs"].shape, data["adv"].shape)
 
         steps_per_train_iter = int(math.ceil(N / batch_size))
-        if average_accumulate_grads:
+        if accumulate_grads:
             pi_optimizer.zero_grad()
             vf_optimizer.zero_grad()
             average_kl = 0
-        print("STEPS", steps_per_train_iter)
         for batch_idx in range(steps_per_train_iter):
             batch_data = dict()
             for k, v in data.items():
@@ -259,10 +262,9 @@ def ppo_update(
             loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
             loss_v = compute_loss_v(batch_data)
             kl = pi_info["kl"]
-            if average_accumulate_grads:
-                print("KL HERE", kl)
+            if accumulate_grads:
                 average_kl += kl
-            if not average_accumulate_grads and target_kl is not None:
+            if not accumulate_grads and target_kl is not None:
                 if kl > 1.5 * target_kl:
                     logger.print("Early stopping at step %d due to reaching max kl." % update_step)
                     early_stop_update = True
@@ -275,7 +277,7 @@ def ppo_update(
             # else:
             #     entropy_loss = -torch.mean(entropy)
             # torch.nn.utils.clip_grad.clip_grad_norm_() # TODO
-            if not average_accumulate_grads:
+            if not accumulate_grads:
                 pi_optimizer.zero_grad()
                 vf_optimizer.zero_grad()
                 loss_pi.backward()
@@ -283,18 +285,20 @@ def ppo_update(
                 loss_v.backward()
                 vf_optimizer.step()
                 update_step += 1
-            if average_accumulate_grads:
+            if accumulate_grads:
+                # scale loss down
+                loss_pi /= steps_per_train_iter
+                loss_v /= steps_per_train_iter
                 loss_pi.backward()
                 loss_v.backward()
         
-        if average_accumulate_grads and target_kl is not None:
+        if accumulate_grads and target_kl is not None:
             average_kl /= steps_per_train_iter
             if average_kl > 1.5 * target_kl:
                 logger.print("Early stopping at step %d due to reaching max kl." % update_step)
                 early_stop_update = True
                 break
-        if average_accumulate_grads:
-            # average grads
+        if accumulate_grads:
             pi_optimizer.step()
             vf_optimizer.step()
             update_step += 1
