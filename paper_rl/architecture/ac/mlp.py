@@ -70,7 +70,6 @@ class MLPActorCritic(ActorCritic):
         log_std_scale=-0.5,
     ):
         super().__init__()
-
         obs_dim = observation_space.shape[0]
 
         # policy builder depends on action space

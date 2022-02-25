@@ -123,6 +123,8 @@ class PPO:
         def policy(o):
             if obs_to_tensor is None:
                 o = torch.as_tensor(o, dtype=torch.float32)
+            else:
+                o = obs_to_tensor(o)
             return ac.step(o)
 
         def update(update_pi=True):
