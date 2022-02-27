@@ -198,10 +198,8 @@ class PPO:
             logger.store("train", UpdateTime=(update_end_time - update_start_time) * 1e-9, append=False)
             logger.store("train", Epoch=epoch, append=False)
             logger.store("train", TotalEnvInteractions=self.steps_per_epoch * self.n_envs * (epoch + 1), append=False)
-            stats = logger.log(step=epoch)
-            logger.reset()
             if train_callback is not None:
-                train_callback(epoch=epoch, stats=stats)
+                train_callback(epoch=epoch)
 
 
 def ppo_update(

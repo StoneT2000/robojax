@@ -18,7 +18,7 @@ from stable_baselines3.common.env_util import make_vec_env
 if __name__ == "__main__":
     # env_id = "Pendulum-v0"
     env_id = "CartPole-v1"
-    num_cpu = 2
+    num_cpu = 1
     seed = 1
     env = make_vec_env(env_id, num_cpu, seed=seed)
 
@@ -41,13 +41,12 @@ if __name__ == "__main__":
         observation_space=env.observation_space,
         logger=logger,
         steps_per_epoch=steps_per_epoch,
-        ent_coef=0.00,
-        vf_coef=0.5,
         gamma=0.95,
         train_iters=10,  # 80 // (steps_per_epoch * num_cpu // batch_size)
     )
 
-    def train_callback(epoch, stats):
+    def train_callback(epoch):
+        stats = logger.log(step=epoch)
         filtered = {}
         for k in stats.keys():
             if (
@@ -64,17 +63,18 @@ if __name__ == "__main__":
             ):
                 filtered[k] = stats[k]
         logger.pretty_print_table(filtered)
+        logger.reset()
 
-    # algo.train(
-    #     max_ep_len=1000,
-    #     start_epoch=0,
-    #     n_epochs=10,
-    #     pi_optimizer=pi_optimizer,
-    #     vf_optimizer=vf_optimizer,
-    #     batch_size=batch_size,
-    #     rollout_callback=None,
-    #     train_callback=train_callback,
-    # )
+    algo.train(
+        max_ep_len=1000,
+        start_epoch=0,
+        n_epochs=10,
+        pi_optimizer=pi_optimizer,
+        vf_optimizer=vf_optimizer,
+        batch_size=batch_size,
+        rollout_callback=None,
+        train_callback=train_callback,
+    )
     env.close()
 
     eval_env = make_vec_env(env_id, 1, seed=seed)
