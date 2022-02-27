@@ -19,6 +19,7 @@ class Rollout:
         rollout_callback=None,
         custom_reward=None,
         logger=None,
+        render=False,
     ):
         trajectories = []
         past_obs = []
@@ -29,15 +30,23 @@ class Rollout:
             past_rews.append([])
             past_acts.append([])
         observations = env.reset()
+        is_dict = isinstance(observations, dict)
         step = 0
         while True:
             with torch.no_grad():
                 acts = policy(observations)
-            for idx, o in enumerate(observations):
-                past_obs[idx].append(o)
+            if is_dict:
+                for idx in range(n_envs):
+                    o = {}
+                    for k in observations.keys():
+                        o[k] = observations[k][idx]
+                    past_obs[idx].append(o)
+            else:
+                for idx, o in enumerate(observations):
+                    past_obs[idx].append(o)
             for idx, a in enumerate(acts):
                 past_acts[idx].append(a)
-
+            if render: env.render()
             next_os, rewards, dones, infos = env.step(acts)
             if custom_reward is not None: rewards = custom_reward(rewards, observations, acts)
             for idx, r in enumerate(rewards):
@@ -80,7 +89,7 @@ class Rollout:
         rollout_callback=None,
         max_ep_len=1000,
         custom_reward=None,
-        logger=None
+        logger=None,
     ):
         """
         collects for a buffer
