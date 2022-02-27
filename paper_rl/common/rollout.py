@@ -86,7 +86,7 @@ class Rollout:
         collects for a buffer
         """
         # policy should return a, v, logp
-        observations, ep_returns, ep_lengths = env.reset(), np.zeros(n_envs), np.zeros(n_envs)
+        observations, ep_returns, ep_lengths = env.reset(), np.zeros(n_envs), np.zeros(n_envs, dtype=int)
         rollout_start_time = time.time_ns()
         for t in range(steps):
             a, v, logp = policy(observations)
@@ -97,6 +97,9 @@ class Rollout:
             ep_returns += rewards
             ep_lengths += 1
             buf.store(observations, a, rewards, v, logp)
+            timeouts = ep_lengths == max_ep_len
+            terminals = dones | timeouts  # terminated means done or reached max ep length
+            epoch_ended = t == steps - 1
             if rollout_callback is not None:
                 rollout_callback(
                     observations=observations,
@@ -105,15 +108,11 @@ class Rollout:
                     rewards=rewards,
                     infos=infos,
                     dones=dones,
+                    terminals=terminals,
                 )
             if logger is not None: logger.store(tag="train", VVals=v)
 
             observations = next_os
-
-            timeouts = ep_lengths == max_ep_len
-            terminals = dones | timeouts  # terminated means done or reached max ep length
-            epoch_ended = t == steps - 1
-
             for idx, terminal in enumerate(terminals):
                 if terminal or epoch_ended:
                     if "terminal_observation" in infos[idx]:

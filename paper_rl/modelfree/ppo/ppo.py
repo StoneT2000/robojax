@@ -96,6 +96,7 @@ class PPO:
         train_callback=None,
         rollout_callback=None,
         obs_to_tensor=None,
+        custom_obs=lambda x: x, # for formatting obs to put in replay buffer
         max_ep_len=None,
         start_epoch: int = 0,
         n_epochs: int = 10,
@@ -107,6 +108,12 @@ class PPO:
         compute_delta_loss=False,
         accumulate_grads=False,
     ):
+        """
+        Parameters
+        ----------
+
+        max_ep_len - max episode length. Can be set to infinity if environment returns a done signal to cap max episode length    
+        """
         if max_ep_len is None:
             # TODO: infer this
             raise ValueError("max_ep_len is missing")
