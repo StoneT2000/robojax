@@ -6,7 +6,7 @@ import torch
 
 from paper_rl.common.buffer import BaseBuffer
 
-
+from tqdm import tqdm
 class Rollout:
     def __init__(self) -> None:
         pass
@@ -20,6 +20,7 @@ class Rollout:
         custom_reward=None,
         logger=None,
         render=False,
+        pbar=False,
     ):
         trajectories = []
         past_obs = []
@@ -32,6 +33,8 @@ class Rollout:
         observations = env.reset()
         is_dict = isinstance(observations, dict)
         step = 0
+        if pbar:
+            pbar = tqdm(total=n_trajectories)
         while True:
             with torch.no_grad():
                 acts = policy(observations)
@@ -65,7 +68,7 @@ class Rollout:
             # eval_env.render()
             for idx, d in enumerate(dones):
                 if d:
-                    t_obs = np.vstack(past_obs[idx])
+                    t_obs = past_obs[idx] if is_dict else np.vstack(past_obs[idx])
                     t_act = np.vstack(past_acts[idx])
                     t_rew = np.vstack(past_rews[idx])
                     trajectories.append({
@@ -76,6 +79,7 @@ class Rollout:
                     past_obs[idx] = []
                     past_acts[idx] = []
                     past_rews[idx] = []
+                    pbar.update()
                     if len(trajectories) == n_trajectories:
                         return trajectories
             step += 1
