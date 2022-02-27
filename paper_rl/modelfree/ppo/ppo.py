@@ -219,8 +219,14 @@ def ppo_update(
     accumulate_grads=False,
     update_pi=True,
 ):
+    # TODO ABSTRACT OBS TO DEVICE TO A SEPARATE FUNC
     def compute_loss_pi(data):
-        obs, act, adv, logp_old = data["obs"], data["act"], data["adv"].to(device), data["logp"].to(device)
+        obs, act, adv, logp_old = data["obs"], data["act"].to(device), data["adv"].to(device), data["logp"].to(device)
+        if isinstance(obs, dict):
+            for k in obs.keys():
+                obs[k] = obs[k].to(device)
+        else:
+            obs = obs.to(device)
         # if isinstance(self.env.action_space, spaces.Discrete):
         # Convert discrete action from float to long
         # print(act.shape, act[:2])
@@ -251,6 +257,11 @@ def ppo_update(
     # Set up function for computing value loss
     def compute_loss_v(data):
         obs, ret = data["obs"], data["ret"].to(device)
+        if isinstance(obs, dict):
+            for k in obs.keys():
+                obs[k] = obs[k].to(device)
+        else:
+            obs = obs.to(device)
         return ((ac.v(obs) - ret) ** 2).mean()
 
     pi_l_old, v_l_old, entropy_old = None, None, None
