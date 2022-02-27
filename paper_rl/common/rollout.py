@@ -38,6 +38,7 @@ class Rollout:
         while True:
             with torch.no_grad():
                 acts = policy(observations)
+
             if is_dict:
                 for idx in range(n_envs):
                     o = {}
@@ -47,6 +48,7 @@ class Rollout:
             else:
                 for idx, o in enumerate(observations):
                     past_obs[idx].append(o)
+
             for idx, a in enumerate(acts):
                 past_acts[idx].append(a)
             if render: env.render()
@@ -68,6 +70,8 @@ class Rollout:
             # eval_env.render()
             for idx, d in enumerate(dones):
                 if d:
+                    termminal_obs = infos[idx]["terminal_observation"]
+                    past_obs[idx].append(termminal_obs)
                     t_obs = past_obs[idx] if is_dict else np.vstack(past_obs[idx])
                     t_act = np.vstack(past_acts[idx])
                     t_rew = np.vstack(past_rews[idx])

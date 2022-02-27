@@ -91,18 +91,12 @@ class MLPActorCritic(ActorCritic):
             a = pi.sample()
             logp_a = self.pi._log_prob_from_distribution(pi, a)
             v = self.v(obs)
-        return a.numpy(), v.numpy(), logp_a.numpy()
+        return a.cpu().numpy(), v.cpu().numpy(), logp_a.cpu().numpy()
 
     def act(self, obs, deterministic=False):
         if deterministic:
-            return self.pi.act(obs).numpy()
+            return self.pi.act(obs).cpu().numpy()
         return self.step(obs)[0]
 
     def get_value(self, x):
         return self.v(x)
-
-    def get_action_and_value(self, x, action=None):
-        probs = self.pi._distribution(x)
-        if action is None:
-            action = probs.sample()
-        return action, probs.log_prob(action), probs.entropy(), self.v(x)
