@@ -289,7 +289,12 @@ def ppo_update(
         for batch_idx in range(steps_per_train_iter):
             batch_data = dict()
             for k, v in data.items():
-                batch_data[k] = v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
+                if isinstance(v, dict):
+                    batch_data[k] = {}
+                    for v_k in v.keys():
+                        batch_data[k][v_k] = v[v_k][max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
+                else:
+                    batch_data[k] = v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
             if update_pi:
                 loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
                 kl = pi_info["kl"]

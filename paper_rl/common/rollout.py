@@ -48,7 +48,6 @@ class Rollout:
             else:
                 for idx, o in enumerate(observations):
                     past_obs[idx].append(o)
-
             for idx, a in enumerate(acts):
                 past_acts[idx].append(a)
             if render: env.render()
@@ -104,6 +103,7 @@ class Rollout:
         """
         # policy should return a, v, logp
         observations, ep_returns, ep_lengths = env.reset(), np.zeros(n_envs), np.zeros(n_envs, dtype=int)
+        is_dict = isinstance(observations, dict)
         rollout_start_time = time.time_ns()
         for t in range(steps):
             a, v, logp = policy(observations)
@@ -135,7 +135,12 @@ class Rollout:
                     if "terminal_observation" in infos[idx]:
                         o = infos[idx]["terminal_observation"]
                     else:
-                        o = observations[idx]
+                        if is_dict:
+                            o = {}
+                            for k in observations:
+                                o[k] = observations[k][idx:idx+1]
+                        else:
+                            o = observations[idx]
                     ep_ret = ep_returns[idx]
                     ep_len = ep_lengths[idx]
                     timeout = timeouts[idx]

@@ -36,7 +36,9 @@ class PPOBuffer(BaseBuffer):
         if isinstance(self.obs_shape, dict):
             # raise NotImplementedError("Can't handle dict observations yet!")
             self.obs_is_dict = True
-            self.obs_buf = []
+            self.obs_buf = {}
+            for k in self.observation_space:
+                self.obs_buf[k] = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape[k], dtype=self.observation_space[k].dtype)
         else:
             self.obs_buf = np.zeros(
                 (self.buffer_size, self.n_envs) + self.obs_shape, dtype=np.float32,
@@ -71,7 +73,9 @@ class PPOBuffer(BaseBuffer):
         """
         assert self.ptr < self.max_size  # buffer has to have room so you can store
         if self.obs_is_dict:
-            self.obs_buf.append(np.array(obs).copy())
+            for k in obs.keys():
+                obs[k] = obs[k].reshape(self.obs_buf[k][self.ptr].shape)
+                self.obs_buf[k][self.ptr] = np.array(obs[k]).copy()
         else:
             self.obs_buf[self.ptr] = np.array(obs).copy()
         if isinstance(self.action_space, spaces.Discrete):
@@ -134,10 +138,13 @@ class PPOBuffer(BaseBuffer):
             logp=self.logp_buf.reshape(-1),
         )
         if self.obs_is_dict:
-            flattened = [item for sublist in self.obs_buf for item in sublist]
+            # flattened = [item for sublist in self.obs_buf for item in sublist]
             # print("OBSBUF", len(self.obs_buf), len(flattened))
-            data["obs"] = flattened
-            self.obs_buf = []
+            # data["obs"] = flattened
+            data["obs"] = {}
+            for k in self.obs_shape:
+                data["obs"][k] = self.obs_buf[k].reshape((-1, ) + self.obs_shape[k])
+                self.obs_buf[k] = np.zeros((self.buffer_size, self.n_envs) + self.obs_shape[k], dtype=self.observation_space[k].dtype)
         else:
             data["obs"] = self.obs_buf.reshape((-1, ) + self.obs_shape)
         if isinstance(self.action_space, spaces.Discrete):
@@ -147,6 +154,8 @@ class PPOBuffer(BaseBuffer):
         tensored_data = {k: torch.as_tensor(data[k], dtype=torch.float32) for k in ["ret", "adv", "logp", "act"]}
         if self.obs_is_dict:
             # tensored_data["obs"] = torch.as_tensor(data["obs"], dtype=torch.float32)
+            for k in data["obs"]:
+                data["obs"][k] = torch.as_tensor(data["obs"][k])
             tensored_data["obs"] = data["obs"]
         else:
             tensored_data["obs"] = torch.as_tensor(data["obs"], dtype=torch.float32)
