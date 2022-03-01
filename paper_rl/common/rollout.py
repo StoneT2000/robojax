@@ -133,7 +133,11 @@ class Rollout:
             for idx, terminal in enumerate(terminals):
                 if terminal or epoch_ended:
                     if "terminal_observation" in infos[idx]:
+                        # batch the input
                         o = infos[idx]["terminal_observation"]
+                        if is_dict:
+                            for k in o:
+                                o[k] = np.expand_dims(o[k], axis=0)
                     else:
                         if is_dict:
                             o = {}
