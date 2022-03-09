@@ -82,7 +82,7 @@ class Rollout:
                     past_obs[idx] = []
                     past_acts[idx] = []
                     past_rews[idx] = []
-                    pbar.update()
+                    if pbar: pbar.update()
                     if len(trajectories) == n_trajectories:
                         return trajectories
             step += 1
