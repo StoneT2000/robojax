@@ -140,7 +140,7 @@ class Rollout:
                     rewards=rewards,
                     infos=infos,
                     dones=dones,
-                    terminals=terminals,
+                    timeouts=timeouts,
                 )
             if logger is not None: logger.store(tag="train", VVals=v)
 
