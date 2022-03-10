@@ -21,7 +21,13 @@ class Rollout:
         logger=None,
         render=False,
         pbar=False,
+        even_num_traj_per_env=False # collects even number of trajectories per env
     ):
+        traj_count = 0
+        if even_num_traj_per_env:
+            assert n_trajectories % n_envs == 0
+            max_trajectories_per_env = n_trajectories / n_envs
+            trajectories_per_env = []
         trajectories = []
         past_obs = []
         past_rews = []
@@ -30,6 +36,8 @@ class Rollout:
             past_obs.append([])
             past_rews.append([])
             past_acts.append([])
+            if even_num_traj_per_env:
+                trajectories_per_env.append([])
         observations = env.reset()
         is_dict = isinstance(observations, dict)
         step = 0
@@ -69,22 +77,29 @@ class Rollout:
             # eval_env.render()
             for idx, d in enumerate(dones):
                 if d:
-                    termminal_obs = infos[idx]["terminal_observation"]
-                    past_obs[idx].append(termminal_obs)
-                    t_obs = past_obs[idx] if is_dict else np.vstack(past_obs[idx])
-                    t_act = np.vstack(past_acts[idx])
-                    t_rew = np.vstack(past_rews[idx])
-                    trajectories.append({
-                        "observations": t_obs,
-                        "rewards": t_rew,
-                        "actions": t_act
-                    })
+                    if not even_num_traj_per_env or len(trajectories_per_env[idx]) < max_trajectories_per_env:
+                        termminal_obs = infos[idx]["terminal_observation"]
+                        past_obs[idx].append(termminal_obs)
+                        t_obs = past_obs[idx] if is_dict else np.vstack(past_obs[idx])
+                        t_act = np.vstack(past_acts[idx])
+                        t_rew = np.vstack(past_rews[idx])
+                        traj = {
+                            "observations": t_obs,
+                            "rewards": t_rew,
+                            "actions": t_act
+                        }
+                        traj_count += 1
+                        if not even_num_traj_per_env:
+                            trajectories.append(traj)
+                        else:
+                            trajectories_per_env[idx].append(traj)
                     past_obs[idx] = []
                     past_acts[idx] = []
                     past_rews[idx] = []
                     if pbar: pbar.update()
-                    if len(trajectories) == n_trajectories:
-                        return trajectories
+                    if traj_count == n_trajectories:
+                        if even_num_traj_per_env: return trajectories_per_env
+                        else: return trajectories
             step += 1
     def collect(
         self,
