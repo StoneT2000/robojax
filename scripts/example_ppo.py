@@ -1,6 +1,8 @@
+import os.path as osp
 import gym
 import numpy as np
 import torch
+from paper_rl.cfg import parse_cfg
 from paper_rl.common.rollout import Rollout
 from paper_rl.logger.logger import Logger
 
@@ -17,9 +19,10 @@ from stable_baselines3.common.env_util import make_vec_env
 
 if __name__ == "__main__":
     # env_id = "Pendulum-v0"
-    env_id = "CartPole-v1"
-    num_cpu = 1
-    seed = 1
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "default_ppo.yml"))
+    env_id = cfg["env_id"]
+    num_cpu = cfg["cpu"]
+    seed = cfg["seed"]
     env = make_vec_env(env_id, num_cpu, seed=seed)
 
     torch.manual_seed(seed)
@@ -27,12 +30,10 @@ if __name__ == "__main__":
     model = MLPActorCritic(env.observation_space, env.action_space, hidden_sizes=(64, 64))
     pi_optimizer = torch.optim.Adam(model.pi.parameters(), lr=1e-4)
     vf_optimizer = torch.optim.Adam(model.v.parameters(), lr=4e-4)
-
-    # torch.set_num_threads(1)
-
-    logger = Logger(tensorboard=True)
-    steps_per_epoch = 2048 // num_cpu
-    batch_size = 512
+    
+    logger = Logger(tensorboard=False, wandb=True, cfg=cfg, workspace=cfg["workspace"], exp_name=cfg["exp_name"])
+    steps_per_epoch = cfg["steps_per_epoch"] // num_cpu
+    batch_size = cfg["batch_size"]
     algo = PPO(
         ac=model,
         env=env,
@@ -41,8 +42,8 @@ if __name__ == "__main__":
         observation_space=env.observation_space,
         logger=logger,
         steps_per_epoch=steps_per_epoch,
-        gamma=0.95,
-        train_iters=10,  # 80 // (steps_per_epoch * num_cpu // batch_size)
+        gamma=cfg["gamma"],
+        train_iters=cfg["train_iters"],  # 80 // (steps_per_epoch * num_cpu // batch_size)
     )
 
     def train_callback(epoch):
@@ -68,7 +69,7 @@ if __name__ == "__main__":
     algo.train(
         max_ep_len=1000,
         start_epoch=0,
-        n_epochs=10,
+        n_epochs=cfg["epochs"],
         pi_optimizer=pi_optimizer,
         vf_optimizer=vf_optimizer,
         batch_size=batch_size,
@@ -99,6 +100,11 @@ if __name__ == "__main__":
     expert_trajectories = rollout.collect_trajectories(policy, eval_env, n_trajectories=10, n_envs=2,)
     eval_env.close()
     for e in expert_trajectories:
-        print(len(e["observations"]))
+        logger.store(tag="test", append=True, EpLen=len(e["observations"] - 1))
     print(f"Collected {len(expert_trajectories)} trajectories")
-    np.save("weak_cartpole.npy", expert_trajectories)
+    # np.save("weak_cartpole.npy", expert_trajectories)
+
+    stats = logger.log(cfg["epochs"] - 1)
+    logger.pretty_print_table(stats)
+
+    logger.close()

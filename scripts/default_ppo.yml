@@ -1,0 +1,12 @@
+env_id: CartPole-v1
+steps_per_epoch: 2048
+cpu: 4
+batch_size: 512
+
+gamma: 0.95
+train_iters: 10
+epochs: 10
+
+workspace: "PaperRL"
+
+exp_name: "ppo-CartPole-v1"

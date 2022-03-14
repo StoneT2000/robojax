@@ -40,6 +40,7 @@ dependencies:
   - transforms3d
 
   - pip:
+
     # Simulators
     - sapien
 
@@ -49,6 +50,7 @@ dependencies:
     # Exp tracking
     - tensorboard
     - wandb
+    - omegaconf
 
     # More Deep Learning
     - tensorflow

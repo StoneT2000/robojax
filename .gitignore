@@ -4,3 +4,4 @@ __pycache__
 paper_rl/architecture/ac/transformer
 .ipynb_checkpoints
 .DS_Store
+wandb/**/*

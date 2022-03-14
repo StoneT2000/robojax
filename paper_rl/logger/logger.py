@@ -6,8 +6,8 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict
-
+from typing import Dict, Union
+from omegaconf import OmegaConf
 import numpy as np
 import pandas as pd
 import torch
@@ -25,7 +25,7 @@ color2num = dict(
     white=37,
     crimson=38,
 )
-
+import wandb as wb
 
 def colorize(string, color, bold=False, highlight=False):
     """
@@ -55,6 +55,7 @@ class Logger:
         workspace: str = "default_workspace",
         exp_name: str = "default_exp",
         clear_out: bool = True,
+        cfg: Union[Dict, OmegaConf] = {},
     ) -> None:
         """
 
@@ -79,22 +80,33 @@ class Logger:
         # set up external loggers
         if self.tensorboard:
             from torch.utils.tensorboard import SummaryWriter
-
             self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
-            pass
+            wb.init(project=workspace, name=exp_name)
+        self.save_config(cfg)
 
         self.data = defaultdict(dict)
         self.stats = {}
 
     def close(self):
+        """
+        finishes up experiment logging
+
+        in wandb, finishes the experiment and uploads remaining data
+        """
         if self.tensorboard:
             self.tb_writer.close()
+        if self.wandb:
+            wb.finish()
 
-    def save_config(self, config: Dict, verbose=2):
+    def save_config(self, config: Union[Dict, OmegaConf], verbose=2):
         """
         save configuration of experiments to the experiment directory
         """
+        if type(config) == type(OmegaConf.create()):
+            config = OmegaConf.to_container(config)
+        if self.wandb:
+            wb.config.update(config)
         config_path = osp.join(self.exp_path, "config.json")
         config_json = convert_json(config)
         output = json.dumps(config_json, indent=2, sort_keys=True)
@@ -190,6 +202,9 @@ class Logger:
                     if self.tensorboard:
                         self.tb_writer.add_scalar(name, scalar, step)
                     self.stats[name] = scalar
+                if self.wandb:
+                    wb.log(data=key_vals, step=step)
+                    
         return self.stats
 
     def reset(self):
