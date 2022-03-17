@@ -55,6 +55,7 @@ class Logger:
         workspace: str = "default_workspace",
         exp_name: str = "default_exp",
         clear_out: bool = True,
+        project_name: str = None,
         cfg: Union[Dict, OmegaConf] = {},
     ) -> None:
         """
@@ -82,7 +83,9 @@ class Logger:
             from torch.utils.tensorboard import SummaryWriter
             self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
-            wb.init(project=workspace, name=exp_name)
+            if project_name is None:
+                project_name = workspace
+            wb.init(project=project_name, name=exp_name)
         self.save_config(cfg)
 
         self.data = defaultdict(dict)
