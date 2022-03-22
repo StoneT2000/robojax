@@ -80,6 +80,12 @@ if __name__ == "__main__":
         demo_trajectories["actions"].append(traj["actions"])
     demo_trajectories["observations"] = torch.as_tensor(np.vstack(demo_trajectories["observations"]), dtype=torch.float32)
     demo_trajectories["actions"] = torch.as_tensor(np.vstack(demo_trajectories["actions"]), dtype=torch.float32)
+    def demo_trajectory_sampler(batch_size):
+        transition_inds = np.random.randint(0, len(demo_trajectories["observations"]), size=batch_size)
+        return dict(
+            observations=demo_trajectories["observations"][transition_inds],
+            actions=demo_trajectories["actions"][transition_inds]
+        )
     algo.train(
         max_ep_len=1000,
         start_epoch=0,
@@ -89,7 +95,7 @@ if __name__ == "__main__":
         batch_size=batch_size,
         rollout_callback=None,
         train_callback=train_callback,
-        demo_trajectories=demo_trajectories
+        demo_trajectory_sampler=demo_trajectory_sampler
     )
     env.close()
 

@@ -114,7 +114,7 @@ class PPO:
         vf_optimizer: torch.optim.Optimizer = None,
         batch_size=1000,
         accumulate_grads=False,
-        demo_trajectories = None,
+        demo_trajectory_sampler = None,
     ):
         """
         Parameters
@@ -122,8 +122,10 @@ class PPO:
 
         max_ep_len - max episode length. Can be set to infinity if environment returns a done signal to cap max episode length    
 
-        demo_trajectories - optional demo trajectories to provide for DAPG training
+        demo_trajectory_sampler - optional function that returns sampled demo trajectories to provide for DAPG training
         """
+        dapg = False
+        if demo_trajectory_sampler is not None: dapg = True
         if max_ep_len is None:
             # TODO: infer this
             raise ValueError("max_ep_len is missing")
@@ -158,7 +160,7 @@ class PPO:
                 device=device,
                 accumulate_grads=accumulate_grads,
                 update_pi=update_pi,
-                demo_trajectories=demo_trajectories,
+                demo_trajectories=demo_trajectory_sampler(batch_size),
                 dapg_lambda=self.dapg_lambda
             )
             pi_info, loss_pi, loss_v, update_step = (
@@ -205,7 +207,7 @@ class PPO:
             update(update_pi = update_pi)
             update_end_time = time.time_ns()
 
-            if demo_trajectories is not None:
+            if dapg:
                 logger.store("train", dapg_lambda=self.dapg_lambda, append=False)
                 self.dapg_lambda *= self.dapg_damping
 
@@ -244,11 +246,7 @@ def ppo_update(
     # TODO ABSTRACT OBS TO DEVICE TO A SEPARATE FUNC
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data["obs_buf"], data["act_buf"].to(device), data["adv_buf"].to(device), data["logp_buf"].to(device)
-        if isinstance(obs, dict):
-            for k in obs.keys():
-                obs[k] = obs[k].to(device)
-        else:
-            obs = obs.to(device)
+        obs = to_torch(obs, device=device)
 
         # Policy loss)
         ac.pi.eval()
@@ -271,7 +269,8 @@ def ppo_update(
         # add dapg loss, the negative log likelihood in particular
         if demo_trajectories is not None:
             ac.pi.eval()
-            demo_pi, demo_logp = ac.pi(demo_trajectories["observations"], demo_trajectories["actions"])
+            
+            demo_pi, demo_logp = ac.pi(to_torch(demo_trajectories["observations"], device=device), to_torch(demo_trajectories["actions"], device=device))
             ac.pi.train()
             dapg_actor_loss = -demo_logp.mean()
 
