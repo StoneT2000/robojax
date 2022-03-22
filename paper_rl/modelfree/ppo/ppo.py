@@ -231,7 +231,7 @@ class PPO:
 
             if dapg:
                 logger.store("train", dapg_lambda=self.dapg_lambda, append=False)
-                self.dapg_lambda *= self.dapg_damping
+                if update_pi: self.dapg_lambda *= self.dapg_damping
 
             logger.store("train", UpdateTime=(update_end_time - update_start_time) * 1e-9, append=False)
             logger.store("train", Epoch=epoch, append=False)
