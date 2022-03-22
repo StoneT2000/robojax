@@ -355,8 +355,9 @@ def ppo_update(
             average_kl = 0
         for batch_idx in range(steps_per_train_iter):
             batch_data = buffer.sample_batch(batch_size=batch_size)
-            batch_demo_trajectories = demo_trajectories[batch_idx]
-            batch_data["demo_trajectories"] = batch_demo_trajectories
+            if dapg: 
+                batch_demo_trajectories = demo_trajectories[batch_idx]
+                batch_data["demo_trajectories"] = batch_demo_trajectories
             if update_pi:
                 loss_pi_data = compute_loss_pi(batch_data)
                 loss_pi, logp, entropy, pi_info = loss_pi_data["loss_pi"], loss_pi_data["logp"], loss_pi_data["entropy"], loss_pi_data["pi_info"]
