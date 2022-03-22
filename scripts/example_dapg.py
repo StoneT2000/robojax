@@ -20,7 +20,7 @@ from stable_baselines3.common.env_util import make_vec_env
 
 if __name__ == "__main__":
     # env_id = "Pendulum-v0"
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "sample_configs/default_ppo.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "sample_configs/default_dapg.yml"))
     env_id = cfg["env_id"]
     num_cpu = cfg["cpu"]
     seed = cfg["seed"]
@@ -45,6 +45,8 @@ if __name__ == "__main__":
         steps_per_epoch=steps_per_epoch,
         gamma=cfg["gamma"],
         train_iters=cfg["train_iters"],  # 80 // (steps_per_epoch * num_cpu // batch_size)
+        dapg_damping=cfg["dapg_damping"],
+        dapg_lambda=cfg["dapg_lambda"]
     )
 
     def train_callback(epoch):
@@ -58,8 +60,9 @@ if __name__ == "__main__":
                 or "EpLen" in k
                 # or "VVals" in k
                 or "LossPi_avg" in k
-                or "KL_avg" in k
-                or "ClipFrac_avg" in k
+                or "LossDAPGActor_avg" in k
+                or "PPOLoss_avg" in k
+                or "dapg_lambda" in k
                 or "UpdateTime" in k
                 or "RolloutTime" in k
             ):
@@ -67,6 +70,16 @@ if __name__ == "__main__":
         logger.pretty_print_table(filtered)
         logger.reset()
 
+    # sample demo trajectories
+    with open("./scripts/expert_cartpole.pkl", "rb") as f:
+        expert_trajectories = pickle.load(f)
+
+    demo_trajectories = dict(observations=[], actions=[])
+    for traj in expert_trajectories:
+        demo_trajectories["observations"].append(traj["observations"][:-1])
+        demo_trajectories["actions"].append(traj["actions"])
+    demo_trajectories["observations"] = torch.as_tensor(np.vstack(demo_trajectories["observations"]), dtype=torch.float32)
+    demo_trajectories["actions"] = torch.as_tensor(np.vstack(demo_trajectories["actions"]), dtype=torch.float32)
     algo.train(
         max_ep_len=1000,
         start_epoch=0,
@@ -76,6 +89,7 @@ if __name__ == "__main__":
         batch_size=batch_size,
         rollout_callback=None,
         train_callback=train_callback,
+        demo_trajectories=demo_trajectories
     )
     env.close()
 
@@ -103,9 +117,6 @@ if __name__ == "__main__":
     eval_env.close()
     for e in expert_trajectories:
         logger.store(tag="test", append=True, EpLen=len(e["observations"] - 1))
-    print(f"Collected {len(expert_trajectories)} trajectories")
-    with open("expert_cartpole.pkl", "wb") as f:
-        pickle.dump(expert_trajectories, f)
 
     stats = logger.log(cfg["epochs"] - 1)
     logger.pretty_print_table(stats)

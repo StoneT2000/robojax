@@ -33,6 +33,8 @@ class PPO:
         clip_ratio: float = 0.2,
         ent_coef: float = 0.0,
         vf_coef: float = 0.5,
+        dapg_lambda: float = 0.1,
+        dapg_damping: float = 0.99,
         # max_grad_norm: float = 0.5, # TODO
         # use_sde: bool = False,
         # sde_sample_freq: int = -1,
@@ -42,7 +44,7 @@ class PPO:
         # verbose: int = 0,
         seed: Optional[int] = None,
         device: Union[torch.device, str] = "cpu",
-        # _init_setup_model: bool = True
+
     ) -> None:
         # Random seed
         if seed is None:
@@ -64,6 +66,9 @@ class PPO:
         self.clip_ratio = clip_ratio
         self.gae_lambda = gae_lambda
         self.gamma = gamma
+
+        self.dapg_lambda = dapg_lambda
+        self.dapg_damping = dapg_damping
 
         # self.pi_optimizer = optim.Adam(ac.pi.parameters(), lr=pi_lr)
         # self.vf_optimizer = optim.Adam(ac.v.parameters(), lr=vf_lr)
@@ -90,29 +95,34 @@ class PPO:
         )
 
     def to_state_dict(self):
-        pass
+        state_dict = dict(
+            ac_state_dict=self.ac.state_dict(),
+            # TODO
+        )
+        return state_dict
 
     def train(
         self,
         train_callback=None,
         rollout_callback=None,
         obs_to_tensor=None,
-        custom_obs=lambda x: x, # for formatting obs to put in replay buffer
         max_ep_len=None,
         start_epoch: int = 0,
         n_epochs: int = 10,
         critic_warmup_epochs: int = 0, # number of epochs to collect rollouts and update critic only, freezing policy
         pi_optimizer: torch.optim.Optimizer = None,
         vf_optimizer: torch.optim.Optimizer = None,
-        optim=None,
         batch_size=1000,
         accumulate_grads=False,
+        demo_trajectories = None,
     ):
         """
         Parameters
         ----------
 
         max_ep_len - max episode length. Can be set to infinity if environment returns a done signal to cap max episode length    
+
+        demo_trajectories - optional demo trajectories to provide for DAPG training
         """
         if max_ep_len is None:
             # TODO: infer this
@@ -147,7 +157,9 @@ class PPO:
                 logger=logger,
                 device=device,
                 accumulate_grads=accumulate_grads,
-                update_pi=update_pi
+                update_pi=update_pi,
+                demo_trajectories=demo_trajectories,
+                dapg_lambda=self.dapg_lambda
             )
             pi_info, loss_pi, loss_v, update_step = (
                 update_res["pi_info"],
@@ -163,14 +175,17 @@ class PPO:
                     LossV=loss_v.cpu().item(),
                 )
             if pi_info is not None:
-                kl, ent, cf = pi_info["kl"], pi_info["ent"], pi_info["cf"]
+                kl, ent, cf, loss_pi = pi_info["kl"], pi_info["ent"], pi_info["cf"], pi_info["loss_pi"]
                 logger.store(
                     tag="train",
-                    LossPi=loss_pi.cpu().item(),
+                    LossPi=loss_pi,
+
                     KL=kl,
                     Entropy=ent,
                     ClipFrac=cf,
                 )
+                if "dapg_actor_loss" in pi_info:
+                    logger.store("train", LossDAPGActor=pi_info["dapg_actor_loss"])
 
         for epoch in range(start_epoch, start_epoch + n_epochs):
 
@@ -188,8 +203,12 @@ class PPO:
             # advantage normalization before update
             update_pi = epoch >= critic_warmup_epochs
             update(update_pi = update_pi)
-            
             update_end_time = time.time_ns()
+
+            if demo_trajectories is not None:
+                logger.store("train", dapg_lambda=self.dapg_lambda, append=False)
+                self.dapg_lambda *= self.dapg_damping
+
             logger.store("train", UpdateTime=(update_end_time - update_start_time) * 1e-9, append=False)
             logger.store("train", Epoch=epoch, append=False)
             logger.store("train", TotalEnvInteractions=self.steps_per_epoch * self.n_envs * (epoch + 1), append=False)
@@ -219,6 +238,8 @@ def ppo_update(
     device=torch.device("cpu"),
     accumulate_grads=False,
     update_pi=True,
+    demo_trajectories=None,
+    dapg_lambda=0.1,
 ):
     # TODO ABSTRACT OBS TO DEVICE TO A SEPARATE FUNC
     def compute_loss_pi(data):
@@ -228,11 +249,6 @@ def ppo_update(
                 obs[k] = obs[k].to(device)
         else:
             obs = obs.to(device)
-        # if isinstance(self.env.action_space, spaces.Discrete):
-        # Convert discrete action from float to long
-        # print(act.shape, act[:2])
-        # act = act.long().flatten()
-        # print(act.shape, act[:2])
 
         # Policy loss)
         ac.pi.eval()
@@ -241,18 +257,30 @@ def ppo_update(
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
+        
         # Entropy loss for some basic extra exploration
         entropy = pi.entropy()
         with torch.no_grad():
             # Useful extra info
             logr = logp - logp_old
             approx_kl = (torch.exp(logr) - 1 - logr).mean().cpu().item()
-            
-            # approx_kl = (logp_old - logp).mean().item()
             clipped = ratio.gt(1 + clip_ratio) | ratio.lt(1 - clip_ratio)
             clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
-        pi_info = dict(kl=approx_kl, ent=entropy.mean().item(), cf=clipfrac)
-        return loss_pi, logp, entropy, pi_info
+        pi_info = dict(kl=approx_kl, ent=entropy.mean().item(), cf=clipfrac, ppo_loss=loss_pi.cpu().item())
+
+        # add dapg loss, the negative log likelihood in particular
+        if demo_trajectories is not None:
+            ac.pi.eval()
+            demo_pi, demo_logp = ac.pi(demo_trajectories["observations"], demo_trajectories["actions"])
+            ac.pi.train()
+            dapg_actor_loss = -demo_logp.mean()
+
+            dapg_actor_loss = dapg_actor_loss * dapg_lambda
+            pi_info["dapg_actor_loss"] = dapg_actor_loss.cpu().item()
+            loss_pi = loss_pi + dapg_actor_loss
+        pi_info["loss_pi"] = loss_pi.cpu().item()
+
+        return dict(loss_pi=loss_pi, logp=logp, entropy=entropy, pi_info=pi_info)
 
     # Set up function for computing value loss
     def compute_loss_v(data):
@@ -294,7 +322,8 @@ def ppo_update(
             #     else:
             #         batch_data[k] = v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
             if update_pi:
-                loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
+                loss_pi_data = compute_loss_pi(batch_data)
+                loss_pi, logp, entropy, pi_info = loss_pi_data["loss_pi"], loss_pi_data["logp"], loss_pi_data["entropy"], loss_pi_data["pi_info"]
                 kl = pi_info["kl"]
                 if accumulate_grads:
                     average_kl += kl
