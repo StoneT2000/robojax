@@ -199,11 +199,11 @@ class PPO:
                     LossV=loss_v.cpu().item(),
                 )
             if pi_info is not None:
-                kl, ent, cf, loss_pi = pi_info["kl"], pi_info["ent"], pi_info["cf"], pi_info["loss_pi"]
+                kl, ent, cf, loss_pi, ppo_loss = pi_info["kl"], pi_info["ent"], pi_info["cf"], pi_info["loss_pi"], pi_info["ppo_loss"]
                 logger.store(
                     tag="train",
                     LossPi=loss_pi,
-
+                    PPOLoss=ppo_loss,
                     KL=kl,
                     Entropy=ent,
                     ClipFrac=cf,
