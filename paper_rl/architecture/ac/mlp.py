@@ -19,6 +19,7 @@ class MLPCategoricalActor(Actor):
         return Categorical(logits=logits)
 
     def _log_prob_from_distribution(self, pi, act):
+        act = act.reshape(-1)
         return pi.log_prob(act)
 
     def act(self, obs):

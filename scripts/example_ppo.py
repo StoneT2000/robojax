@@ -88,6 +88,7 @@ if __name__ == "__main__":
         eval_env.render()
         if done.any():
             print(info)
+            break
     eval_env.close()
 
     eval_env = make_vec_env(env_id, 2, seed=seed)

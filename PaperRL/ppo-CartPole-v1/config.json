@@ -1,0 +1,12 @@
+{
+  "batch_size": 512,
+  "cpu": 4,
+  "env_id": "CartPole-v1",
+  "epochs": 10,
+  "exp_name": "ppo-CartPole-v1",
+  "gamma": 0.95,
+  "seed": 1,
+  "steps_per_epoch": 2048,
+  "train_iters": 10,
+  "workspace": "PaperRL"
+}

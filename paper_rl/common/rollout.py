@@ -128,7 +128,7 @@ class Rollout:
             #     ep_returns[idx] += returns[idx]
             ep_returns += rewards
             ep_lengths += 1
-            buf.store(obs_buf=observations, act_buf=a, rew_buf=rewards, val_buf=v, logp_buf=logp)
+            buf.store(obs_buf=observations, act_buf=a, rew_buf=rewards, val_buf=v, logp_buf=logp, done_buf=dones)
             timeouts = ep_lengths == max_ep_len
             terminals = dones | timeouts  # terminated means done or reached max ep length
             epoch_ended = t == steps - 1

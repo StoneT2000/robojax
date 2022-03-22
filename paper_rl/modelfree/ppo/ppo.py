@@ -176,6 +176,7 @@ class PPO:
 
             # rollout
             rollout_start_time = time.time_ns()
+            buf.reset()
             ac.eval()
             rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger)
             ac.train()
@@ -185,9 +186,9 @@ class PPO:
 
             update_start_time = time.time_ns()
             # advantage normalization before update
-            buf.adv_buf = (buf.adv_buf - buf.adv_buf.mean()) / (buf.adv_buf.std())
             update_pi = epoch >= critic_warmup_epochs
             update(update_pi = update_pi)
+            
             update_end_time = time.time_ns()
             logger.store("train", UpdateTime=(update_end_time - update_start_time) * 1e-9, append=False)
             logger.store("train", Epoch=epoch, append=False)
@@ -196,6 +197,13 @@ class PPO:
                 early_stop = train_callback(epoch=epoch)
                 if early_stop is not None and early_stop:
                     break
+
+def compute_gae(
+    buffer: GenericBuffer,
+):  
+    # TODO move out the gae computations from within buffer's finish_path function
+    buffer.buffers["adv_buf"] = (buffer.buffers["adv_buf"] - buffer.buffers["adv_buf"].mean()) / (buffer.buffers["adv_buf"].std())
+
 
 
 def ppo_update(
@@ -233,7 +241,6 @@ def ppo_update(
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
-
         # Entropy loss for some basic extra exploration
         entropy = pi.entropy()
         with torch.no_grad():
@@ -262,27 +269,30 @@ def ppo_update(
     early_stop_update = False
     loss_pi = None
     pi_info = None
+
+    # compute gae here
+    compute_gae(buffer=buffer)
+
     for _ in range(train_iters):
         if early_stop_update:
             break
-        N = buffer.buffer_size
+        N = buffer.buffer_size * buffer.n_envs
 
         steps_per_train_iter = int(math.ceil(N / batch_size))
         if accumulate_grads:
             if update_pi: pi_optimizer.zero_grad()
             vf_optimizer.zero_grad()
             average_kl = 0
-        data = buffer.get()
         for batch_idx in range(steps_per_train_iter):
-            # batch_data = buffer.sample_batch(batch_size=batch_size)
-            batch_data=dict()
-            for k, v in data.items():
-                if isinstance(v, dict):
-                    batch_data[k] = {}
-                    for v_k in v.keys():
-                        batch_data[k][v_k] = v[v_k][max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
-                else:
-                    batch_data[k] = v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
+            batch_data = buffer.sample_batch(batch_size=batch_size)
+            # batch_data=dict()
+            # for k, v in data.items():
+            #     if isinstance(v, dict):
+            #         batch_data[k] = {}
+            #         for v_k in v.keys():
+            #             batch_data[k][v_k] = v[v_k][max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
+            #     else:
+            #         batch_data[k] = v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
             if update_pi:
                 loss_pi, logp, entropy, pi_info = compute_loss_pi(batch_data)
                 kl = pi_info["kl"]

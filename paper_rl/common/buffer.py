@@ -124,7 +124,7 @@ class GenericBuffer(BaseBuffer):
 
     def sample_batch(self, batch_size: int):
         if self.full:
-            batch_inds = (np.random.randint(1, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
+            batch_inds = (np.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
         else:
             batch_inds = np.random.randint(0, self.ptr, size=batch_size)
         env_indices = np.random.randint(0, high=self.n_envs, size=(len(batch_inds),))

@@ -36,7 +36,8 @@ class PPOBuffer(GenericBuffer):
             rew_buf = ((), np.float32),
             ret_buf = ((), np.float32),
             val_buf = ((), np.float32),
-            logp_buf = ((), np.float32)
+            logp_buf = ((), np.float32),
+            done_buf = ((), np.bool8)
         )
         if isinstance(self.obs_shape, dict):
             buffer_config["obs_buf"] = (self.obs_shape, {k: self.observation_space[k].dtype for k in self.observation_space})
@@ -47,20 +48,10 @@ class PPOBuffer(GenericBuffer):
             n_envs=n_envs,
             config=buffer_config
         )
-        self.obs_is_dict = False
 
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, [0] * n_envs, self.buffer_size
         self.next_batch_idx = 0
-
-        self.rew_buf = self.buffers["rew_buf"]
-        self.val_buf = self.buffers["val_buf"]
-        self.ret_buf = self.buffers["ret_buf"]
-        self.adv_buf = self.buffers["adv_buf"]
-        self.obs_buf = self.buffers["obs_buf"]
-        self.logp_buf = self.buffers["logp_buf"]
-        self.act_buf = self.buffers["act_buf"]
-
 
     def finish_path(self, env_id, last_val=0):
         # TODO: remove env_id and do it in batch
@@ -80,58 +71,21 @@ class PPOBuffer(GenericBuffer):
         """
 
         path_slice = slice(self.path_start_idx[env_id], self.ptr)
-        rews = np.append(self.rew_buf[path_slice, env_id], last_val)
-        vals = np.append(self.val_buf[path_slice, env_id], last_val)
+        if self.ptr < self.path_start_idx[env_id]:
+            path_slice = slice(self.path_start_idx[env_id],self.buffer_size)
+        rews = np.append(self.buffers["rew_buf"][path_slice, env_id], last_val)
+        vals = np.append(self.buffers["val_buf"][path_slice, env_id], last_val)
 
         # the next two lines implement GAE-Lambda advantage calculation
         deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
-        # print(deltas.shape, self.adv_buf.shape, self.adv_buf[path_slice,env_id].shape)
-        self.adv_buf[path_slice, env_id] = discount_cumsum(deltas, self.gamma * self.lam)
+
+        self.buffers["adv_buf"][path_slice, env_id] = discount_cumsum(deltas, self.gamma * self.lam)
 
         # the next line computes rewards-to-go, to be targets for the value function
-        self.ret_buf[path_slice, env_id] = discount_cumsum(rews, self.gamma)[:-1]
+        self.buffers["ret_buf"][path_slice, env_id] = discount_cumsum(rews, self.gamma)[:-1]
 
         self.path_start_idx[env_id] = self.ptr
 
-    def get(self):
-        """
-        Call this at the end of an epoch to get all of the data from
-        the buffer, with advantages appropriately normalized (shifted to have
-        mean zero and std one). Also, resets some pointers in the buffer.
-        """
-        assert self.full  # buffer has to be full before you can get
-        N = self.buffer_size * self.n_envs
+    def reset(self) -> None:
+        super().reset()
         self.ptr, self.path_start_idx = 0, [0] * self.n_envs
-        # the next line implement the advantage normalization trick
-        self.adv_buf = (self.adv_buf - self.adv_buf.mean()) / (self.adv_buf.std())
-        data = dict(
-            # obs=
-            ret_buf=self.ret_buf.reshape(-1),
-            adv_buf=self.adv_buf.reshape(-1),
-            logp_buf=self.logp_buf.reshape(-1),
-        )
-        if self.obs_is_dict:
-            # flattened = [item for sublist in self.obs_buf for item in sublist]
-            # print("OBSBUF", len(self.obs_buf), len(flattened))
-            # data["obs"] = flattened
-            data["obs_buf"] = {}
-            for k in self.obs_shape:
-                data["obs_buf"][k] = self.obs_buf[k].reshape((-1,) + self.obs_shape[k])
-                self.obs_buf[k] = np.zeros(
-                    (self.buffer_size, self.n_envs) + self.obs_shape[k], dtype=self.observation_space[k].dtype
-                )
-        else:
-            data["obs_buf"] = self.obs_buf.reshape((-1,) + self.obs_shape)
-        if isinstance(self.action_space, spaces.Discrete):
-            data["act_buf"] = self.act_buf.reshape(-1)
-        else:
-            data["act_buf"] = self.act_buf.reshape((-1, self.action_dim))
-        tensored_data = {k: torch.as_tensor(data[k], dtype=torch.float32) for k in ["ret_buf", "adv_buf", "logp_buf", "act_buf"]}
-        if self.obs_is_dict:
-            # tensored_data["obs"] = torch.as_tensor(data["obs"], dtype=torch.float32)
-            for k in data["obs_buf"]:
-                data["obs_buf"][k] = torch.as_tensor(data["obs_buf"][k])
-            tensored_data["obs_buf"] = data["obs_buf"]
-        else:
-            tensored_data["obs_buf"] = torch.as_tensor(data["obs_buf"], dtype=torch.float32)
-        return tensored_data
