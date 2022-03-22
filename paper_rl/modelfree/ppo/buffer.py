@@ -23,7 +23,7 @@ class PPOBuffer(GenericBuffer):
         action_space: spaces.Space,
         n_envs: int = 1,
         gamma=0.99,
-        lam=0.95,
+        lam=0.95
     ):
         self.observation_space = observation_space
         self.action_space = action_space

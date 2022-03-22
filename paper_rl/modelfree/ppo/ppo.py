@@ -115,6 +115,7 @@ class PPO:
         batch_size=1000,
         accumulate_grads=False,
         demo_trajectory_sampler = None,
+        dapg_nll_loss=False,
     ):
         """
         Parameters
@@ -147,6 +148,22 @@ class PPO:
             return ac.step(o)
 
         def update(update_pi=True):
+            all_demo_trajectories = None
+            if dapg:
+                all_demo_trajectories = []
+                steps_per_train_iter = int(math.ceil(buf.buffer_size * buf.n_envs / batch_size))
+                ac.eval()
+                with torch.no_grad():
+                    for _ in range(steps_per_train_iter):
+                        demo_trajectories = demo_trajectory_sampler(batch_size)
+                        if not dapg_nll_loss:
+                            # collect old logp
+                            pi, logp = ac.pi(to_torch(demo_trajectories["observations"], device=device), to_torch(demo_trajectories["actions"],  device=device))
+                            demo_trajectories["logp"] = logp
+                        all_demo_trajectories.append(demo_trajectories)
+                ac.train()
+
+
             update_res = ppo_update(
                 buffer=buf,
                 ac=ac,
@@ -160,8 +177,9 @@ class PPO:
                 device=device,
                 accumulate_grads=accumulate_grads,
                 update_pi=update_pi,
-                demo_trajectories=demo_trajectory_sampler(batch_size),
-                dapg_lambda=self.dapg_lambda
+                demo_trajectories=all_demo_trajectories,
+                dapg_lambda=self.dapg_lambda,
+                dapg_nll_loss=dapg_nll_loss
             )
             pi_info, loss_pi, loss_v, update_step = (
                 update_res["pi_info"],
@@ -242,7 +260,19 @@ def ppo_update(
     update_pi=True,
     demo_trajectories=None,
     dapg_lambda=0.1,
+    dapg_nll_loss=False,
 ):
+    """
+    
+    demo_trajectories - dict of ndarray or list of dicts
+        if list, treats each element as a batch
+
+
+    dapg_nll_loss - bool
+        if true, uses negative log likelihood as the demo augmented loss. Otherwise uses PPO loss
+    """
+    dapg = False
+    if demo_trajectories is not None: dapg = True
     # TODO ABSTRACT OBS TO DEVICE TO A SEPARATE FUNC
     def compute_loss_pi(data):
         obs, act, adv, logp_old = data["obs_buf"], data["act_buf"].to(device), data["adv_buf"].to(device), data["logp_buf"].to(device)
@@ -267,15 +297,22 @@ def ppo_update(
         pi_info = dict(kl=approx_kl, ent=entropy.mean().item(), cf=clipfrac, ppo_loss=loss_pi.cpu().item())
 
         # add dapg loss, the negative log likelihood in particular
-        if demo_trajectories is not None:
+        if dapg:
+            demo_trajectories = data["demo_trajectories"]
             ac.pi.eval()
-            
             demo_pi, demo_logp = ac.pi(to_torch(demo_trajectories["observations"], device=device), to_torch(demo_trajectories["actions"], device=device))
             ac.pi.train()
-            dapg_actor_loss = -demo_logp.mean()
 
-            dapg_actor_loss = dapg_actor_loss * dapg_lambda
+            if dapg_nll_loss:
+                dapg_actor_loss = -demo_logp.mean()
+            else:
+                # mark advantage as 1 since advantage is normalized
+                demo_logp_old = demo_trajectories["logp"]
+                ratio = torch.exp(demo_logp - demo_logp_old)
+                clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio)
+                dapg_actor_loss = -(torch.min(ratio, clip_adv)).mean()
             pi_info["dapg_actor_loss"] = dapg_actor_loss.cpu().item()
+            dapg_actor_loss = dapg_actor_loss * dapg_lambda
             loss_pi = loss_pi + dapg_actor_loss
         pi_info["loss_pi"] = loss_pi.cpu().item()
 
@@ -312,14 +349,8 @@ def ppo_update(
             average_kl = 0
         for batch_idx in range(steps_per_train_iter):
             batch_data = buffer.sample_batch(batch_size=batch_size)
-            # batch_data=dict()
-            # for k, v in data.items():
-            #     if isinstance(v, dict):
-            #         batch_data[k] = {}
-            #         for v_k in v.keys():
-            #             batch_data[k][v_k] = v[v_k][max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
-            #     else:
-            #         batch_data[k] = v[max(0, (batch_idx) * batch_size) : (batch_idx + 1) * batch_size]
+            batch_demo_trajectories = demo_trajectories[batch_idx]
+            batch_data["demo_trajectories"] = batch_demo_trajectories
             if update_pi:
                 loss_pi_data = compute_loss_pi(batch_data)
                 loss_pi, logp, entropy, pi_info = loss_pi_data["loss_pi"], loss_pi_data["logp"], loss_pi_data["entropy"], loss_pi_data["pi_info"]

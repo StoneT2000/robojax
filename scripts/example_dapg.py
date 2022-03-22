@@ -95,7 +95,8 @@ if __name__ == "__main__":
         batch_size=batch_size,
         rollout_callback=None,
         train_callback=train_callback,
-        demo_trajectory_sampler=demo_trajectory_sampler
+        demo_trajectory_sampler=demo_trajectory_sampler,
+        dapg_nll_loss=cfg["dapg_nll_loss"]
     )
     env.close()
 

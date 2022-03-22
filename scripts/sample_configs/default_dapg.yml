@@ -13,3 +13,4 @@ exp_name: "ppo-CartPole-v1"
 
 dapg_lambda: 0.1
 dapg_damping: 0.9
+dapg_nll_loss: False
