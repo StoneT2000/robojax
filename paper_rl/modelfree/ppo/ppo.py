@@ -32,7 +32,8 @@ class PPO:
         gae_lambda: float = 0.97,
         clip_ratio: float = 0.2,
         ent_coef: float = 0.0,
-        vf_coef: float = 0.5,
+        pi_coef: float = 1.0,
+        vf_coef: float = 1.0,
         dapg_lambda: float = 0.1,
         dapg_damping: float = 0.99,
         # max_grad_norm: float = 0.5, # TODO
@@ -61,6 +62,7 @@ class PPO:
 
         # hparams
         self.target_kl = target_kl
+        self.pi_coef = pi_coef
         self.ent_coef = ent_coef
         self.vf_coef = vf_coef
         self.clip_ratio = clip_ratio
@@ -169,6 +171,8 @@ class PPO:
                 ac=ac,
                 pi_optimizer=pi_optimizer,
                 vf_optimizer=vf_optimizer,
+                pi_coef=self.pi_coef,
+                vf_coef=self.vf_coef,
                 clip_ratio=clip_ratio,
                 train_iters=train_iters,
                 batch_size=batch_size,
@@ -250,6 +254,8 @@ def ppo_update(
     ac: ActorCritic,
     pi_optimizer,
     vf_optimizer,
+    pi_coef,
+    vf_coef,
     clip_ratio,
     train_iters,
     batch_size,
@@ -284,7 +290,7 @@ def ppo_update(
         ac.pi.train()
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
-        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
+        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() * pi_coef
         
         # Entropy loss for some basic extra exploration
         entropy = pi.entropy()
@@ -311,8 +317,8 @@ def ppo_update(
                 ratio = torch.exp(demo_logp - demo_logp_old)
                 clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio)
                 dapg_actor_loss = -(torch.min(ratio, clip_adv)).mean()
-            pi_info["dapg_actor_loss"] = dapg_actor_loss.cpu().item()
             dapg_actor_loss = dapg_actor_loss * dapg_lambda
+            pi_info["dapg_actor_loss"] = dapg_actor_loss.cpu().item()
             loss_pi = loss_pi + dapg_actor_loss
         pi_info["loss_pi"] = loss_pi.cpu().item()
 
@@ -362,7 +368,7 @@ def ppo_update(
                         logger.print("Early stopping at step %d due to reaching max kl." % update_step)
                         early_stop_update = True
                         break
-            loss_v = compute_loss_v(batch_data)
+            loss_v = compute_loss_v(batch_data) * vf_coef
             # TODO - entropy loss
             # if entropy is None:
             #     # Approximate entropy when no analytical form

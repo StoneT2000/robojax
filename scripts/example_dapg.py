@@ -46,7 +46,8 @@ if __name__ == "__main__":
         gamma=cfg["gamma"],
         train_iters=cfg["train_iters"],  # 80 // (steps_per_epoch * num_cpu // batch_size)
         dapg_damping=cfg["dapg_damping"],
-        dapg_lambda=cfg["dapg_lambda"]
+        dapg_lambda=cfg["dapg_lambda"],
+        pi_coef=cfg["pi_coef"]
     )
 
     def train_callback(epoch):
