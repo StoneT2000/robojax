@@ -11,6 +11,7 @@ from torch import optim
 from torch.nn import functional as F
 
 from paper_rl.architecture.ac.core import ActorCritic, count_vars
+from paper_rl.common.buffer import GenericBuffer
 from paper_rl.common.rollout import Rollout
 from paper_rl.common.utils import to_torch
 from paper_rl.logger.logger import Logger
@@ -105,7 +106,6 @@ class PPO:
         vf_optimizer: torch.optim.Optimizer = None,
         optim=None,
         batch_size=1000,
-        compute_delta_loss=False,
         accumulate_grads=False,
     ):
         """
@@ -135,9 +135,8 @@ class PPO:
             return ac.step(o)
 
         def update(update_pi=True):
-            data = buf.get()
             update_res = ppo_update(
-                data=data,
+                buffer=buf,
                 ac=ac,
                 pi_optimizer=pi_optimizer,
                 vf_optimizer=vf_optimizer,
@@ -146,17 +145,14 @@ class PPO:
                 batch_size=batch_size,
                 target_kl=target_kl,
                 logger=logger,
-                compute_old=compute_delta_loss,
                 device=device,
                 accumulate_grads=accumulate_grads,
                 update_pi=update_pi
             )
-            pi_info, loss_pi, loss_v, pi_l_old, v_l_old, update_step = (
+            pi_info, loss_pi, loss_v, update_step = (
                 update_res["pi_info"],
                 update_res["loss_pi"],
                 update_res["loss_v"],
-                update_res["pi_l_old"],
-                update_res["v_l_old"],
                 update_res["update_step"],
             )
             logger.store(tag="train", StopIter=update_step, append=False)
@@ -175,23 +171,21 @@ class PPO:
                     Entropy=ent,
                     ClipFrac=cf,
                 )
-            if compute_delta_loss:
-                logger.store(
-                    tag="train",
-                    DeltaLossPi=(loss_pi.cpu().item() - pi_l_old),
-                    DeltaLossV=(loss_v.cpu().item() - v_l_old),
-                )
 
-        # to tweak, just copy the code below
         for epoch in range(start_epoch, start_epoch + n_epochs):
+
+            # rollout
             rollout_start_time = time.time_ns()
-            ac.pi.eval()
+            ac.eval()
             rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger)
-            ac.pi.train()
+            ac.train()
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
             logger.store("train", RolloutTime=rollout_delta_time, critic_warmup_epochs=critic_warmup_epochs, append=False)
+
             update_start_time = time.time_ns()
+            # advantage normalization before update
+            buf.adv_buf = (buf.adv_buf - buf.adv_buf.mean()) / (buf.adv_buf.std())
             update_pi = epoch >= critic_warmup_epochs
             update(update_pi = update_pi)
             update_end_time = time.time_ns()
@@ -205,7 +199,7 @@ class PPO:
 
 
 def ppo_update(
-    data,
+    buffer: GenericBuffer,
     ac: ActorCritic,
     pi_optimizer,
     vf_optimizer,
@@ -214,14 +208,13 @@ def ppo_update(
     batch_size,
     target_kl,
     logger=None,
-    compute_old=False,
     device=torch.device("cpu"),
     accumulate_grads=False,
     update_pi=True,
 ):
     # TODO ABSTRACT OBS TO DEVICE TO A SEPARATE FUNC
     def compute_loss_pi(data):
-        obs, act, adv, logp_old = data["obs"], data["act"].to(device), data["adv"].to(device), data["logp"].to(device)
+        obs, act, adv, logp_old = data["obs_buf"], data["act_buf"].to(device), data["adv_buf"].to(device), data["logp_buf"].to(device)
         if isinstance(obs, dict):
             for k in obs.keys():
                 obs[k] = obs[k].to(device)
@@ -256,19 +249,13 @@ def ppo_update(
 
     # Set up function for computing value loss
     def compute_loss_v(data):
-        obs, ret = data["obs"], data["ret"].to(device)
+        obs, ret = data["obs_buf"], data["ret_buf"].to(device)
         if isinstance(obs, dict):
             for k in obs.keys():
                 obs[k] = obs[k].to(device)
         else:
             obs = obs.to(device)
         return ((ac.v(obs) - ret) ** 2).mean()
-
-    pi_l_old, v_l_old, entropy_old = None, None, None
-    if compute_old:
-        pi_l_old, logp_old, entropy_old, pi_info_old = compute_loss_pi(data)
-        pi_l_old = pi_l_old.item()
-        v_l_old = compute_loss_v(data).item()
 
     # Train policy with multiple steps of gradient descent
     update_step = 0
@@ -278,16 +265,17 @@ def ppo_update(
     for _ in range(train_iters):
         if early_stop_update:
             break
-        N = len(data["obs"])
-        # print(data["obs"].shape, data["adv"].shape)
+        N = buffer.buffer_size
 
         steps_per_train_iter = int(math.ceil(N / batch_size))
         if accumulate_grads:
             if update_pi: pi_optimizer.zero_grad()
             vf_optimizer.zero_grad()
             average_kl = 0
+        data = buffer.get()
         for batch_idx in range(steps_per_train_iter):
-            batch_data = dict()
+            # batch_data = buffer.sample_batch(batch_size=batch_size)
+            batch_data=dict()
             for k, v in data.items():
                 if isinstance(v, dict):
                     batch_data[k] = {}
@@ -347,7 +335,4 @@ def ppo_update(
         update_step=update_step,
         loss_v=loss_v,
         loss_pi=loss_pi,
-        pi_l_old=pi_l_old,
-        v_l_old=v_l_old,
-        entropy_old=entropy_old,
     )

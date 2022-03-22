@@ -31,7 +31,7 @@ if __name__ == "__main__":
     pi_optimizer = torch.optim.Adam(model.pi.parameters(), lr=1e-4)
     vf_optimizer = torch.optim.Adam(model.v.parameters(), lr=4e-4)
     
-    logger = Logger(tensorboard=False, wandb=True, cfg=cfg, workspace=cfg["workspace"], exp_name=cfg["exp_name"])
+    logger = Logger(tensorboard=False, wandb=False, cfg=cfg, workspace=cfg["workspace"], exp_name=cfg["exp_name"])
     steps_per_epoch = cfg["steps_per_epoch"] // num_cpu
     batch_size = cfg["batch_size"]
     algo = PPO(
