@@ -4,9 +4,12 @@
 
 My personal RL library (at the moment). Frequently changed and edited, but feel free to use as potential reference code (its mostly correct)
 
-
-
 Implements PPO, DAPG w/ PPO, and GAIL (probably broken)
+
+Main Features:
+- Always seeded, we love reproducibility
+- Highly configurable with functional capabilities. You can pull out specific parts of algorithms out and tweak it (e.g. the PPO update is written functionally)
+- WALL-E might have endorsed this repository
 
 ## Setup
 
