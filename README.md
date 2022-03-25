@@ -1,4 +1,4 @@
-# PaperRL
+# WALL-E RL
 My personal RL library (at the moment). Frequently changed and edited, but feel free to use as potential reference code (its mostly correct)
 
 
@@ -11,3 +11,9 @@ I highly recommend using conda. Otherwise you can try and install all the packag
 ```
 conda env create -f environment.yml
 ```
+
+## Contributors
+
+
+
+- name credits to @jonzamora
