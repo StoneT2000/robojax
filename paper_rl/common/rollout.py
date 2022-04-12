@@ -17,12 +17,19 @@ class Rollout:
         n_trajectories,
         n_envs,
         rollout_callback=None,
+        format_trajectory=None,
         custom_reward=None,
         logger=None,
         render=False,
         pbar=False,
         even_num_traj_per_env=False # collects even number of trajectories per env
     ):
+        """
+        format_trajectory: function
+            given trajectories observations, actions, rewards, and past infos, return the desired data to be stored for this trajectory
+            default will store observations including the terminal observation, actions, and rewards.
+        
+        """
         traj_count = 0
         if even_num_traj_per_env:
             assert n_trajectories % n_envs == 0
@@ -32,10 +39,12 @@ class Rollout:
         past_obs = []
         past_rews = []
         past_acts = []
+        past_infos = []
         for _ in range(n_envs):
             past_obs.append([])
             past_rews.append([])
             past_acts.append([])
+            past_infos.append([])
             if even_num_traj_per_env:
                 trajectories_per_env.append([])
         observations = env.reset()
@@ -61,10 +70,12 @@ class Rollout:
             if render: env.render()
             next_os, rewards, dones, infos = env.step(acts)
             if custom_reward is not None: rewards = custom_reward(rewards, observations, acts)
-            for idx, r in enumerate(rewards):
-                past_rews[idx].append(r)
+            for idx in range(len(rewards)):
+                past_rews[idx].append(rewards[idx])
+                past_infos[idx].append(infos[idx])
             if rollout_callback is not None:
                 rollout_callback(
+                    env=env,
                     observations=observations,
                     next_observations=next_os,
                     actions=acts,
@@ -83,20 +94,25 @@ class Rollout:
                         t_obs = past_obs[idx] if is_dict else np.vstack(past_obs[idx])
                         t_act = np.vstack(past_acts[idx])
                         t_rew = np.vstack(past_rews[idx])
-                        traj = {
-                            "observations": t_obs,
-                            "rewards": t_rew,
-                            "actions": t_act
-                        }
+                        t_info = past_infos[idx]
+                        if format_trajectory is None:
+                            traj = {
+                                "observations": t_obs,
+                                "rewards": t_rew,
+                                "actions": t_act
+                            }
+                        else: 
+                            traj = format_trajectory(t_obs, t_act, t_rew, t_info)
                         traj_count += 1
                         if not even_num_traj_per_env:
                             trajectories.append(traj)
                         else:
                             trajectories_per_env[idx].append(traj)
+                        if pbar: pbar.update()
                     past_obs[idx] = []
                     past_acts[idx] = []
                     past_rews[idx] = []
-                    if pbar: pbar.update()
+                    past_infos[idx] = []
                     if traj_count == n_trajectories:
                         if even_num_traj_per_env: return trajectories_per_env
                         else: return trajectories

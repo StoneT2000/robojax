@@ -54,7 +54,7 @@ class Logger:
         tensorboard=False,
         workspace: str = "default_workspace",
         exp_name: str = "default_exp",
-        clear_out: bool = True,
+        resume: bool = True,
         project_name: str = None,
         cfg: Union[Dict, OmegaConf] = {},
     ) -> None:
@@ -85,7 +85,7 @@ class Logger:
         if self.wandb:
             if project_name is None:
                 project_name = workspace
-            wb.init(project=project_name, name=exp_name)
+            wb.init(project=project_name, name=exp_name, resume=resume)
         self.save_config(cfg)
 
         self.data = defaultdict(dict)
