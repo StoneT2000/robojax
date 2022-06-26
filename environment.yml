@@ -1,4 +1,4 @@
-name: paper-rl
+name: walle-rl
 channels:
   - conda-forge
   - pytorch
@@ -24,7 +24,6 @@ dependencies:
   - isort
 
   # RL related
-  - mpi4py
   - gym
   
   # Deep Learning

@@ -1,9 +1,9 @@
 import gym
 import torch
 
-from paper_rl.modelfree.ppo import PPO
-from paper_rl.architecture.ac.mlp import MLPActorCritic
-from paper_rl.logger import Logger
+from walle_rl.modelfree.ppo import PPO
+from walle_rl.architecture.ac.mlp import MLPActorCritic
+from walle_rl.logger import Logger
 from omegaconf import OmegaConf
 import argparse
 parser = argparse.ArgumentParser()

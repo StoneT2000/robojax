@@ -11,12 +11,12 @@ from gym import spaces
 from torch import optim
 from torch.nn import functional as F
 
-from paper_rl.architecture.ac.core import ActorCritic, count_vars
-from paper_rl.common.rollout import Rollout
-from paper_rl.common.utils import to_torch
-from paper_rl.logger.logger import Logger
-from paper_rl.modelfree.ppo.buffer import PPOBuffer
-from paper_rl.modelfree.ppo.ppo import ppo_update
+from walle_rl.architecture.ac.core import ActorCritic, count_vars
+from walle_rl.common.rollout import Rollout
+from walle_rl.common.utils import to_torch
+from walle_rl.logger.logger import Logger
+from walle_rl.modelfree.ppo.buffer import PPOBuffer
+from walle_rl.modelfree.ppo.ppo import ppo_update
 
 class GAIL():
     """

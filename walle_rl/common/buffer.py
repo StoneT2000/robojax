@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from gym import spaces
 
-from paper_rl.common.utils import get_action_dim, get_obs_shape
+from walle_rl.common.utils import get_action_dim, get_obs_shape
 
 
 class BaseBuffer(ABC):
@@ -99,7 +99,10 @@ class GenericBuffer(BaseBuffer):
             else:
                 self.buffers[k] = np.zeros((self.buffer_size, self.n_envs) + shape, dtype=dtype)
         self.ptr, self.path_start_idx, self.max_size = 0, [0]*n_envs, self.buffer_size
-        self.next_batch_idx = 0
+        
+        self.batch_idx = None
+        self.batch_inds = None
+        self.batch_env_inds = None
 
     def store(self, **kwargs):
         """
@@ -122,23 +125,48 @@ class GenericBuffer(BaseBuffer):
             self.full = True
             self.ptr = 0
 
-    def sample_batch(self, batch_size: int):
-        if self.full:
-            batch_inds = (np.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
-        else:
-            batch_inds = np.random.randint(0, self.ptr, size=batch_size)
-        env_indices = np.random.randint(0, high=self.n_envs, size=(len(batch_inds),))
-
+    def _get_batch_by_ids(self, batch_ids, env_ids):
         batch_data = dict()
         for k in self.buffers.keys():
             data = self.buffers[k]
             if self.is_dict[k]:
                 batch_data[k] = dict()
                 for data_k in data.keys():
-                    batch_data[k][data_k] = torch.as_tensor(data[data_k][batch_inds, env_indices])
+                    batch_data[k][data_k] = torch.as_tensor(data[data_k][batch_ids, env_ids])
             else:
-                batch_data[k] = torch.as_tensor(data[batch_inds, env_indices])
+                batch_data[k] = torch.as_tensor(data[batch_ids, env_ids])
         return batch_data
+    def _prepared_for_sampling(self, batch_size, drop_last_batch=True):
+        if self.batch_idx == None: return False
+        if drop_last_batch and self.batch_idx + batch_size > self.buffer_size * self.n_envs: return False
+        if self.batch_idx > self.buffer_size * self.n_envs: return False
+        return True
+
+    def sample_batch(self, batch_size: int, drop_last_batch=True):
+        if not self._prepared_for_sampling(batch_size, drop_last_batch):
+            self.batch_idx = 0            
+            if self.full:
+                inds = np.arange(0, self.buffer_size).repeat(self.n_envs)
+            else:
+                inds = np.arange(0, self.ptr).repeat(self.n_envs)
+            env_inds = np.tile(np.arange(self.n_envs), len(inds) // self.n_envs)
+            inds = np.vstack([inds, env_inds]).T
+            np.random.shuffle(inds)
+            self.batch_inds = inds[:, 0]
+            self.batch_env_inds = inds[:, 1]
+        batch_ids = self.batch_inds[self.batch_idx: self.batch_idx + batch_size]
+        env_ids = self.batch_env_inds[self.batch_idx: self.batch_idx + batch_size]
+        self.batch_idx = self.batch_idx + batch_size
+        return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
+            
+    def sample_random_batch(self, batch_size: int):
+        if self.full:
+            batch_ids = (np.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
+        else:
+            batch_ids = np.random.randint(0, self.ptr, size=batch_size)
+        env_ids = np.random.randint(0, high=self.n_envs, size=(len(batch_ids),))
+
+        return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
     def get(self):
         all_data = dict()
         for k in self.buffers.keys():

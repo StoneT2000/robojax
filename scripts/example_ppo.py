@@ -3,12 +3,12 @@ import pickle
 import gym
 import numpy as np
 import torch
-from paper_rl.cfg import parse_cfg
-from paper_rl.common.rollout import Rollout
-from paper_rl.logger.logger import Logger
+from walle_rl.cfg import parse_cfg
+from walle_rl.common.rollout import Rollout
+from walle_rl.logger.logger import Logger
 
-from paper_rl.modelfree.ppo import PPO
-from paper_rl.architecture.ac.mlp import MLPActorCritic
+from walle_rl.modelfree.ppo import PPO
+from walle_rl.architecture.ac.mlp import MLPActorCritic
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.utils import set_random_seed
 

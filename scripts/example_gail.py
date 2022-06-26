@@ -1,11 +1,11 @@
 import gym
 import numpy as np
 import torch
-from paper_rl.architecture.ac.core import mlp
-from paper_rl.logger.logger import Logger
+from walle_rl.architecture.ac.core import mlp
+from walle_rl.logger.logger import Logger
 import torch.nn as nn
-from paper_rl.modelfree.gail import GAIL
-from paper_rl.architecture.ac.mlp import MLPActorCritic
+from walle_rl.modelfree.gail import GAIL
+from walle_rl.architecture.ac.mlp import MLPActorCritic
 
 from stable_baselines3.common.env_util import make_vec_env
 import os.path as osp

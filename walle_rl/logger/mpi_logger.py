@@ -6,13 +6,14 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Union
-from omegaconf import OmegaConf
+from typing import Dict
+
 import numpy as np
 import pandas as pd
 import torch
 
-from paper_rl.common.mpi.serialization_utils import convert_json
+from walle_rl.common.mpi.mpi_tools import mpi_statistics_scalar, proc_id
+from walle_rl.common.mpi.serialization_utils import convert_json
 
 color2num = dict(
     gray=30,
@@ -25,7 +26,7 @@ color2num = dict(
     white=37,
     crimson=38,
 )
-import wandb as wb
+
 
 def colorize(string, color, bold=False, highlight=False):
     """
@@ -43,7 +44,7 @@ def colorize(string, color, bold=False, highlight=False):
     return "\x1b[%sm%s\x1b[0m" % (";".join(attr), string)
 
 
-class Logger:
+class MPILogger:
     """
     Logging tool
     """
@@ -54,9 +55,7 @@ class Logger:
         tensorboard=False,
         workspace: str = "default_workspace",
         exp_name: str = "default_exp",
-        resume: bool = True,
-        project_name: str = None,
-        cfg: Union[Dict, OmegaConf] = {},
+        clear_out: bool = True,
     ) -> None:
         """
 
@@ -72,63 +71,53 @@ class Logger:
         self.exp_path = osp.join(workspace, exp_name)
         self.log_path = osp.join(self.exp_path, "logs")
         self.raw_log_file = osp.join(self.log_path, "raw.csv")
-        if clear_out:
-            if osp.exists(self.exp_path):
-                shutil.rmtree(self.exp_path, ignore_errors=True)
+        if proc_id() == 0:
+            if clear_out:
+                if osp.exists(self.exp_path):
+                    shutil.rmtree(self.exp_path, ignore_errors=True)
 
         Path(self.log_path).mkdir(parents=True, exist_ok=True)
 
         # set up external loggers
         if self.tensorboard:
             from torch.utils.tensorboard import SummaryWriter
+
             self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
-            if project_name is None:
-                project_name = workspace
-            wb.init(project=project_name, name=exp_name, resume=resume)
-        self.save_config(cfg)
+            pass
 
         self.data = defaultdict(dict)
         self.stats = {}
 
     def close(self):
-        """
-        finishes up experiment logging
-
-        in wandb, finishes the experiment and uploads remaining data
-        """
         if self.tensorboard:
             self.tb_writer.close()
-        if self.wandb:
-            wb.finish()
 
-    def save_config(self, config: Union[Dict, OmegaConf], verbose=2):
+    def save_config(self, config: Dict, verbose=2):
         """
         save configuration of experiments to the experiment directory
         """
-        if type(config) == type(OmegaConf.create()):
-            config = OmegaConf.to_container(config)
-        if self.wandb:
-            wb.config.update(config)
-        config_path = osp.join(self.exp_path, "config.json")
-        config_json = convert_json(config)
-        output = json.dumps(config_json, indent=2, sort_keys=True)
-        if verbose > 1:
-            self.print("Saving config:\n", color="cyan", bold=True)
-        if verbose > 1:
-            self.print(output)
-        with open(config_path, "w") as out:
-            out.write(output)
+        if proc_id() == 0:
+            config_path = osp.join(self.exp_path, "config.json")
+            config_json = convert_json(config)
+            output = json.dumps(config_json, indent=2, sort_keys=True)
+            if verbose > 1:
+                self.print("Saving config:\n", color="cyan", bold=True)
+            if verbose > 1:
+                self.print(output)
+            with open(config_path, "w") as out:
+                out.write(output)
 
     def print(self, msg, file=sys.stdout, color="", bold=False):
         """
         print to terminal, stdout by default. Ensures only the main process ever prints.
         """
-        if color == "":
-            print(msg, file=file)
-        else:
-            print(colorize(msg, color, bold=bold), file=file)
-        sys.stdout.flush()
+        if proc_id() == 0:
+            if color == "":
+                print(msg, file=file)
+            else:
+                print(colorize(msg, color, bold=bold), file=file)
+            sys.stdout.flush()
 
     def store(self, tag="default", append=True, **kwargs):
         """
@@ -161,19 +150,20 @@ class Logger:
         return self.data[tag]
 
     def pretty_print_table(self, data):
-        vals = []
-        key_lens = [len(key) for key in data.keys()]
-        max_key_len = max(15, max(key_lens))
-        keystr = "%" + "%d" % max_key_len
-        fmt = "| " + keystr + "s | %15s |"
-        n_slashes = 22 + max_key_len
-        print("-" * n_slashes)
-        for key in sorted(data.keys()):
-            val = data[key]
-            valstr = "%8.3g" % val if hasattr(val, "__float__") else val
-            print(fmt % (key, valstr))
-            vals.append(val)
-        print("-" * n_slashes, flush=True)
+        if proc_id() == 0:
+            vals = []
+            key_lens = [len(key) for key in data.keys()]
+            max_key_len = max(15, max(key_lens))
+            keystr = "%" + "%d" % max_key_len
+            fmt = "| " + keystr + "s | %15s |"
+            n_slashes = 22 + max_key_len
+            print("-" * n_slashes)
+            for key in data.keys():
+                val = data[key]
+                valstr = "%8.3g" % val if hasattr(val, "__float__") else val
+                print(fmt % (key, valstr))
+                vals.append(val)
+            print("-" * n_slashes, flush=True)
 
     def log(self, step):
         """
@@ -185,34 +175,32 @@ class Logger:
         for tag in self.data.keys():
             data_dict = self.data[tag]
             for k, v in data_dict.items():
-                if isinstance(v, list):
-                    vals = np.array(v)
-                    vals_sum, n = vals.sum(), len(vals)
-                    avg = vals_sum / n
-                    sum_sq = np.sum((vals - avg) ** 2)
-                    std = np.sqrt(sum_sq / n)
-                    minv = np.min(vals)
-                    maxv = np.max(vals)
+                if isinstance(v, int) or isinstance(v, float):
+                    key_vals = {f"{tag}/{k}": v}
+                else:
+                    vals = (
+                        np.concatenate(v)
+                        if isinstance(v[0], np.ndarray) and len(v[0].shape) > 0
+                        else v
+                    )
+                    stats = mpi_statistics_scalar(vals, with_min_and_max=True)
+                    avg, std, minv, maxv = stats[0], stats[1], stats[2], stats[3]
                     key_vals = {
                         f"{tag}/{k}_avg": avg,
                         f"{tag}/{k}_std": std,
                         f"{tag}/{k}_min": minv,
                         f"{tag}/{k}_max": maxv,
                     }
-                else:
-                    key_vals = {f"{tag}/{k}": v}
-                for name, scalar in key_vals.items():
-                    if self.tensorboard:
-                        self.tb_writer.add_scalar(name, scalar, step)
-                    self.stats[name] = scalar
-                if self.wandb:
-                    wb.log(data=key_vals, step=step)
-                    
+                if proc_id() == 0:
+                    for name, scalar in key_vals.items():
+                        if self.tensorboard:
+                            self.tb_writer.add_scalar(name, scalar, step)
+                        self.stats[name] = scalar
         return self.stats
 
     def reset(self):
         """
         call this each time after log is called
         """
-        self.data = defaultdict(dict)
+        self.data = {}
         self.stats = {}

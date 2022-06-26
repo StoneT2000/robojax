@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from mpi4py import MPI
 
-from paper_rl.common.mpi.mpi_tools import (broadcast, mpi_avg, num_procs,
+from walle_rl.common.mpi.mpi_tools import (broadcast, mpi_avg, num_procs,
                                            proc_id)
 
 

@@ -4,7 +4,7 @@ import gym
 import numpy as np
 import torch
 
-from paper_rl.common.buffer import BaseBuffer
+from walle_rl.common.buffer import BaseBuffer
 
 from tqdm import tqdm
 class Rollout:
@@ -21,6 +21,7 @@ class Rollout:
         custom_reward=None,
         logger=None,
         render=False,
+        video_capture=None,
         pbar=False,
         even_num_traj_per_env=False # collects even number of trajectories per env
     ):
@@ -67,7 +68,13 @@ class Rollout:
                     past_obs[idx].append(o)
             for idx, a in enumerate(acts):
                 past_acts[idx].append(a)
-            if render: env.render()
+            if render:
+                if render == True:
+                    render_o = env.render()
+                else:
+                    render_o = env.render(render)
+                if video_capture is not None:
+                    video_capture(output=render_o, step=step)
             next_os, rewards, dones, infos = env.step(acts)
             if custom_reward is not None: rewards = custom_reward(rewards, observations, acts)
             for idx in range(len(rewards)):
@@ -128,6 +135,7 @@ class Rollout:
         max_ep_len=1000,
         custom_reward=None,
         logger=None,
+        verbose=1,
     ):
         """
         collects for a buffer
@@ -179,7 +187,7 @@ class Rollout:
                     ep_ret = ep_returns[idx]
                     ep_len = ep_lengths[idx]
                     timeout = timeouts[idx]
-                    if epoch_ended and not terminal:
+                    if epoch_ended and not terminal and verbose == 1:
                         print("Warning: trajectory cut off by epoch at %d steps." % ep_lengths[idx], flush=True)
                     # if trajectory didn't reach terminal state, bootstrap value target
                     if timeout or epoch_ended:

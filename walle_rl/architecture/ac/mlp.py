@@ -6,7 +6,7 @@ from gym.spaces import Box, Discrete
 from torch.distributions.categorical import Categorical
 from torch.distributions.normal import Normal
 
-from paper_rl.architecture.ac.core import Actor, ActorCritic, mlp
+from walle_rl.architecture.ac.core import Actor, ActorCritic, mlp
 
 
 class MLPCategoricalActor(Actor):

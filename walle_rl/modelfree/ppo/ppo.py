@@ -10,12 +10,12 @@ from gym import spaces
 from torch import optim
 from torch.nn import functional as F
 
-from paper_rl.architecture.ac.core import ActorCritic, count_vars
-from paper_rl.common.buffer import GenericBuffer
-from paper_rl.common.rollout import Rollout
-from paper_rl.common.utils import to_torch
-from paper_rl.logger.logger import Logger
-from paper_rl.modelfree.ppo.buffer import PPOBuffer
+from walle_rl.architecture.ac.core import ActorCritic, count_vars
+from walle_rl.common.buffer import GenericBuffer
+from walle_rl.common.rollout import Rollout
+from walle_rl.common.utils import to_torch
+from walle_rl.logger.logger import Logger
+from walle_rl.modelfree.ppo.buffer import PPOBuffer
 
 
 class PPO:
@@ -118,6 +118,7 @@ class PPO:
         accumulate_grads=False,
         demo_trajectory_sampler = None,
         dapg_nll_loss=False,
+        verbose=1,
     ):
         """
         Parameters
@@ -217,7 +218,7 @@ class PPO:
             rollout_start_time = time.time_ns()
             buf.reset()
             ac.eval()
-            rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger)
+            rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger, verbose=verbose)
             ac.train()
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
@@ -355,6 +356,7 @@ def ppo_update(
             average_kl = 0
         for batch_idx in range(steps_per_train_iter):
             batch_data = buffer.sample_batch(batch_size=batch_size)
+            loss_v = compute_loss_v(batch_data) * vf_coef
             if dapg: 
                 batch_demo_trajectories = demo_trajectories[batch_idx]
                 batch_data["demo_trajectories"] = batch_demo_trajectories
@@ -369,7 +371,7 @@ def ppo_update(
                         logger.print("Early stopping at step %d due to reaching max kl." % update_step)
                         early_stop_update = True
                         break
-            loss_v = compute_loss_v(batch_data) * vf_coef
+            
             # TODO - entropy loss
             # if entropy is None:
             #     # Approximate entropy when no analytical form
