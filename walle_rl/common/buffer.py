@@ -5,7 +5,7 @@ Adapted from SB3
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Generator, List, Optional, Union
 
-import numpy as np
+import jax.numpy as jnp
 import torch
 from gym import spaces
 
@@ -16,8 +16,6 @@ class BaseBuffer(ABC):
     """
     Base class that represent a buffer (rollout or replay)
     :param buffer_size: Max number of element in the buffer
-    :param observation_space: Observation space
-    :param action_space: Action space
     :param device: PyTorch device
         to which the values will be converted
     :param n_envs: Number of parallel environments
@@ -95,9 +93,9 @@ class GenericBuffer(BaseBuffer):
             if is_dict:
                 self.buffers[k] = dict()
                 for part_key in shape.keys():
-                    self.buffers[k][part_key] = np.zeros((self.buffer_size, self.n_envs) + shape[part_key], dtype=dtype[part_key])
+                    self.buffers[k][part_key] = jnp.zeros((self.buffer_size, self.n_envs) + shape[part_key], dtype=dtype[part_key])
             else:
-                self.buffers[k] = np.zeros((self.buffer_size, self.n_envs) + shape, dtype=dtype)
+                self.buffers[k] = jnp.zeros((self.buffer_size, self.n_envs) + shape, dtype=dtype)
         self.ptr, self.path_start_idx, self.max_size = 0, [0]*n_envs, self.buffer_size
         
         self.batch_idx = None
@@ -112,11 +110,11 @@ class GenericBuffer(BaseBuffer):
             data = kwargs[k]
             if self.is_dict[k]:
                 for data_k in data.keys():
-                    d = np.array(data[data_k]).copy()
+                    d = jnp.array(data[data_k]).copy()
                     d = d.reshape(self.buffers[k][data_k][self.ptr].shape)
                     self.buffers[k][data_k][self.ptr] = d
             else:
-                d = np.array(data).copy()
+                d = jnp.array(data).copy()
                 d = d.reshape(self.buffers[k][self.ptr].shape)
                 self.buffers[k][self.ptr] = d
         self.ptr += 1
@@ -143,15 +141,18 @@ class GenericBuffer(BaseBuffer):
         return True
 
     def sample_batch(self, batch_size: int, drop_last_batch=True):
+        """
+        Sample a Batch of data without replacement
+        """
         if not self._prepared_for_sampling(batch_size, drop_last_batch):
             self.batch_idx = 0            
             if self.full:
-                inds = np.arange(0, self.buffer_size).repeat(self.n_envs)
+                inds = jnp.arange(0, self.buffer_size).repeat(self.n_envs)
             else:
-                inds = np.arange(0, self.ptr).repeat(self.n_envs)
-            env_inds = np.tile(np.arange(self.n_envs), len(inds) // self.n_envs)
-            inds = np.vstack([inds, env_inds]).T
-            np.random.shuffle(inds)
+                inds = jnp.arange(0, self.ptr).repeat(self.n_envs)
+            env_inds = jnp.tile(jnp.arange(self.n_envs), len(inds) // self.n_envs)
+            inds = jnp.vstack([inds, env_inds]).T
+            jnp.random.shuffle(inds)
             self.batch_inds = inds[:, 0]
             self.batch_env_inds = inds[:, 1]
         batch_ids = self.batch_inds[self.batch_idx: self.batch_idx + batch_size]
@@ -160,14 +161,21 @@ class GenericBuffer(BaseBuffer):
         return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
             
     def sample_random_batch(self, batch_size: int):
+        """
+        Sample a batch of data with replacement
+        """
         if self.full:
-            batch_ids = (np.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
+            batch_ids = (jnp.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
         else:
-            batch_ids = np.random.randint(0, self.ptr, size=batch_size)
-        env_ids = np.random.randint(0, high=self.n_envs, size=(len(batch_ids),))
+            batch_ids = jnp.random.randint(0, self.ptr, size=batch_size)
+        env_ids = jnp.random.randint(0, high=self.n_envs, size=(len(batch_ids),))
 
         return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
-    def get(self):
+    
+    def data(self):
+        """
+        returns all data from buffer
+        """
         all_data = dict()
         for k in self.buffers.keys():
             data = self.buffers[k]

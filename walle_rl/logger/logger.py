@@ -12,8 +12,6 @@ import numpy as np
 import pandas as pd
 import torch
 
-from walle_rl.common.mpi.serialization_utils import convert_json
-
 color2num = dict(
     gray=30,
     red=31,
@@ -171,6 +169,7 @@ class Logger:
         return self.data[tag]
 
     def pretty_print_table(self, data):
+        # Code from spinning up
         vals = []
         key_lens = [len(key) for key in data.keys()]
         max_key_len = max(15, max(key_lens))

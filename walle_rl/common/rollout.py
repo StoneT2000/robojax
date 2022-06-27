@@ -1,7 +1,7 @@
 import time
 
 import gym
-import numpy as np
+import jax.numpy as jnp
 import torch
 
 from walle_rl.common.buffer import BaseBuffer
@@ -98,9 +98,9 @@ class Rollout:
                     if not even_num_traj_per_env or len(trajectories_per_env[idx]) < max_trajectories_per_env:
                         termminal_obs = infos[idx]["terminal_observation"]
                         past_obs[idx].append(termminal_obs)
-                        t_obs = past_obs[idx] if is_dict else np.vstack(past_obs[idx])
-                        t_act = np.vstack(past_acts[idx])
-                        t_rew = np.vstack(past_rews[idx])
+                        t_obs = past_obs[idx] if is_dict else jnp.vstack(past_obs[idx])
+                        t_act = jnp.vstack(past_acts[idx])
+                        t_rew = jnp.vstack(past_rews[idx])
                         t_info = past_infos[idx]
                         if format_trajectory is None:
                             traj = {
@@ -141,7 +141,7 @@ class Rollout:
         collects for a buffer
         """
         # policy should return a, v, logp
-        observations, ep_returns, ep_lengths = env.reset(), np.zeros(n_envs), np.zeros(n_envs, dtype=int)
+        observations, ep_returns, ep_lengths = env.reset(), jnp.zeros(n_envs), jnp.zeros(n_envs, dtype=int)
         is_dict = isinstance(observations, dict)
         rollout_start_time = time.time_ns()
         for t in range(steps):
@@ -176,7 +176,7 @@ class Rollout:
                         o = infos[idx]["terminal_observation"]
                         if is_dict:
                             for k in o:
-                                o[k] = np.expand_dims(o[k], axis=0)
+                                o[k] = jnp.expand_dims(o[k], axis=0)
                     else:
                         if is_dict:
                             o = {}

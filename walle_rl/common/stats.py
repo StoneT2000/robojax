@@ -14,4 +14,5 @@ def discount_cumsum(x, discount):
          x1 + discount * x2,
          x2]
     """
+    # TODO replace with jax
     return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]

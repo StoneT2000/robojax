@@ -6,7 +6,7 @@ from cmath import isinf
 import warnings
 from typing import Dict, Tuple, Union
 
-import numpy as np
+import jax.numpy as jnp
 import torch
 from gym import spaces
 from torch.nn import functional as F
@@ -46,7 +46,7 @@ def get_action_dim(action_space: spaces.Space) -> int:
     :return:
     """
     if isinstance(action_space, spaces.Box):
-        return int(np.prod(action_space.shape))
+        return int(jnp.prod(action_space.shape))
     elif isinstance(action_space, spaces.Discrete):
         # Action is an int
         return 1
@@ -83,7 +83,7 @@ def to_torch(x, device=torch.device("cpu"), copy=False):
                 return x.clone().to(device)
             else:
                 return x.to(device)
-        elif isinstance(x, np.ndarray):
+        elif isinstance(x, jnp.ndarray):
             data = torch.from_numpy(x)
             if copy:
                 return data.clone().to(device)

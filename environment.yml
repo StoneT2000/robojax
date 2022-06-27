@@ -38,6 +38,12 @@ dependencies:
   - opencv
   - transforms3d
 
+  # Jax ecosystem
+  - jax
+  - chex
+  - haiku
+  - flax
+
   - pip:
 
     # Simulators
