@@ -1,12 +1,8 @@
 """
 Exploration strategies. Code adopted from RLax https://github.com/deepmind/rlax/
 """
-
-from typing import Optional
-
 import chex
 import jax
-import jax.numpy as jnp
 
 Array = chex.Array
 Scalar = chex.Scalar
