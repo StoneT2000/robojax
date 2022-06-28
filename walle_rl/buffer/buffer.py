@@ -3,7 +3,7 @@ Adapted from SB3
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import jax.numpy as jnp
 import torch

@@ -1,13 +1,18 @@
-from typing import Any, Dict, Generator, List, Optional, Union
-
-import numpy as np
-import torch
+from typing import TypedDict
 from gym import spaces
-
 from walle_rl.buffer.buffer import GenericBuffer
-from walle_rl.common.stats import discount_cumsum
 from walle_rl.common.utils import get_action_dim, get_obs_shape
+from walle_rl.common.stats import discount_cumsum
+import numpy as np
 
+class Batch(TypedDict):
+    act_buf: np.array
+    adv_buf: np.array
+    rew_buf: np.array
+    ret_buf: np.array
+    val_buf: np.array
+    logp_buf: np.array
+    done_buf: np.array
 
 class PPOBuffer(GenericBuffer):
     """
@@ -52,6 +57,11 @@ class PPOBuffer(GenericBuffer):
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, [0] * n_envs, self.buffer_size
         self.next_batch_idx = 0
+
+    def sample_batch(self, batch_size: int, drop_last_batch=True) -> Batch:
+        return super().sample_batch(batch_size, drop_last_batch)
+    def sample_random_batch(self, batch_size: int) -> Batch:
+        return super().sample_random_batch(batch_size)
 
     def finish_path(self, env_id, last_val=0):
         # TODO: remove env_id and do it in batch

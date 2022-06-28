@@ -4,7 +4,7 @@ import gym
 import jax.numpy as jnp
 import torch
 
-from walle_rl.common.buffer import BaseBuffer
+from walle_rl.buffer.buffer import BaseBuffer
 
 from tqdm import tqdm
 class Rollout:

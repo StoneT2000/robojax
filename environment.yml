@@ -38,13 +38,14 @@ dependencies:
   - opencv
   - transforms3d
 
-  # Jax ecosystem
-  - jax
-  - chex
-  - haiku
-  - flax
-
   - pip:
+    # Jax ecosystem
+    - jax
+    - chex
+    - haiku
+    - flax
+    - distrax
+    - optax
 
     # Simulators
     - sapien
