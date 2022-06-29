@@ -7,6 +7,7 @@ import warnings
 from typing import Dict, Tuple, Union
 
 import jax.numpy as jnp
+import numpy as np
 import torch
 from gym import spaces
 from torch.nn import functional as F
@@ -46,7 +47,7 @@ def get_action_dim(action_space: spaces.Space) -> int:
     :return:
     """
     if isinstance(action_space, spaces.Box):
-        return int(jnp.prod(action_space.shape))
+        return int(np.prod(action_space.shape))
     elif isinstance(action_space, spaces.Discrete):
         # Action is an int
         return 1

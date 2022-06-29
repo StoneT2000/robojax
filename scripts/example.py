@@ -1,5 +1,7 @@
 import distrax
 import walle_rl.agents.ppo
+from walle_rl.agents.ppo.agent import PPO
+from walle_rl.agents.ppo.buffer import PPOBuffer
 from walle_rl.architecture.mlp import MLP
 import gym
 
@@ -14,6 +16,7 @@ from walle_rl.architecture.ac.core import ActorCritic
 import optax
 
 import walle_rl.explore as explore
+from walle_rl.logger.logger import Logger
 # RNG sequence
 rng = PRNGSequence(0)
 
@@ -25,10 +28,7 @@ env = make_vec_env(env_id, num_cpu, seed=seed)
 obs = env.reset()
 act_dims = 1
 actor=MLP([64,64,64,1], output_activation=nn.tanh)
-# , (4,), optax.adam(learning_rate=3e-4)
 critic=MLP([64,64,64,1], output_activation=None)
-# , next(rng), (4,), optax.adam(learning_rate=3e-4)
-# explorer=Model.create(, next(rng), (), None)
 ac = ActorCritic(
     rng=rng,
     actor=actor,
@@ -39,6 +39,23 @@ ac = ActorCritic(
     actor_optim=optax.adam(learning_rate=3e-4),
     critic_optim=optax.adam(learning_rate=3e-4)
 )
+logger = Logger(tensorboard=False, wandb=False, cfg=dict(), workspace="workspace", exp_name="test")
+steps_per_epoch = 4000
+buffer = PPOBuffer(buffer_size=steps_per_epoch, observation_space=env.observation_space, action_space=env.action_space, n_envs=num_cpu)
+algo = PPO(max_ep_len=200)
+algo.train_loop(
+    rng=rng,
+    ac=ac,
+    env=env,
+    buffer=buffer,
+    steps_per_epoch=steps_per_epoch,
+    batch_size=1000,
+    logger=logger,
+    update_iters=40,
+    n_epochs=20
+)
+
+
 # ac = Model.create(ac, next(rng), (4,))
 for i in range(1000):
     a = ac.act(obs=obs, key=next(rng), deterministic=False)

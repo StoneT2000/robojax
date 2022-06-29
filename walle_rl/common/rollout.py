@@ -1,6 +1,7 @@
 import time
 
 import gym
+import numpy as np
 import jax.numpy as jnp
 import torch
 
@@ -98,9 +99,9 @@ class Rollout:
                     if not even_num_traj_per_env or len(trajectories_per_env[idx]) < max_trajectories_per_env:
                         termminal_obs = infos[idx]["terminal_observation"]
                         past_obs[idx].append(termminal_obs)
-                        t_obs = past_obs[idx] if is_dict else jnp.vstack(past_obs[idx])
-                        t_act = jnp.vstack(past_acts[idx])
-                        t_rew = jnp.vstack(past_rews[idx])
+                        t_obs = past_obs[idx] if is_dict else np.vstack(past_obs[idx])
+                        t_act = np.vstack(past_acts[idx])
+                        t_rew = np.vstack(past_rews[idx])
                         t_info = past_infos[idx]
                         if format_trajectory is None:
                             traj = {
@@ -141,18 +142,18 @@ class Rollout:
         collects for a buffer
         """
         # policy should return a, v, logp
-        observations, ep_returns, ep_lengths = env.reset(), jnp.zeros(n_envs), jnp.zeros(n_envs, dtype=int)
+        observations, ep_returns, ep_lengths = env.reset(), np.zeros(n_envs), np.zeros(n_envs, dtype=int)
         is_dict = isinstance(observations, dict)
         rollout_start_time = time.time_ns()
-        for t in range(steps):
-            a, v, logp = policy(observations)
+        for t in tqdm(range(steps)):
+            pi_output = policy(observations)
+            a = pi_output['actions']
+
             next_os, rewards, dones, infos = env.step(a)
             if custom_reward is not None: rewards = custom_reward(rewards, observations, a)
-            # for idx, d in enumerate(dones):
-            #     ep_returns[idx] += returns[idx]
+
             ep_returns += rewards
             ep_lengths += 1
-            buf.store(obs_buf=observations, act_buf=a, rew_buf=rewards, val_buf=v, logp_buf=logp, done_buf=dones)
             timeouts = ep_lengths == max_ep_len
             terminals = dones | timeouts  # terminated means done or reached max ep length
             epoch_ended = t == steps - 1
@@ -160,13 +161,13 @@ class Rollout:
                 rollout_callback(
                     observations=observations,
                     next_observations=next_os,
+                    pi_output=pi_output,
                     actions=a,
                     rewards=rewards,
                     infos=infos,
                     dones=dones,
                     timeouts=timeouts,
                 )
-            if logger is not None: logger.store(tag="train", VVals=v)
 
             observations = next_os
             for idx, terminal in enumerate(terminals):
@@ -176,7 +177,7 @@ class Rollout:
                         o = infos[idx]["terminal_observation"]
                         if is_dict:
                             for k in o:
-                                o[k] = jnp.expand_dims(o[k], axis=0)
+                                o[k] = np.expand_dims(o[k], axis=0)
                     else:
                         if is_dict:
                             o = {}
@@ -191,7 +192,8 @@ class Rollout:
                         print("Warning: trajectory cut off by epoch at %d steps." % ep_lengths[idx], flush=True)
                     # if trajectory didn't reach terminal state, bootstrap value target
                     if timeout or epoch_ended:
-                        _, v, _ = policy(o)
+                        out = policy(o)
+                        v = out["val"]
                     else:
                         v = 0
                     buf.finish_path(idx, v)
@@ -202,4 +204,4 @@ class Rollout:
                     ep_lengths[idx] = 0
         rollout_end_time = time.time_ns()
         rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
-        if logger is not None: logger.store("train", RolloutTime=rollout_delta_time, append=False)
+        if logger is not None: logger.store("train", rollout_time=rollout_delta_time, append=False)

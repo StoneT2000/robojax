@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import jax.numpy as jnp
 import torch
+import numpy as np
 from gym import spaces
 
 from walle_rl.common.utils import get_action_dim, get_obs_shape
@@ -93,9 +94,9 @@ class GenericBuffer(BaseBuffer):
             if is_dict:
                 self.buffers[k] = dict()
                 for part_key in shape.keys():
-                    self.buffers[k][part_key] = jnp.zeros((self.buffer_size, self.n_envs) + shape[part_key], dtype=dtype[part_key])
+                    self.buffers[k][part_key] = np.zeros((self.buffer_size, self.n_envs) + shape[part_key], dtype=dtype[part_key])
             else:
-                self.buffers[k] = jnp.zeros((self.buffer_size, self.n_envs) + shape, dtype=dtype)
+                self.buffers[k] = np.zeros((self.buffer_size, self.n_envs) + shape, dtype=dtype)
         self.ptr, self.path_start_idx, self.max_size = 0, [0]*n_envs, self.buffer_size
         
         self.batch_idx = None
@@ -110,11 +111,11 @@ class GenericBuffer(BaseBuffer):
             data = kwargs[k]
             if self.is_dict[k]:
                 for data_k in data.keys():
-                    d = jnp.array(data[data_k]).copy()
+                    d = np.array(data[data_k]).copy()
                     d = d.reshape(self.buffers[k][data_k][self.ptr].shape)
                     self.buffers[k][data_k][self.ptr] = d
             else:
-                d = jnp.array(data).copy()
+                d = np.array(data).copy()
                 d = d.reshape(self.buffers[k][self.ptr].shape)
                 self.buffers[k][self.ptr] = d
         self.ptr += 1
@@ -147,12 +148,12 @@ class GenericBuffer(BaseBuffer):
         if not self._prepared_for_sampling(batch_size, drop_last_batch):
             self.batch_idx = 0            
             if self.full:
-                inds = jnp.arange(0, self.buffer_size).repeat(self.n_envs)
+                inds = np.arange(0, self.buffer_size).repeat(self.n_envs)
             else:
-                inds = jnp.arange(0, self.ptr).repeat(self.n_envs)
-            env_inds = jnp.tile(jnp.arange(self.n_envs), len(inds) // self.n_envs)
-            inds = jnp.vstack([inds, env_inds]).T
-            jnp.random.shuffle(inds)
+                inds = np.arange(0, self.ptr).repeat(self.n_envs)
+            env_inds = np.tile(np.arange(self.n_envs), len(inds) // self.n_envs)
+            inds = np.vstack([inds, env_inds]).T
+            np.random.shuffle(inds)
             self.batch_inds = inds[:, 0]
             self.batch_env_inds = inds[:, 1]
         batch_ids = self.batch_inds[self.batch_idx: self.batch_idx + batch_size]
@@ -165,10 +166,10 @@ class GenericBuffer(BaseBuffer):
         Sample a batch of data with replacement
         """
         if self.full:
-            batch_ids = (jnp.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
+            batch_ids = (np.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
         else:
-            batch_ids = jnp.random.randint(0, self.ptr, size=batch_size)
-        env_ids = jnp.random.randint(0, high=self.n_envs, size=(len(batch_ids),))
+            batch_ids = np.random.randint(0, self.ptr, size=batch_size)
+        env_ids = np.random.randint(0, high=self.n_envs, size=(len(batch_ids),))
 
         return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
     

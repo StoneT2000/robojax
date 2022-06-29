@@ -11,7 +11,9 @@ T = TypeVar("T", bound=nn.Module)
 @struct.dataclass
 class Model:
     """
-    model class that holds the model parameters and training state. Provides wrapped functions to execute forward passes in OOP style
+    model class that holds the model parameters and training state. Provides wrapped functions to execute forward passes in OOP style. 
+    
+    calling Model.create returns the original nn.Module but additional functions
 
     expects all parameters to optimized by a single optimizer
     """

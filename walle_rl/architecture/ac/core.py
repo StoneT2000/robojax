@@ -1,5 +1,5 @@
 # import torch.nn as nn
-from typing import Any, Callable, Union
+from typing import Any, Callable, Tuple, Union
 from chex import Array
 import distrax
 import flax
@@ -41,11 +41,11 @@ class Actor(nn.Module):
         # stub method just for initialization
         a = self.actor(x)
         dist = self.explorer(a)
-        return dist
+        return dist, a
 
 
 class ActorCritic:
-    pi: Union[Actor, Model]
+    actor: Union[Actor, Model]
     critic: Model
     act_dims: int
 
@@ -62,17 +62,17 @@ class ActorCritic:
     ) -> None:
         self.act_dims = act_dims
         actor_module = Actor(act_dims=self.act_dims, actor=actor, explorer=explorer)
-        self.pi = Model.create(model=actor_module, key=next(rng), input_shape=obs_shape, optimizer=actor_optim)
+        self.actor = Model.create(model=actor_module, key=next(rng), input_shape=obs_shape, optimizer=actor_optim)
         self.critic = Model.create(model=critic, key=next(rng), input_shape=obs_shape, optimizer=critic_optim)
     def step(self, key, obs):
-        dist = self.pi(obs, method=self.pi._distribution)
-        a = dist.sample(key)
-        logp_a = self.pi._log_prob_from_distribution(dist, a)
+        dist = self.actor(obs, method=self.actor._distribution)
+        a = dist.sample(seed=key)
+        logp_a = self.actor._log_prob_from_distribution(dist, a)
         v = self.critic(obs)
-        return dict(a=a, v=v, logp_a=logp_a)
+        return dict(actions=a, val=v, logp_a=logp_a)
 
     def act(self, obs, key=None, deterministic=False):
         if deterministic:
-            return self.pi(obs)
-        dist: distrax.Distribution = self.pi(obs, method=self.pi._distribution)
+            return self.actor(obs)
+        dist: distrax.Distribution = self.actor(obs, method=self.actor._distribution)
         return dist.sample(seed=key)
