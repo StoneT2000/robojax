@@ -145,10 +145,9 @@ class Rollout:
         observations, ep_returns, ep_lengths = env.reset(), np.zeros(n_envs), np.zeros(n_envs, dtype=int)
         is_dict = isinstance(observations, dict)
         rollout_start_time = time.time_ns()
-        for t in tqdm(range(steps)):
+        for t in range(steps):
             pi_output = policy(observations)
             a = pi_output['actions']
-
             next_os, rewards, dones, infos = env.step(a)
             if custom_reward is not None: rewards = custom_reward(rewards, observations, a)
 

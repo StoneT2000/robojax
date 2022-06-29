@@ -53,6 +53,8 @@ class Actor(nn.Module):
         # stub method just for initialization
         a = self.actor(x)
         dist = self.explorer(a)
+        if self.explorer.categorical:
+            return dist, a.argmax(1)
         return dist, a
 
 
@@ -62,6 +64,9 @@ def _step(key, actor_apply_fn: Callable, actor_params: Params, critic_apply_fn: 
     a = dist.sample(seed=key)
     logp_a = dist.log_prob(a)
     v = critic_apply_fn(critic_params, obs)
+    v = jnp.squeeze(
+        v, -1
+    )
     return dict(actions=a, val=v, logp_a=logp_a)
 
 
@@ -87,7 +92,7 @@ class ActorCritic:
         self.critic = Model.create(model=critic, key=next(rng), input_shape=obs_shape, optimizer=critic_optim)
 
     def step(self, key, obs):
-        return _step(
+        res = _step(
             key=key,
             actor_apply_fn=self.actor.apply_fn,
             actor_params=self.actor.params,
@@ -95,6 +100,7 @@ class ActorCritic:
             critic_params=self.critic.params,
             obs=obs,
         )
+        return res
         # dist = self.actor(obs, method=self.actor._distribution)
         # a = dist.sample(seed=key)
         # logp_a = self.actor._log_prob_from_distribution(dist, a)
@@ -106,4 +112,5 @@ class ActorCritic:
         if deterministic:
             return self.actor(obs)
         dist: distrax.Distribution = self.actor(obs, method=self.actor.model._distribution)
-        return dist.sample(seed=key)
+        # TODO remove np array here
+        return np.array(dist.sample(seed=key))

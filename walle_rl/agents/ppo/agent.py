@@ -5,6 +5,7 @@ from typing import Callable, Dict, Optional
 from chex import ArrayTree, PRNGKey
 
 import distrax
+import torch as th
 import gym
 import numpy as np
 from walle_rl.architecture.model import Model
@@ -30,7 +31,6 @@ import chex
 #     return actor_apply_fn()
 
 
-# def _update_params_jit()
 @functools.partial(jax.jit, static_argnames=["clip_ratio", "update_actor", "update_critic"])
 def update_parameters(
     actor: Model, critic: Model, clip_ratio: float, update_actor: bool, update_critic: bool, batch: Batch
@@ -131,8 +131,9 @@ class PPO(Policy):
         rollout = Rollout()
 
         def policy(o):
-            # return _sample_actions(key=next(rng), actor_apply_fn=ac``)
-            return ac.step(key=next(rng), obs=o)
+            res = ac.step(key=next(rng), obs=o)
+            res['actions'] = np.array(res['actions'])
+            return res
 
         buffer.reset()
 
@@ -168,12 +169,11 @@ class PPO(Policy):
         # ac.train()
         # logger.store("train", RolloutTime=rollout_delta_time, critic_warmup_epochs=critic_warmup_epochs, append=False)
         update_start_time = time.time_ns()
-        # advantage normalization before update
         # update_pi = epoch >= critic_warmup_epochs
         # update(update_pi = update_pi)
+        buffer.buffers["adv_buf"] = (buffer.buffers["adv_buf"] - buffer.buffers["adv_buf"].mean()) / (buffer.buffers["adv_buf"].std())
         for update_iter in range(update_iters):
             batch = buffer.sample_batch(batch_size=batch_size, drop_last_batch=True)
-            # info = self.gradient(ac=ac, batch=batch)
             res = update_parameters(
                 actor=ac.actor,
                 critic=ac.critic,
@@ -182,10 +182,12 @@ class PPO(Policy):
                 update_critic=update_critic,
                 batch=batch,
             )
+            
             ac.actor = res['new_actor']
             ac.critic = res['new_critic']
             info_a, info_c = res["info_a"], res["info_c"]
-            logger.store("train", actor_loss=info_a["loss_pi"], entropy=info_a["entropy"])
+            # print(f"Actor Loss: {info_a['loss_pi']}")
+            logger.store("train", actor_loss=info_a["loss_pi"], entropy=info_a["entropy"], critic_loss=info_c["critic_loss"])
 
         update_end_time = time.time_ns()
         logger.store("train", update_time=(update_end_time - update_start_time) * 1e-9, append=False)
@@ -196,18 +198,20 @@ class PPO(Policy):
 
     @staticmethod
     def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: Batch):
-        obs, act, adv, logp_old = batch["obs_buf"], batch["act_buf"], batch["adv_buf"], batch["logp_buf"]
         def loss_fn(actor_params: Params):
+            obs, act, adv, logp_old = batch["obs_buf"], batch["act_buf"], batch["adv_buf"], batch["logp_buf"]
             # ac.pi.val()
-            dist, a = actor_apply_fn(actor_params, obs)
-            logp = dist.log_prob(a)
+            dist, _ = actor_apply_fn(actor_params, obs)
+            dist: distrax.Distribution
+            logp = dist.log_prob(act)
             # ac.pi.train()
-            prob_ratios = jnp.exp(logp - logp_old)
-            loss_pi = clipped_surrogate_pg_loss(prob_ratios_t=prob_ratios, adv_t=adv, clip_ratio=clip_ratio)
+            ratio = jnp.exp(logp - logp_old)
+            clip_adv = jax.lax.clamp(1. - clip_ratio, ratio, 1. + clip_ratio) * adv
+            loss_pi = -jnp.mean(jnp.minimum(ratio * adv, clip_adv), axis=0)
 
-            entropy = dist.entropy()
+            entropy = dist.entropy().mean()
 
-            info = dict(loss_pi=loss_pi, entropy=entropy)
+            info = dict(loss_pi=loss_pi, entropy=entropy, logp_old=logp_old.mean(), clip_adv=clip_adv)
             return loss_pi, info
 
         return loss_fn
@@ -216,7 +220,9 @@ class PPO(Policy):
     def critic_loss_fn(critic_apply_fn: Model, batch: Batch):
         def loss_fn(critic_params: Params):
             obs, ret = batch["obs_buf"], batch["ret_buf"]
-            critic_loss = ((critic_apply_fn(critic_params, obs) - ret) ** 2).mean()
+            v = critic_apply_fn(critic_params, obs)
+            v = jnp.squeeze(v, -1)
+            critic_loss = jnp.mean(jnp.square(v - ret), axis=0)
             return critic_loss, dict(critic_loss=critic_loss)
 
         return loss_fn

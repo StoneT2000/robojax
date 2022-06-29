@@ -53,6 +53,5 @@ class Model(struct.PyTreeNode):
         except AttributeError:
             # if attribute is another module, can we scope it?
             attr = self.model.__getattribute__(name)
-            # import ipdb;ipdb.set_trace()
             return attr
 
