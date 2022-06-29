@@ -131,9 +131,9 @@ class GenericBuffer(BaseBuffer):
             if self.is_dict[k]:
                 batch_data[k] = dict()
                 for data_k in data.keys():
-                    batch_data[k][data_k] = torch.as_tensor(data[data_k][batch_ids, env_ids])
+                    batch_data[k][data_k] = jnp.array(data[data_k][batch_ids, env_ids])
             else:
-                batch_data[k] = torch.as_tensor(data[batch_ids, env_ids])
+                batch_data[k] = jnp.array(data[batch_ids, env_ids])
         return batch_data
     def _prepared_for_sampling(self, batch_size, drop_last_batch=True):
         if self.batch_idx == None: return False

@@ -40,9 +40,12 @@ ac = ActorCritic(
     critic_optim=optax.adam(learning_rate=3e-4)
 )
 logger = Logger(tensorboard=False, wandb=False, cfg=dict(), workspace="workspace", exp_name="test")
-steps_per_epoch = 4000
+steps_per_epoch = 400
 buffer = PPOBuffer(buffer_size=steps_per_epoch, observation_space=env.observation_space, action_space=env.action_space, n_envs=num_cpu)
 algo = PPO(max_ep_len=200)
+def t_cb(epoch):
+    stats = logger.log(step=epoch)
+    logger.pretty_print_table(stats)
 algo.train_loop(
     rng=rng,
     ac=ac,
@@ -52,7 +55,8 @@ algo.train_loop(
     batch_size=1000,
     logger=logger,
     update_iters=40,
-    n_epochs=20
+    n_epochs=20,
+    train_callback=t_cb
 )
 
 

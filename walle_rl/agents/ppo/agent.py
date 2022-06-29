@@ -1,20 +1,51 @@
 from dataclasses import dataclass
+import functools
 import time
 from typing import Callable, Dict, Optional
-from chex import PRNGKey
+from chex import ArrayTree, PRNGKey
 
 import distrax
 import gym
+import numpy as np
+from walle_rl.architecture.model import Model
 from walle_rl.common.random import PRNGSequence
 import jax
 from walle_rl.agents.ppo.buffer import PPOBuffer, Batch
-from walle_rl.architecture.ac.core import ActorCritic
+from walle_rl.architecture.ac.core import Actor, ActorCritic, Params
 from walle_rl.agents.base import Policy
 from walle_rl.buffer.buffer import GenericBuffer
 from walle_rl.common.rollout import Rollout
 from walle_rl.logger.logger import Logger
 from walle_rl.optim.pg import clipped_surrogate_pg_loss
 import jax.numpy as jnp
+import chex
+
+# chex.Array
+# def _sample_actions(
+#     key: PRNGKey,
+#     actor_apply_fn: Callable,
+#     actor_params: ArrayTree,
+#     observations: np.ndarray,
+# ):
+#     return actor_apply_fn()
+
+
+# def _update_params_jit()
+@functools.partial(jax.jit, static_argnames=["clip_ratio", "update_actor", "update_critic"])
+def update_parameters(
+    actor: Model, critic: Model, clip_ratio: float, update_actor: bool, update_critic: bool, batch: Batch
+):
+    info_a, info_c = None, None
+    if update_actor:
+        grads_a_fn = jax.grad(PPO.actor_loss_fn(clip_ratio=clip_ratio, actor_apply_fn=actor.apply_fn, batch=batch), has_aux=True)
+        grads, info_a = grads_a_fn(actor.params)
+        new_actor = actor.apply_gradient(grads=grads)
+    if update_critic:
+        grads_c_fn = jax.grad(PPO.critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch), has_aux=True)
+        grads, info_c = grads_c_fn(critic.params)
+        new_critic = critic.apply_gradient(grads=grads)
+
+    return dict(new_actor=new_actor, new_critic=new_critic, info_a=info_a, info_c=info_c)
 
 
 @dataclass
@@ -100,10 +131,11 @@ class PPO(Policy):
         rollout = Rollout()
 
         def policy(o):
+            # return _sample_actions(key=next(rng), actor_apply_fn=ac``)
             return ac.step(key=next(rng), obs=o)
 
         buffer.reset()
-        
+
         def wrapped_rollout_cb(observations, next_observations, pi_output, actions, rewards, infos, dones, timeouts):
             observations, next_observations, pi_output, actions, rewards, infos, dones, timeouts
             buffer.store(
@@ -114,9 +146,12 @@ class PPO(Policy):
                 logp_buf=pi_output["logp_a"],
                 done_buf=dones,
             )
-            if logger is not None: logger.store(tag="train", v_vals=pi_output["val"])
+            if logger is not None:
+                logger.store(tag="train", v_vals=pi_output["val"])
             if rollout_callback is not None:
-                return rollout_callback(observations, next_observations, pi_output, actions, rewards, infos, dones, timeouts)
+                return rollout_callback(
+                    observations, next_observations, pi_output, actions, rewards, infos, dones, timeouts
+                )
 
         # ac.eval()
         rollout.collect(
@@ -139,15 +174,18 @@ class PPO(Policy):
         for update_iter in range(update_iters):
             batch = buffer.sample_batch(batch_size=batch_size, drop_last_batch=True)
             # info = self.gradient(ac=ac, batch=batch)
-            if update_actor:
-                info_a = self.get_actor_loss_fn(ac)
-                grads_a_fn = jax.grad(info_a["loss_pi_fn"])
-                ac.actor.apply_gradient(grads_a_fn)
-                logger.store("train", entropy=info_a["entropy"])
-            if update_critic:
-                info_c = self.get_critic_loss_fn(ac)
-                grads_c_fn = jax.grad(info_c["loss_v_fn"])
-                ac.critic.apply_gradient(grads_c_fn)
+            res = update_parameters(
+                actor=ac.actor,
+                critic=ac.critic,
+                clip_ratio=self.clip_ratio,
+                update_actor=update_actor,
+                update_critic=update_critic,
+                batch=batch,
+            )
+            ac.actor = res['new_actor']
+            ac.critic = res['new_critic']
+            info_a, info_c = res["info_a"], res["info_c"]
+            logger.store("train", actor_loss=info_a["loss_pi"], entropy=info_a["entropy"])
 
         update_end_time = time.time_ns()
         logger.store("train", update_time=(update_end_time - update_start_time) * 1e-9, append=False)
@@ -156,23 +194,29 @@ class PPO(Policy):
         #     if update_actor:
         #         self.dapg_lambda *= self.dapg_damping
 
-    def get_actor_loss_fn(self, ac: ActorCritic, batch: Batch):
+    @staticmethod
+    def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: Batch):
         obs, act, adv, logp_old = batch["obs_buf"], batch["act_buf"], batch["adv_buf"], batch["logp_buf"]
+        def loss_fn(actor_params: Params):
+            # ac.pi.val()
+            dist, a = actor_apply_fn(actor_params, obs)
+            logp = dist.log_prob(a)
+            # ac.pi.train()
+            prob_ratios = jnp.exp(logp - logp_old)
+            loss_pi = clipped_surrogate_pg_loss(prob_ratios_t=prob_ratios, adv_t=adv, clip_ratio=clip_ratio)
 
-        # ac.pi.´val()
-        dist, a = ac.actor(obs)
-        logp = ac.actor._log_prob_from_distribution(dist, a)
-        # ac.pi.train()
-        prob_ratios = jnp.exp(logp - logp_old)
-        loss_pi_fn = clipped_surrogate_pg_loss(prob_ratios_t=prob_ratios, adv_t=adv, clip_ratio=self.clip_ratio)
+            entropy = dist.entropy()
 
-        entropy = dist.entropy()
+            info = dict(loss_pi=loss_pi, entropy=entropy)
+            return loss_pi, info
 
-        info = dict(loss_pi_fn=loss_pi_fn, entropy=entropy)
-        return info
+        return loss_fn
 
-    def get_critic_loss_fn(self, ac: ActorCritic, batch: Batch):
-        obs, ret = batch["obs_buf"], batch["ret_buf"]
-        loss_v_fn = ((ac.critic(obs) - ret) ** 2).mean()
+    @staticmethod
+    def critic_loss_fn(critic_apply_fn: Model, batch: Batch):
+        def loss_fn(critic_params: Params):
+            obs, ret = batch["obs_buf"], batch["ret_buf"]
+            critic_loss = ((critic_apply_fn(critic_params, obs) - ret) ** 2).mean()
+            return critic_loss, dict(critic_loss=critic_loss)
 
-        return dict(loss_v_fn=loss_v_fn)
+        return loss_fn

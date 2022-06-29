@@ -1,6 +1,7 @@
 """
 Slightly modified code from RLax policy_gradient.py
 """
+import functools
 from typing import Optional
 import chex
 import distrax
@@ -110,7 +111,7 @@ def entropy_loss(
   entropy_per_timestep = distrax.Softmax(logits_t).entropy()
   return -jnp.mean(entropy_per_timestep * w_t)
 
-
+@functools.partial(jax.jit, static_argnames=['use_stop_gradient'])
 def _compute_advantages(logits_t: Array,
                         q_t: Array,
                         use_stop_gradient=True) -> Array:
@@ -124,6 +125,7 @@ def _compute_advantages(logits_t: Array,
   adv_t = q_t - jnp.expand_dims(baseline_t, 1)
   return policy_t, 
 
+@functools.partial(jax.jit, static_argnames=['clip_ratio', 'use_stop_gradient'])
 def clipped_surrogate_pg_loss(
     prob_ratios_t: Array,
     adv_t: Array,
