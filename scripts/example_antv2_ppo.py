@@ -23,12 +23,12 @@ rng = PRNGSequence(0)
 np.random.seed(0)
 # define env
 # env_id="Pendulum-v1"
-env_id="Ant-v4"
+env_id="Ant-v2"
 num_cpu = 4
 seed = 0
 env = make_vec_env(env_id, num_cpu, seed=seed)
 obs = env.reset()
-act_dims = int(env.action_space.n)
+act_dims = get_action_dim(action_space=env.action_space)
 actor=MLP([64,64,act_dims], output_activation=None)
 critic=MLP([64,64,1], output_activation=None)
 ac = ActorCritic(
@@ -42,7 +42,7 @@ ac = ActorCritic(
     critic_optim=optax.adam(learning_rate=4e-4)
 )
 logger = Logger(tensorboard=False, wandb=False, cfg=dict(), workspace="workspace", exp_name="test")
-steps_per_epoch = 2000
+steps_per_epoch = 10000
 steps_per_epoch = steps_per_epoch // num_cpu
 buffer = PPOBuffer(buffer_size=steps_per_epoch, observation_space=env.observation_space, action_space=env.action_space, n_envs=num_cpu)
 algo = PPO(max_ep_len=200)
@@ -50,20 +50,20 @@ def t_cb(epoch):
     stats = logger.log(step=epoch)
     logger.pretty_print_table(stats)
     logger.reset()
-# algo.train_loop(
-#     rng=rng,
-#     ac=ac,
-#     env=env,
-#     buffer=buffer,
-#     steps_per_epoch=steps_per_epoch,
-#     batch_size=512,
-#     logger=logger,
-#     update_iters=80,
-#     n_epochs=10,
-#     train_callback=t_cb
-# )
+algo.train_loop(
+    rng=rng,
+    ac=ac,
+    env=env,
+    buffer=buffer,
+    steps_per_epoch=steps_per_epoch,
+    batch_size=512,
+    logger=logger,
+    update_iters=80,
+    n_epochs=10,
+    train_callback=t_cb
+)
 
 for i in range(1000):
     a = ac.act(obs=obs, key=next(rng), deterministic=False)
     env.render()
-    obs,_,_,_ = env.step(np.array(a))
+    obs,r,_,_ = env.step(np.array(a))

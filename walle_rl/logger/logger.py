@@ -10,7 +10,6 @@ from typing import Dict, Union
 from omegaconf import OmegaConf
 import numpy as np
 import pandas as pd
-import torch
 
 color2num = dict(
     gray=30,
@@ -81,8 +80,9 @@ class Logger:
 
         # set up external loggers
         if self.tensorboard:
-            from torch.utils.tensorboard import SummaryWriter
-            self.tb_writer = SummaryWriter(log_dir=self.log_path)
+            pass
+            # from torch.utils.tensorboard import SummaryWriter
+            # self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
             
             if project_name is None:

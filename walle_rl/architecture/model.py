@@ -28,10 +28,10 @@ class Model(struct.PyTreeNode):
     def create(cls,
         model: T,
         key: PRNGKey,
-        input_shape: Tuple,
+        sample_input: Any,
         optimizer: Optional[optax.GradientTransformation] = None
     ) -> Union[T, 'Model']:
-        model_vars = model.init(key, jnp.ones(input_shape, jnp.float32))
+        model_vars = model.init(key, sample_input)
         opt_state = None
         if optimizer is not None:
             opt_state = optimizer.init(model_vars)

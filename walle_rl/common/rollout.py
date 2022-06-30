@@ -3,7 +3,6 @@ import time
 import gym
 import numpy as np
 import jax.numpy as jnp
-import torch
 
 from walle_rl.buffer.buffer import BaseBuffer
 
@@ -55,8 +54,7 @@ class Rollout:
         if pbar:
             pbar = tqdm(total=n_trajectories)
         while True:
-            with torch.no_grad():
-                acts = policy(observations)
+            acts = policy(observations)
 
             if is_dict:
                 for idx in range(n_envs):

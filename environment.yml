@@ -27,9 +27,9 @@ dependencies:
   - gym
   
   # Deep Learning
-  - pytorch::pytorch
-  - torchvision
-  - torchaudio
+  # - pytorch::pytorch
+  # - torchvision
+  # - torchaudio
   # - cudatoolkit=11.3
 
   - huggingface::transformers
@@ -40,28 +40,28 @@ dependencies:
 
   - pip:
     # Jax ecosystem
-    - jax
+    - jax[cpu]
     - chex
-    - haiku
+    # - haiku
     - flax
     - distrax
     - optax
 
-    # Simulators
-    - sapien
+  #   # Simulators
+    - mujoco-py<2.2,>=2.1
 
-    # Video generation
+  #   # Video generation
     - moviepy
 
-    # Exp tracking
+  #   # Exp tracking
     - tensorboard
     - wandb
     - omegaconf
 
-    # More Deep Learning
-    - tensorflow
+  #   # More Deep Learning
     - huggingface_hub
+    
     - pyglet>=1.4.0
 
-    # More RL
+  #   # More RL
     - stable-baselines3

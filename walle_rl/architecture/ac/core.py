@@ -1,4 +1,3 @@
-# import torch.nn as nn
 import functools
 from typing import Any, Callable, Tuple, Union
 from chex import Array
@@ -33,7 +32,6 @@ def mlp(sizes, activation, output_activation=None):  # TODO
 
 
 class Actor(nn.Module):
-    act_dims: int
     actor: nn.Module
     explorer: nn.Module
     log_std_scale: float = -0.5
@@ -70,7 +68,6 @@ def _step(key, actor_apply_fn: Callable, actor_params: Params, critic_apply_fn: 
 class ActorCritic:
     actor: Model
     critic: Model
-    act_dims: int
 
     def __init__(
         self,
@@ -78,15 +75,14 @@ class ActorCritic:
         actor: nn.Module,
         critic: nn.Module,
         explorer,
-        obs_shape,
+        sample_obs,
         act_dims,
         actor_optim: optax.GradientTransformation,
         critic_optim: optax.GradientTransformation,
     ) -> None:
-        self.act_dims = act_dims
-        actor_module = Actor(act_dims=self.act_dims, actor=actor, explorer=explorer)
-        self.actor = Model.create(model=actor_module, key=next(rng), input_shape=obs_shape, optimizer=actor_optim)
-        self.critic = Model.create(model=critic, key=next(rng), input_shape=obs_shape, optimizer=critic_optim)
+        actor_module = Actor(actor=actor, explorer=explorer)
+        self.actor = Model.create(model=actor_module, key=next(rng), sample_input=sample_obs, optimizer=actor_optim)
+        self.critic = Model.create(model=critic, key=next(rng), sample_input=sample_obs, optimizer=critic_optim)
 
     def step(self, key, obs):
         res = _step(

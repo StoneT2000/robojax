@@ -5,7 +5,6 @@ from typing import Callable, Dict, Optional
 from chex import ArrayTree, PRNGKey
 
 import distrax
-import torch as th
 import gym
 import numpy as np
 from walle_rl.architecture.model import Model

@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
 import jax.numpy as jnp
-import torch
 import numpy as np
 from gym import spaces
 
@@ -17,15 +16,13 @@ class BaseBuffer(ABC):
     """
     Base class that represent a buffer (rollout or replay)
     :param buffer_size: Max number of element in the buffer
-    :param device: PyTorch device
-        to which the values will be converted
     :param n_envs: Number of parallel environments
     """
 
     def __init__(
         self,
         buffer_size: int,
-        device: Union[torch.device, str] = "cpu",
+        device = "cpu",
         n_envs: int = 1,
     ):
         super(BaseBuffer, self).__init__()
@@ -33,10 +30,6 @@ class BaseBuffer(ABC):
         
         self.ptr = 0
         self.full = False
-        if isinstance(device, str):
-            self.device = torch.device(device)
-        else:
-            self.device = device
         self.n_envs = n_envs
 
     def store(self, *args, **kwargs) -> None:
@@ -69,7 +62,7 @@ class GenericBuffer(BaseBuffer):
     def __init__(
         self,
         buffer_size: int,
-        device: Union[torch.device, str] = "cpu",
+        device = "cpu",
         n_envs: int = 1,
         config=dict() 
     ):
@@ -172,18 +165,3 @@ class GenericBuffer(BaseBuffer):
         env_ids = np.random.randint(0, high=self.n_envs, size=(len(batch_ids),))
 
         return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
-    
-    def data(self):
-        """
-        returns all data from buffer
-        """
-        all_data = dict()
-        for k in self.buffers.keys():
-            data = self.buffers[k]
-            if self.is_dict[k]:
-                all_data[k] = dict()
-                for data_k in data.keys():
-                    all_data[k][data_k] = torch.as_tensor(data[data_k].reshape(-1))
-            else:
-                all_data[k] = torch.as_tensor(data.reshape(-1))
-        return all_data

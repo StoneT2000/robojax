@@ -21,8 +21,7 @@ from walle_rl.logger.logger import Logger
 # RNG sequence
 rng = PRNGSequence(0)
 np.random.seed(0)
-# define env
-# env_id="Pendulum-v1"
+
 env_id="CartPole-v1"
 num_cpu = 4
 seed = 0
@@ -35,9 +34,8 @@ ac = ActorCritic(
     rng=rng,
     actor=actor,
     critic=critic,
-    # explorer=explore.Gaussian(act_dims=act_dims),
     explorer=explore.Categorical(),
-    obs_shape=obs.shape,
+    obs_shape=obs,
     act_dims=act_dims,
     actor_optim=optax.adam(learning_rate=1e-4),
     critic_optim=optax.adam(learning_rate=4e-4)
