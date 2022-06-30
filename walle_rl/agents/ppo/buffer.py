@@ -49,7 +49,7 @@ class PPOBuffer(GenericBuffer):
         else:
             buffer_config["obs_buf"] = (self.obs_shape, np.float32)
         super().__init__(
-            buffer_size=buffer_size,
+            buffer_size=buffer_size + 1, # add one to buffer size to store one more frame for GAE computation
             n_envs=n_envs,
             config=buffer_config
         )

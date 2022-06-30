@@ -50,11 +50,8 @@ class Actor(nn.Module):
         return dist.log_prob(act)
 
     def __call__(self, x) -> distrax.Distribution:
-        # stub method just for initialization
         a = self.actor(x)
         dist = self.explorer(a)
-        if self.explorer.categorical:
-            return dist, a.argmax(1)
         return dist, a
 
 

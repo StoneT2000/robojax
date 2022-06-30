@@ -21,23 +21,94 @@ from walle_rl.optim.pg import clipped_surrogate_pg_loss
 import jax.numpy as jnp
 import chex
 
-# chex.Array
-# def _sample_actions(
-#     key: PRNGKey,
-#     actor_apply_fn: Callable,
-#     actor_params: ArrayTree,
-#     observations: np.ndarray,
-# ):
-#     return actor_apply_fn()
+@functools.partial(jax.jit, static_argnames=["gamma", "gae_lambda"])
+@functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
+# def gae_advantages(rewards: np.ndarray, dones: np.ndarray, values: np.ndarray, gamma: float, gae_lambda: float):
+#     advantages = []
+#     gae = 0.
+#     not_dones = ~dones
+#     for t in reversed(range(len(rewards))):
+#         # Masks used to set next state value to 0 for terminal states.
+#         value_diff = gamma * values[t + 1] * not_dones[t] - values[t]
+#         delta = rewards[t] + value_diff
+#         # Masks[t] used to ensure that values before and after a terminal state
+#         # are independent of each other.
+#         gae = delta + gamma * gae_lambda * not_dones[t] * gae
+#         advantages.append(gae)
+#     advantages = jnp.array(advantages)
+#     advantages = advantages[::-1]
+#     return advantages
+def gae_advantages(rewards: np.ndarray, dones: np.ndarray, values: np.ndarray, gamma: float, gae_lambda: float):
+    N = len(rewards)
+    advantages = jnp.zeros((N + 1))
+    # advantages = []
+    gae = 0.0
+    not_dones = ~dones
+    
+    value_diffs = gamma * values[1:] * not_dones - values[:-1]
+    deltas = rewards + value_diffs
+
+    # Is this faster?
+    # def body_fun(t, advantages):
+    #     gae = deltas[N - t - 1] + gamma * gae_lambda * not_dones[t] * advantages[t - 1]
+    #     # advantages.append(gae)
+    #     advantages = advantages.at[t].set(gae)
+    #     return advantages
+    # advantages = jax.lax.fori_loop(1, N, body_fun, advantages)
+    
+    # TODO vectorize for loop below
+    def body_fun(gae, t):
+        gae = deltas[t] + gamma * gae_lambda * not_dones[t] * gae
+        return gae, gae
+    indices = jnp.arange(N)[::-1]
+    gae, advantages = jax.lax.scan(body_fun, 0.0, indices,)
+    
+    advantages = advantages[::-1]
+    return advantages
+
+
+def update_parameters(
+    actor: Model,
+    critic: Model,
+    clip_ratio: float,
+    update_actor: bool,
+    update_critic: bool,
+    buffer: PPOBuffer,
+    update_iters: int,
+    batch_size: int,
+):
+    # apply normalization trick
+    buffer.buffers["adv_buf"] = (buffer.buffers["adv_buf"] - buffer.buffers["adv_buf"].mean()) / (
+        buffer.buffers["adv_buf"].std() + 1e-8
+    )
+    for update_iter in range(update_iters):
+        batch = buffer.sample_batch(batch_size=batch_size, drop_last_batch=True)
+        res = update_parameters(
+            actor=actor,
+            critic=critic,
+            clip_ratio=clip_ratio,
+            update_actor=update_actor,
+            update_critic=update_critic,
+            batch=batch,
+        )
+
+        actor = res["new_actor"]
+        critic = res["new_critic"]
+        info_a, info_c = res["info_a"], res["info_c"]
+        # print(f"Actor Loss: {info_a['loss_pi']}")
+        # logger.store("train", actor_loss=info_a["loss_pi"], entropy=info_a["entropy"], critic_loss=info_c["critic_loss"])
+    return actor, critic
 
 
 @functools.partial(jax.jit, static_argnames=["clip_ratio", "update_actor", "update_critic"])
-def update_parameters(
+def update_parameters_step(
     actor: Model, critic: Model, clip_ratio: float, update_actor: bool, update_critic: bool, batch: Batch
 ):
     info_a, info_c = None, None
     if update_actor:
-        grads_a_fn = jax.grad(PPO.actor_loss_fn(clip_ratio=clip_ratio, actor_apply_fn=actor.apply_fn, batch=batch), has_aux=True)
+        grads_a_fn = jax.grad(
+            PPO.actor_loss_fn(clip_ratio=clip_ratio, actor_apply_fn=actor.apply_fn, batch=batch), has_aux=True
+        )
         grads, info_a = grads_a_fn(actor.params)
         new_actor = actor.apply_gradient(grads=grads)
     if update_critic:
@@ -132,13 +203,12 @@ class PPO(Policy):
 
         def policy(o):
             res = ac.step(key=next(rng), obs=o)
-            res['actions'] = np.array(res['actions'])
+            res["actions"] = np.array(res["actions"])
             return res
 
         buffer.reset()
 
         def wrapped_rollout_cb(observations, next_observations, pi_output, actions, rewards, infos, dones, timeouts):
-            observations, next_observations, pi_output, actions, rewards, infos, dones, timeouts
             buffer.store(
                 obs_buf=observations,
                 act_buf=actions,
@@ -160,21 +230,34 @@ class PPO(Policy):
             env=env,
             n_envs=buffer.n_envs,
             buf=buffer,
-            steps=steps_per_epoch,
+            steps=steps_per_epoch+1,
             rollout_callback=wrapped_rollout_cb,
             max_ep_len=self.max_ep_len,
             logger=logger,
             verbose=verbose,
         )
         # ac.train()
-        # logger.store("train", RolloutTime=rollout_delta_time, critic_warmup_epochs=critic_warmup_epochs, append=False)
         update_start_time = time.time_ns()
-        # update_pi = epoch >= critic_warmup_epochs
-        # update(update_pi = update_pi)
-        buffer.buffers["adv_buf"] = (buffer.buffers["adv_buf"] - buffer.buffers["adv_buf"].mean()) / (buffer.buffers["adv_buf"].std())
+        advantages = gae_advantages(
+            buffer.buffers["rew_buf"][:-1],
+            buffer.buffers["done_buf"][:-1],
+            buffer.buffers["val_buf"],
+            self.gamma,
+            self.gae_lambda,
+        )
+        # print("Adv", advantages.mean())
+        buffer.buffers["adv_buf"] = advantages
+        returns = advantages + buffer.buffers["val_buf"][-1, :]  # TODO check device?
+        buffer.buffers["ret_buf"] = returns
+        # apply normalization trick
+        buffer.buffers["adv_buf"] = (buffer.buffers["adv_buf"] - buffer.buffers["adv_buf"].mean()) / (
+            buffer.buffers["adv_buf"].std() + 1e-8
+        )
         for update_iter in range(update_iters):
             batch = buffer.sample_batch(batch_size=batch_size, drop_last_batch=True)
-            res = update_parameters(
+            if ac.actor.model.explorer.categorical:
+                batch["act_buf"] = batch["act_buf"][:, 0]
+            res = update_parameters_step(
                 actor=ac.actor,
                 critic=ac.critic,
                 clip_ratio=self.clip_ratio,
@@ -182,12 +265,14 @@ class PPO(Policy):
                 update_critic=update_critic,
                 batch=batch,
             )
-            
-            ac.actor = res['new_actor']
-            ac.critic = res['new_critic']
+
+            ac.actor = res["new_actor"]
+            ac.critic = res["new_critic"]
             info_a, info_c = res["info_a"], res["info_c"]
             # print(f"Actor Loss: {info_a['loss_pi']}")
-            logger.store("train", actor_loss=info_a["loss_pi"], entropy=info_a["entropy"], critic_loss=info_c["critic_loss"])
+            logger.store(
+                "train", actor_loss=info_a["loss_pi"], entropy=info_a["entropy"], critic_loss=info_c["critic_loss"]
+            )
 
         update_end_time = time.time_ns()
         logger.store("train", update_time=(update_end_time - update_start_time) * 1e-9, append=False)
@@ -205,10 +290,10 @@ class PPO(Policy):
             dist: distrax.Distribution
             logp = dist.log_prob(act)
             # ac.pi.train()
+            
             ratio = jnp.exp(logp - logp_old)
-            clip_adv = jax.lax.clamp(1. - clip_ratio, ratio, 1. + clip_ratio) * adv
+            clip_adv = jax.lax.clamp(1.0 - clip_ratio, ratio, 1.0 + clip_ratio) * adv
             loss_pi = -jnp.mean(jnp.minimum(ratio * adv, clip_adv), axis=0)
-
             entropy = dist.entropy().mean()
 
             info = dict(loss_pi=loss_pi, entropy=entropy, logp_old=logp_old.mean(), clip_adv=clip_adv)

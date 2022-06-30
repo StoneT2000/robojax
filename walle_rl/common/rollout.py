@@ -171,31 +171,10 @@ class Rollout:
             observations = next_os
             for idx, terminal in enumerate(terminals):
                 if terminal or epoch_ended:
-                    if "terminal_observation" in infos[idx]:
-                        # batch the input
-                        o = infos[idx]["terminal_observation"]
-                        if is_dict:
-                            for k in o:
-                                o[k] = np.expand_dims(o[k], axis=0)
-                    else:
-                        if is_dict:
-                            o = {}
-                            for k in observations:
-                                o[k] = observations[k][idx:idx+1]
-                        else:
-                            o = observations[idx]
                     ep_ret = ep_returns[idx]
                     ep_len = ep_lengths[idx]
-                    timeout = timeouts[idx]
                     if epoch_ended and not terminal and verbose == 1:
                         print("Warning: trajectory cut off by epoch at %d steps." % ep_lengths[idx], flush=True)
-                    # if trajectory didn't reach terminal state, bootstrap value target
-                    if timeout or epoch_ended:
-                        out = policy(o)
-                        v = out["val"]
-                    else:
-                        v = 0
-                    buf.finish_path(idx, v)
                     if terminal:
                         # only save EpRet / EpLen if trajectory finished
                         if logger is not None: logger.store("train", EpRet=ep_ret, EpLen=ep_len)

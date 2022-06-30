@@ -22,30 +22,28 @@ from walle_rl.logger.logger import Logger
 rng = PRNGSequence(0)
 np.random.seed(0)
 # define env
-env_id="Pendulum-v1"
-# env_id="CartPole-v1"
+# env_id="Pendulum-v1"
+env_id="CartPole-v1"
 num_cpu = 4
 seed = 0
 env = make_vec_env(env_id, num_cpu, seed=seed)
 obs = env.reset()
-act_dims = get_action_dim(env.action_space)
-# act_dims=2
-print("33",act_dims)
+act_dims = int(env.action_space.n)
 actor=MLP([64,64,act_dims], output_activation=None)
 critic=MLP([64,64,1], output_activation=None)
 ac = ActorCritic(
     rng=rng,
     actor=actor,
     critic=critic,
-    explorer=explore.Gaussian(act_dims=act_dims),
-    # explorer=explore.Categorical(),
+    # explorer=explore.Gaussian(act_dims=act_dims),
+    explorer=explore.Categorical(),
     obs_shape=obs.shape,
     act_dims=act_dims,
     actor_optim=optax.adam(learning_rate=1e-4),
     critic_optim=optax.adam(learning_rate=4e-4)
 )
 logger = Logger(tensorboard=False, wandb=False, cfg=dict(), workspace="workspace", exp_name="test")
-steps_per_epoch = 2048
+steps_per_epoch = 2000
 steps_per_epoch = steps_per_epoch // num_cpu
 buffer = PPOBuffer(buffer_size=steps_per_epoch, observation_space=env.observation_space, action_space=env.action_space, n_envs=num_cpu)
 algo = PPO(max_ep_len=200)
@@ -62,13 +60,11 @@ algo.train_loop(
     batch_size=512,
     logger=logger,
     update_iters=80,
-    n_epochs=50,
+    n_epochs=10,
     train_callback=t_cb
 )
 
-
-# # ac = Model.create(ac, next(rng), (4,))
-# for i in range(1000):
-#     a = ac.act(obs=obs, key=next(rng), deterministic=False)
-#     env.render()
-#     obs,_,_,_ = env.step(np.array(a))
+for i in range(1000):
+    a = ac.act(obs=obs, key=next(rng), deterministic=False)
+    env.render()
+    obs,_,_,_ = env.step(np.array(a))
