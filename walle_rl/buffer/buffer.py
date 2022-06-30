@@ -3,10 +3,10 @@ Adapted from SB3
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Generator, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
+import jax.numpy as jnp
 import numpy as np
-import torch
 from gym import spaces
 
 from walle_rl.common.utils import get_action_dim, get_obs_shape
@@ -16,17 +16,13 @@ class BaseBuffer(ABC):
     """
     Base class that represent a buffer (rollout or replay)
     :param buffer_size: Max number of element in the buffer
-    :param observation_space: Observation space
-    :param action_space: Action space
-    :param device: PyTorch device
-        to which the values will be converted
     :param n_envs: Number of parallel environments
     """
 
     def __init__(
         self,
         buffer_size: int,
-        device: Union[torch.device, str] = "cpu",
+        device = "cpu",
         n_envs: int = 1,
     ):
         super(BaseBuffer, self).__init__()
@@ -34,10 +30,6 @@ class BaseBuffer(ABC):
         
         self.ptr = 0
         self.full = False
-        if isinstance(device, str):
-            self.device = torch.device(device)
-        else:
-            self.device = device
         self.n_envs = n_envs
 
     def store(self, *args, **kwargs) -> None:
@@ -70,7 +62,7 @@ class GenericBuffer(BaseBuffer):
     def __init__(
         self,
         buffer_size: int,
-        device: Union[torch.device, str] = "cpu",
+        device = "cpu",
         n_envs: int = 1,
         config=dict() 
     ):
@@ -132,9 +124,9 @@ class GenericBuffer(BaseBuffer):
             if self.is_dict[k]:
                 batch_data[k] = dict()
                 for data_k in data.keys():
-                    batch_data[k][data_k] = torch.as_tensor(data[data_k][batch_ids, env_ids])
+                    batch_data[k][data_k] = jnp.array(data[data_k][batch_ids, env_ids])
             else:
-                batch_data[k] = torch.as_tensor(data[batch_ids, env_ids])
+                batch_data[k] = jnp.array(data[batch_ids, env_ids])
         return batch_data
     def _prepared_for_sampling(self, batch_size, drop_last_batch=True):
         if self.batch_idx == None: return False
@@ -143,6 +135,9 @@ class GenericBuffer(BaseBuffer):
         return True
 
     def sample_batch(self, batch_size: int, drop_last_batch=True):
+        """
+        Sample a Batch of data without replacement
+        """
         if not self._prepared_for_sampling(batch_size, drop_last_batch):
             self.batch_idx = 0            
             if self.full:
@@ -160,6 +155,9 @@ class GenericBuffer(BaseBuffer):
         return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
             
     def sample_random_batch(self, batch_size: int):
+        """
+        Sample a batch of data with replacement
+        """
         if self.full:
             batch_ids = (np.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
         else:
@@ -167,14 +165,3 @@ class GenericBuffer(BaseBuffer):
         env_ids = np.random.randint(0, high=self.n_envs, size=(len(batch_ids),))
 
         return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
-    def get(self):
-        all_data = dict()
-        for k in self.buffers.keys():
-            data = self.buffers[k]
-            if self.is_dict[k]:
-                all_data[k] = dict()
-                for data_k in data.keys():
-                    all_data[k][data_k] = torch.as_tensor(data[data_k].reshape(-1))
-            else:
-                all_data[k] = torch.as_tensor(data.reshape(-1))
-        return all_data

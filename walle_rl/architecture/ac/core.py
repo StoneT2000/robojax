@@ -1,45 +1,109 @@
-import torch.nn as nn
+import functools
+from typing import Any, Callable, Tuple, Union
+from chex import Array
+import distrax
+import flax.struct as struct
+import flax.linen as nn
+import flax
+import jax
+import jax.numpy as jnp
 import numpy as np
+import optax
+from walle_rl.architecture.model import Model
+from walle_rl.common.random import PRNGSequence
+
+Params = flax.core.FrozenDict[str, Any]
+
 
 def count_vars(module):
-    return sum([np.prod(p.shape) for p in module.parameters()])
+    return sum([jnp.prod(p.shape) for p in module.parameters()])
 
 
-def mlp(sizes, activation, output_activation=nn.Identity):  # TODO
+def mlp(sizes, activation, output_activation=None):  # TODO
     layers = []
     for j in range(len(sizes) - 1):
-        act = activation if j < len(sizes) - 2 else output_activation
-        layers += [nn.Linear(sizes[j], sizes[j + 1]), act()]
+        layers += [nn.Dense(sizes[j], sizes[j + 1])]
+        if j < len(sizes) - 2:
+            layers += [activation()]
+        else:
+            if output_activation is not None:
+                layers += [output_activation()]
     return nn.Sequential(*layers)
 
 
 class Actor(nn.Module):
-    def _distribution(self, obs):
-        raise NotImplementedError
+    actor: nn.Module
+    explorer: nn.Module
+    log_std_scale: float = -0.5
 
-    def _log_prob_from_distribution(self, pi, act):
-        raise NotImplementedError
+    def __hash__(self) -> int:
+        return id(self)
 
-    def forward(self, obs, act=None):
-        # Produce action distributions for given observations, and
-        # optionally compute the log likelihood of given actions under
-        # those distributions.
-        pi = self._distribution(obs)
-        logp_a = None
-        if act is not None:
-            logp_a = self._log_prob_from_distribution(pi, act)
-        return pi, logp_a
+    def _distribution(self, x):
+        a = self.actor(x)
+        dist = self.explorer(a)
+        return dist
+
+    def _log_prob_from_distribution(self, dist: distrax.Distribution, act: Array) -> Array:
+        return dist.log_prob(act)
+
+    def __call__(self, x) -> distrax.Distribution:
+        a = self.actor(x)
+        dist = self.explorer(a)
+        return dist, a
 
 
-class ActorCritic(nn.Module):
-    pi: Actor
-    v: nn.Module
+@functools.partial(jax.jit, static_argnames=["actor_apply_fn", "critic_apply_fn"])
+def _step(key, actor_apply_fn: Callable, actor_params: Params, critic_apply_fn: Callable, critic_params: Params, obs: np.ndarray):
+    dist, _ = actor_apply_fn(actor_params, obs)
+    a = dist.sample(seed=key)
+    logp_a = dist.log_prob(a)
+    v = critic_apply_fn(critic_params, obs)
+    v = jnp.squeeze(
+        v, -1
+    )
+    return dict(actions=a, val=v, logp_a=logp_a)
 
-    def __init__(self):
-        super().__init__()
 
-    def step(self, obs):
-        raise NotImplementedError
+class ActorCritic:
+    actor: Model
+    critic: Model
 
-    def act(self, obs, deterministic=False):
-        raise NotImplementedError
+    def __init__(
+        self,
+        rng: PRNGSequence,
+        actor: nn.Module,
+        critic: nn.Module,
+        explorer,
+        sample_obs,
+        act_dims,
+        actor_optim: optax.GradientTransformation,
+        critic_optim: optax.GradientTransformation,
+    ) -> None:
+        actor_module = Actor(actor=actor, explorer=explorer)
+        self.actor = Model.create(model=actor_module, key=next(rng), sample_input=sample_obs, optimizer=actor_optim)
+        self.critic = Model.create(model=critic, key=next(rng), sample_input=sample_obs, optimizer=critic_optim)
+
+    def step(self, key, obs):
+        res = _step(
+            key=key,
+            actor_apply_fn=self.actor.apply_fn,
+            actor_params=self.actor.params,
+            critic_apply_fn=self.critic.apply_fn,
+            critic_params=self.critic.params,
+            obs=obs,
+        )
+        return res
+        # dist = self.actor(obs, method=self.actor._distribution)
+        # a = dist.sample(seed=key)
+        # logp_a = self.actor._log_prob_from_distribution(dist, a)
+        # v = self.critic(obs)
+        # return dict(actions=a, val=v, logp_a=logp_a)
+
+    # @jax.jit
+    def act(self, obs, key=None, deterministic=False):
+        if deterministic:
+            return self.actor(obs)
+        dist: distrax.Distribution = self.actor(obs, method=self.actor.model._distribution)
+        # TODO remove np array here
+        return np.array(dist.sample(seed=key))

@@ -10,9 +10,6 @@ from typing import Dict, Union
 from omegaconf import OmegaConf
 import numpy as np
 import pandas as pd
-import torch
-
-from walle_rl.common.mpi.serialization_utils import convert_json
 
 color2num = dict(
     gray=30,
@@ -83,8 +80,9 @@ class Logger:
 
         # set up external loggers
         if self.tensorboard:
-            from torch.utils.tensorboard import SummaryWriter
-            self.tb_writer = SummaryWriter(log_dir=self.log_path)
+            pass
+            # from torch.utils.tensorboard import SummaryWriter
+            # self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
             
             if project_name is None:
@@ -171,6 +169,7 @@ class Logger:
         return self.data[tag]
 
     def pretty_print_table(self, data):
+        # Code from spinning up
         vals = []
         key_lens = [len(key) for key in data.keys()]
         max_key_len = max(15, max(key_lens))

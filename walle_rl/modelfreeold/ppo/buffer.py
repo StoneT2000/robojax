@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from gym import spaces
 
-from walle_rl.common.buffer import GenericBuffer
+from walle_rl.buffer.buffer import GenericBuffer
 from walle_rl.common.stats import discount_cumsum
 from walle_rl.common.utils import get_action_dim, get_obs_shape
 

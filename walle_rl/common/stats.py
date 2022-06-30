@@ -1,3 +1,5 @@
+from chex import Array
+import distrax
 import scipy.signal
 def discount_cumsum(x, discount):
     """
@@ -14,4 +16,8 @@ def discount_cumsum(x, discount):
          x1 + discount * x2,
          x2]
     """
+    # TODO replace with jax
     return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
+
+def _log_prob_from_distribution(dist: distrax.Distribution, x: Array):
+    return dist.log_prob(x)
