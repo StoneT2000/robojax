@@ -1,5 +1,7 @@
+from functools import partial
 import time
-
+from typing import Any
+import jax
 import gym
 import numpy as np
 import jax.numpy as jnp
@@ -123,11 +125,23 @@ class Rollout:
                         if even_num_traj_per_env: return trajectories_per_env
                         else: return trajectories
             step += 1
+    @partial(jax.jit, static_argnums=(0,))
+    def collect_jax(
+        self,
+        policy_params,
+        policy,
+        env: Any # TODO - when where there be a "universal" gym definition in jax? There's gymnax and brax that have good defs
+    ):
+        """
+        rollsout in the jax way. Completely jittable.
+        """
+        raise NotImplementedError()
+
+
     def collect(
         self,
         policy,
         env: gym.Env,
-        buf: BaseBuffer,
         steps,
         n_envs,
         rollout_callback=None,
@@ -137,7 +151,7 @@ class Rollout:
         verbose=1,
     ):
         """
-        collects for a buffer
+        rollsout in the python way. Not jittable.
         """
         # policy should return a, v, logp
         observations, ep_returns, ep_lengths = env.reset(), np.zeros(n_envs), np.zeros(n_envs, dtype=int)

@@ -3,11 +3,14 @@ Adapted from SB3
 """
 
 from abc import ABC, abstractmethod
+from functools import partial
 from typing import Any, Dict, List, Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
+import jax
 from gym import spaces
+from flax import struct
 
 from walle_rl.common.utils import get_action_dim, get_obs_shape
 
@@ -52,8 +55,6 @@ class BaseBuffer(ABC):
         """
         self.ptr = 0
         self.full = False
-
-
 class GenericBuffer(BaseBuffer):
     """
     Generic buffer that stores key value items for vectorized environment outputs.
@@ -117,10 +118,15 @@ class GenericBuffer(BaseBuffer):
             self.full = True
             self.ptr = 0
 
-    def _get_batch_by_ids(self, batch_ids, env_ids):
+
+    @partial(jax.jit, static_argnames=['self'])
+    def _get_batch_by_ids(self, buffers, batch_ids, env_ids):
+        """
+        statefully retrieve batch of data
+        """
         batch_data = dict()
-        for k in self.buffers.keys():
-            data = self.buffers[k]
+        for k in buffers.keys():
+            data = buffers[k]
             if self.is_dict[k]:
                 batch_data[k] = dict()
                 for data_k in data.keys():
@@ -134,6 +140,7 @@ class GenericBuffer(BaseBuffer):
         if self.batch_idx > self.buffer_size * self.n_envs: return False
         return True
 
+    # TODO make this jittable.
     def sample_batch(self, batch_size: int, drop_last_batch=True):
         """
         Sample a Batch of data without replacement
@@ -152,7 +159,7 @@ class GenericBuffer(BaseBuffer):
         batch_ids = self.batch_inds[self.batch_idx: self.batch_idx + batch_size]
         env_ids = self.batch_env_inds[self.batch_idx: self.batch_idx + batch_size]
         self.batch_idx = self.batch_idx + batch_size
-        return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
+        return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
             
     def sample_random_batch(self, batch_size: int):
         """
@@ -164,4 +171,4 @@ class GenericBuffer(BaseBuffer):
             batch_ids = np.random.randint(0, self.ptr, size=batch_size)
         env_ids = np.random.randint(0, high=self.n_envs, size=(len(batch_ids),))
 
-        return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
+        return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)

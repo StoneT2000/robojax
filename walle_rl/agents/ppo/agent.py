@@ -1,3 +1,7 @@
+"""Proximal policy optimization training.
+See: https://arxiv.org/pdf/1707.06347.pdf
+"""
+
 from dataclasses import dataclass
 import functools
 import time
@@ -22,21 +26,6 @@ import chex
 
 @functools.partial(jax.jit, static_argnames=["gamma", "gae_lambda"])
 @functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
-# def gae_advantages(rewards: np.ndarray, dones: np.ndarray, values: np.ndarray, gamma: float, gae_lambda: float):
-#     advantages = []
-#     gae = 0.
-#     not_dones = ~dones
-#     for t in reversed(range(len(rewards))):
-#         # Masks used to set next state value to 0 for terminal states.
-#         value_diff = gamma * values[t + 1] * not_dones[t] - values[t]
-#         delta = rewards[t] + value_diff
-#         # Masks[t] used to ensure that values before and after a terminal state
-#         # are independent of each other.
-#         gae = delta + gamma * gae_lambda * not_dones[t] * gae
-#         advantages.append(gae)
-#     advantages = jnp.array(advantages)
-#     advantages = advantages[::-1]
-#     return advantages
 def gae_advantages(rewards: np.ndarray, dones: np.ndarray, values: np.ndarray, gamma: float, gae_lambda: float):
     N = len(rewards)
     advantages = jnp.zeros((N + 1))
@@ -63,60 +52,7 @@ def gae_advantages(rewards: np.ndarray, dones: np.ndarray, values: np.ndarray, g
     gae, advantages = jax.lax.scan(body_fun, 0.0, indices,)
     
     advantages = advantages[::-1]
-    return advantages
-
-
-def update_parameters(
-    actor: Model,
-    critic: Model,
-    clip_ratio: float,
-    update_actor: bool,
-    update_critic: bool,
-    buffer: PPOBuffer,
-    update_iters: int,
-    batch_size: int,
-):
-    # apply normalization trick
-    buffer.buffers["adv_buf"] = (buffer.buffers["adv_buf"] - buffer.buffers["adv_buf"].mean()) / (
-        buffer.buffers["adv_buf"].std() + 1e-8
-    )
-    for update_iter in range(update_iters):
-        batch = buffer.sample_batch(batch_size=batch_size, drop_last_batch=True)
-        res = update_parameters(
-            actor=actor,
-            critic=critic,
-            clip_ratio=clip_ratio,
-            update_actor=update_actor,
-            update_critic=update_critic,
-            batch=batch,
-        )
-
-        actor = res["new_actor"]
-        critic = res["new_critic"]
-        info_a, info_c = res["info_a"], res["info_c"]
-        # print(f"Actor Loss: {info_a['loss_pi']}")
-        # logger.store("train", actor_loss=info_a["loss_pi"], entropy=info_a["entropy"], critic_loss=info_c["critic_loss"])
-    return actor, critic
-
-
-@functools.partial(jax.jit, static_argnames=["clip_ratio", "update_actor", "update_critic"])
-def update_parameters_step(
-    actor: Model, critic: Model, clip_ratio: float, update_actor: bool, update_critic: bool, batch: Batch
-):
-    info_a, info_c = None, None
-    if update_actor:
-        grads_a_fn = jax.grad(
-            PPO.actor_loss_fn(clip_ratio=clip_ratio, actor_apply_fn=actor.apply_fn, batch=batch), has_aux=True
-        )
-        grads, info_a = grads_a_fn(actor.params)
-        new_actor = actor.apply_gradient(grads=grads)
-    if update_critic:
-        grads_c_fn = jax.grad(PPO.critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch), has_aux=True)
-        grads, info_c = grads_c_fn(critic.params)
-        new_critic = critic.apply_gradient(grads=grads)
-
-    return dict(new_actor=new_actor, new_critic=new_critic, info_a=info_a, info_c=info_c)
-
+    return jax.lax.stop_gradient(advantages)
 
 @dataclass
 class PPO(Policy):
@@ -138,6 +74,11 @@ class PPO(Policy):
     dapg_lambda: Optional[float] = 0.1
     dapg_damping: Optional[float] = 0.99
     target_kl: Optional[float] = 0.01
+    
+    def __hash__(self) -> int:
+        # TODO neat trick to tell jax this object is hashable and can be made constant
+        # This is so we can define jittable methods as member functions in a OOP style, although this should be avoided
+        return id(self)
 
     def train_loop(
         self,
@@ -224,11 +165,12 @@ class PPO(Policy):
                 )
 
         # ac.eval()
+
+        # TODO - add jax rollout collection method for gyms like brax and gymnax
         rollout.collect(
             policy=policy,
             env=env,
             n_envs=buffer.n_envs,
-            buf=buffer,
             steps=steps_per_epoch+1,
             rollout_callback=wrapped_rollout_cb,
             max_ep_len=self.max_ep_len,
@@ -244,7 +186,7 @@ class PPO(Policy):
             self.gamma,
             self.gae_lambda,
         )
-        # print("Adv", advantages.mean())
+
         buffer.buffers["adv_buf"] = advantages
         returns = advantages + buffer.buffers["val_buf"][-1, :]  # TODO check device?
         buffer.buffers["ret_buf"] = returns
@@ -254,9 +196,8 @@ class PPO(Policy):
         )
         for update_iter in range(update_iters):
             batch = buffer.sample_batch(batch_size=batch_size, drop_last_batch=True)
-            if ac.actor.model.explorer.categorical:
-                batch["act_buf"] = batch["act_buf"][:, 0]
-            res = update_parameters_step(
+            # TODO - add grad accumulation,
+            res = PPO.update_parameters_step(
                 actor=ac.actor,
                 critic=ac.critic,
                 clip_ratio=self.clip_ratio,
@@ -268,22 +209,46 @@ class PPO(Policy):
             ac.actor = res["new_actor"]
             ac.critic = res["new_critic"]
             info_a, info_c = res["info_a"], res["info_c"]
-            # print(f"Actor Loss: {info_a['loss_pi']}")
             logger.store(
-                "train", actor_loss=info_a["loss_pi"], entropy=info_a["entropy"], critic_loss=info_c["critic_loss"]
+                "train", critic_loss=info_c["critic_loss"]
             )
+            if info_a is not None:
+                logger.store("train", actor_loss=info_a["loss_pi"], entropy=info_a["entropy"])
 
         update_end_time = time.time_ns()
         logger.store("train", update_time=(update_end_time - update_start_time) * 1e-9, append=False)
+
+        # TODO add dapg and make it jittable
         # if dapg:
         #     logger.store("train", dapg_lambda=self.dapg_lambda, append=False)
         #     if update_actor:
         #         self.dapg_lambda *= self.dapg_damping
 
     @staticmethod
+    @functools.partial(jax.jit, static_argnames=["clip_ratio", "update_actor", "update_critic"])
+    def update_parameters_step(
+        actor: Model, critic: Model, clip_ratio: float, update_actor: bool, update_critic: bool, batch: Batch
+    ):
+        info_a, info_c = None, None
+        new_actor = actor
+        new_critic = critic
+        if update_actor:
+            grads_a_fn = jax.grad(
+                PPO.actor_loss_fn(clip_ratio=clip_ratio, actor_apply_fn=actor.apply_fn, batch=batch), has_aux=True
+            )
+            grads, info_a = grads_a_fn(actor.params)
+            new_actor = actor.apply_gradient(grads=grads)
+        if update_critic:
+            grads_c_fn = jax.grad(PPO.critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch), has_aux=True)
+            grads, info_c = grads_c_fn(critic.params)
+            new_critic = critic.apply_gradient(grads=grads)
+
+        return dict(new_actor=new_actor, new_critic=new_critic, info_a=info_a, info_c=info_c)
+
+    @staticmethod
     def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: Batch):
         def loss_fn(actor_params: Params):
-            obs, act, adv, logp_old = batch["obs_buf"], batch["act_buf"], batch["adv_buf"], batch["logp_buf"]
+            obs, act, adv, logp_old = batch.obs_buf, batch.act_buf, batch.adv_buf, batch.logp_buf
             # ac.pi.val()
             dist, _ = actor_apply_fn(actor_params, obs)
             dist: distrax.Distribution
@@ -303,7 +268,7 @@ class PPO(Policy):
     @staticmethod
     def critic_loss_fn(critic_apply_fn: Model, batch: Batch):
         def loss_fn(critic_params: Params):
-            obs, ret = batch["obs_buf"], batch["ret_buf"]
+            obs, ret = batch.obs_buf, batch.ret_buf
             v = critic_apply_fn(critic_params, obs)
             v = jnp.squeeze(v, -1)
             critic_loss = jnp.mean(jnp.square(v - ret), axis=0)
