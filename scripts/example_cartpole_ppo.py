@@ -35,7 +35,7 @@ ac = ActorCritic(
     actor=actor,
     critic=critic,
     explorer=explore.Categorical(),
-    obs_shape=obs,
+    sample_obs=obs,
     act_dims=act_dims,
     actor_optim=optax.adam(learning_rate=1e-4),
     critic_optim=optax.adam(learning_rate=4e-4)

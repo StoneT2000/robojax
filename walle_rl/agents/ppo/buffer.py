@@ -4,16 +4,18 @@ from walle_rl.buffer.buffer import GenericBuffer
 from walle_rl.common.utils import get_action_dim, get_obs_shape
 from walle_rl.common.stats import discount_cumsum
 import numpy as np
+from flax import struct
 
-class Batch(TypedDict):
+@struct.dataclass
+class Batch:
     act_buf: np.array
     adv_buf: np.array
+    obs_buf: np.array
     rew_buf: np.array
     ret_buf: np.array
     val_buf: np.array
     logp_buf: np.array
     done_buf: np.array
-
 class PPOBuffer(GenericBuffer):
     """
     A buffer for storing trajectories experienced by a PPO agent interacting
@@ -35,8 +37,11 @@ class PPOBuffer(GenericBuffer):
         self.obs_shape = get_obs_shape(observation_space)
 
         self.action_dim = get_action_dim(action_space)
+        act_buf_shape = (self.action_dim,)
+        if isinstance(action_space, spaces.Discrete):
+            act_buf_shape = ()
         buffer_config = dict(
-            act_buf = ((self.action_dim,), action_space.dtype),
+            act_buf = (act_buf_shape, action_space.dtype),
             adv_buf = ((), np.float32),
             rew_buf = ((), np.float32),
             ret_buf = ((), np.float32),
@@ -44,6 +49,7 @@ class PPOBuffer(GenericBuffer):
             logp_buf = ((), np.float32),
             done_buf = ((), np.bool8)
         )
+        
         if isinstance(self.obs_shape, dict):
             buffer_config["obs_buf"] = (self.obs_shape, {k: self.observation_space[k].dtype for k in self.observation_space})
         else:
@@ -59,9 +65,11 @@ class PPOBuffer(GenericBuffer):
         self.next_batch_idx = 0
 
     def sample_batch(self, batch_size: int, drop_last_batch=True) -> Batch:
-        return super().sample_batch(batch_size, drop_last_batch)
+        batch = super().sample_batch(batch_size, drop_last_batch)
+        return Batch(**batch)
     def sample_random_batch(self, batch_size: int) -> Batch:
-        return super().sample_random_batch(batch_size)
+        batch = super().sample_random_batch(batch_size)
+        return Batch(**batch)
 
     def finish_path(self, env_id, last_val=0):
         # TODO: remove env_id and do it in batch

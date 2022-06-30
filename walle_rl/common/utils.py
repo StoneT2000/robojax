@@ -57,3 +57,10 @@ def get_action_dim(action_space: spaces.Space) -> int:
         return int(action_space.n)
     else:
         raise NotImplementedError(f"{action_space} action space is not supported")
+
+
+def is_discrete_action_space(action_space: spaces.Space) -> bool:
+    if isinstance(action_space, spaces.Discrete):
+        return True
+    # TODO handle our env types
+    return False
