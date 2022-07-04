@@ -1,3 +1,4 @@
+import time
 import distrax
 import numpy as np
 import walle_rl.agents.ppo
@@ -44,11 +45,13 @@ logger = Logger(tensorboard=False, wandb=False, cfg=dict(), workspace="workspace
 steps_per_epoch = 2000
 steps_per_epoch = steps_per_epoch // num_cpu
 buffer = PPOBuffer(buffer_size=steps_per_epoch, observation_space=env.observation_space, action_space=env.action_space, n_envs=num_cpu)
-algo = PPO(max_ep_len=200)
+algo = PPO(max_ep_len=500)
 def t_cb(epoch):
     stats = logger.log(step=epoch)
     logger.pretty_print_table(stats)
     logger.reset()
+
+stime = time.time_ns()
 algo.train_loop(
     rng=rng,
     ac=ac,
@@ -58,11 +61,14 @@ algo.train_loop(
     batch_size=512,
     logger=logger,
     update_iters=80,
-    n_epochs=10,
-    train_callback=t_cb
+    n_epochs=50,
+    train_callback=t_cb,
 )
+etime = time.time_ns()
+print(f"Time: {(etime-stime)*(1e-9)}")
 
-for i in range(1000):
-    a = ac.act(obs=obs, key=next(rng), deterministic=False)
-    env.render()
-    obs,_,_,_ = env.step(np.array(a))
+
+# for i in range(1000):
+#     a = ac.act(obs=obs, key=next(rng), deterministic=False)
+#     env.render()
+#     obs,_,_,_ = env.step(np.array(a))
