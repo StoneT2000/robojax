@@ -1,4 +1,4 @@
-name: walle-rl
+name: robojax
 channels:
   - conda-forge
   - pytorch
@@ -25,12 +25,6 @@ dependencies:
 
   # RL related
   - gym
-  
-  # Deep Learning
-  # - pytorch::pytorch
-  # - torchvision
-  # - torchaudio
-  # - cudatoolkit=11.3
 
   - huggingface::transformers
 
