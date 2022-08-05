@@ -1,4 +1,5 @@
 from typing import TypedDict
+from chex import PRNGKey
 from gym import spaces
 from walle_rl.buffer.buffer import GenericBuffer
 from walle_rl.common.utils import get_action_dim, get_obs_shape
@@ -64,11 +65,11 @@ class PPOBuffer(GenericBuffer):
         self.ptr, self.path_start_idx, self.max_size = 0, [0] * n_envs, self.buffer_size
         self.next_batch_idx = 0
 
-    def sample_batch(self, batch_size: int, drop_last_batch=True) -> Batch:
-        batch = super().sample_batch(batch_size, drop_last_batch)
+    def sample_batch(self, key: PRNGKey, batch_size: int, drop_last_batch=True) -> Batch:
+        batch = super().sample_batch(key, batch_size, drop_last_batch)
         return Batch(**batch)
-    def sample_random_batch(self, batch_size: int) -> Batch:
-        batch = super().sample_random_batch(batch_size)
+    def sample_random_batch(self, key: PRNGKey, batch_size: int) -> Batch:
+        batch = super().sample_random_batch(key, batch_size)
         return Batch(**batch)
 
     def finish_path(self, env_id, last_val=0):

@@ -10,7 +10,7 @@ import jax.numpy as jnp
 T = TypeVar("T", bound=nn.Module)
 
 @struct.dataclass
-class Model(struct.PyTreeNode):
+class Model:
     """
     model class that holds the model parameters and training state. Provides wrapped functions to execute forward passes in OOP style. 
     

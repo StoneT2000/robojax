@@ -36,14 +36,6 @@ def gae_advantages(rewards: np.ndarray, dones: np.ndarray, values: np.ndarray, g
     value_diffs = gamma * values[1:] * not_dones - values[:-1]
     deltas = rewards + value_diffs
 
-    # Is this faster?
-    # def body_fun(t, advantages):
-    #     gae = deltas[N - t - 1] + gamma * gae_lambda * not_dones[t] * advantages[t - 1]
-    #     # advantages.append(gae)
-    #     advantages = advantages.at[t].set(gae)
-    #     return advantages
-    # advantages = jax.lax.fori_loop(1, N, body_fun, advantages)
-    
     # TODO vectorize for loop below
     def body_fun(gae, t):
         gae = deltas[t] + gamma * gae_lambda * not_dones[t] * gae
@@ -194,8 +186,9 @@ class PPO(Policy):
         buffer.buffers["adv_buf"] = (buffer.buffers["adv_buf"] - buffer.buffers["adv_buf"].mean()) / (
             buffer.buffers["adv_buf"].std() + 1e-8
         )
+        buffer.buffer_to_jax()
         for update_iter in range(update_iters):
-            batch = buffer.sample_batch(batch_size=batch_size, drop_last_batch=True)
+            batch = buffer.sample_batch(key=next(rng), batch_size=batch_size, drop_last_batch=True)
             # TODO - add grad accumulation,
             res = PPO.update_parameters_step(
                 actor=ac.actor,

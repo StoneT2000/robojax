@@ -1,4 +1,3 @@
-import time
 import distrax
 import numpy as np
 import walle_rl.agents.ppo
@@ -45,30 +44,30 @@ logger = Logger(tensorboard=False, wandb=False, cfg=dict(), workspace="workspace
 steps_per_epoch = 2000
 steps_per_epoch = steps_per_epoch // num_cpu
 buffer = PPOBuffer(buffer_size=steps_per_epoch, observation_space=env.observation_space, action_space=env.action_space, n_envs=num_cpu)
-algo = PPO(max_ep_len=500)
-def t_cb(epoch):
-    stats = logger.log(step=epoch)
-    logger.pretty_print_table(stats)
-    logger.reset()
+algo = PPO(max_ep_len=200)
 
-stime = time.time_ns()
-algo.train_loop(
-    rng=rng,
-    ac=ac,
-    env=env,
-    buffer=buffer,
-    steps_per_epoch=steps_per_epoch,
-    batch_size=512,
-    logger=logger,
-    update_iters=80,
-    n_epochs=20,
-    train_callback=t_cb,
-)
-etime = time.time_ns()
-print(f"Time: {(etime-stime)*(1e-9)}")
+# a chain of mostly jaxxable components, we jit everything until something is not jittable?
+
+# RL COMPONENTS
+
+# Each one is a function taking as input some states 
+# (or wrapped states thathaveother functions in it like Model), some configurations, then outputting some other states
+
+# update_parameters (actor: Model, critic: Model, buffer: Buffer, configs: ConfigState) -> new_actor_model, new_critic_model
 
 
-# for i in range(1000):
-#     a = ac.act(obs=obs, key=next(rng), deterministic=False)
-#     env.render()
-#     obs,_,_,_ = env.step(np.array(a))
+chain = [
+    # rollout with ac.actor and ac.critic -> Buffer
+        # step function (can wrap env in it or not, depends on how env works)
+        # configure rollout
+        # - dapg (dataset state)
+        # - intrinsic rewards (reward state?)
+    # process_rollout Buffer -> Buffer
+    # update_parameters
+
+]
+
+# updating a model training state with PPO
+# ac.actor.params, ac.critic.params,
+for c in chain:
+    pass

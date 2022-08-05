@@ -5,6 +5,7 @@ Adapted from SB3
 from abc import ABC, abstractmethod
 from functools import partial
 from typing import Any, Dict, List, Optional, Union
+from chex import PRNGKey
 
 import jax.numpy as jnp
 import numpy as np
@@ -58,6 +59,10 @@ class BaseBuffer(ABC):
 class GenericBuffer(BaseBuffer):
     """
     Generic buffer that stores key value items for vectorized environment outputs.
+
+    Note that by default everything is stored as a numpy array in this buffer. See JaxBuffer for a version that stores with jax arrays.
+
+    config - dict(k->v) where k is buffer name and v[0] is shape, v[1] is numpy dtype, v[2] is data is dict or not. if is_dict, then shape and dtype should be a dict of shapes and dtypes
     """
 
     def __init__(
@@ -67,10 +72,6 @@ class GenericBuffer(BaseBuffer):
         n_envs: int = 1,
         config=dict() 
     ):
-        """
-        
-        config - dict(k->v) where k is buffer name and v[0] is shape, v[1] is numpy dtype, v[2] is data is dict or not. if is_dict, then shape and dtype should be a dict of shapes and dtypes
-        """
         super().__init__(
             buffer_size=buffer_size,
             device=device,
@@ -79,8 +80,24 @@ class GenericBuffer(BaseBuffer):
         self.is_dict = dict()
         self.config = config
         self.buffers = dict()
-        for k in config.keys():
-            shape, dtype = config[k]
+        
+        self.ptr, self.path_start_idx, self.max_size = 0, [0]*n_envs, self.buffer_size
+        
+        self.batch_idx = None
+        self.batch_inds = None
+        self.batch_env_inds = None
+        self.prepare_for_collection()
+
+    def reset(self) -> None:
+        self.prepare_for_collection()
+        return super().reset()
+
+    def prepare_for_collection(self):
+        """
+        setups up buffer as dictionary for each type of value being held.
+        """
+        for k in self.config.keys():
+            shape, dtype = self.config[k]
             is_dict = False
             if isinstance(shape, dict):
                 is_dict = True
@@ -91,11 +108,6 @@ class GenericBuffer(BaseBuffer):
                     self.buffers[k][part_key] = np.zeros((self.buffer_size, self.n_envs) + shape[part_key], dtype=dtype[part_key])
             else:
                 self.buffers[k] = np.zeros((self.buffer_size, self.n_envs) + shape, dtype=dtype)
-        self.ptr, self.path_start_idx, self.max_size = 0, [0]*n_envs, self.buffer_size
-        
-        self.batch_idx = None
-        self.batch_inds = None
-        self.batch_env_inds = None
 
     def store(self, **kwargs):
         """
@@ -134,26 +146,41 @@ class GenericBuffer(BaseBuffer):
             else:
                 batch_data[k] = jnp.array(data[batch_ids, env_ids])
         return batch_data
+    
     def _prepared_for_sampling(self, batch_size, drop_last_batch=True):
         if self.batch_idx == None: return False
         if drop_last_batch and self.batch_idx + batch_size > self.buffer_size * self.n_envs: return False
         if self.batch_idx > self.buffer_size * self.n_envs: return False
         return True
 
+    def buffer_to_jax(self):
+        """
+        moves all data in buffer to jax arrays before hand and modifies this buffer object
+        """
+        for k in self.buffers.keys():
+            if self.is_dict[k]:
+                self.buffers[k] = dict()
+                for part_key in self.buffers[k].keys():
+                    self.buffers[k][part_key] = jnp.array(self.buffers[k][part_key])
+            else:
+                self.buffers[k] = jnp.array(self.buffers[k])
+
     # TODO make this jittable.
-    def sample_batch(self, batch_size: int, drop_last_batch=True):
+    @partial(jax.jit, static_argnames=['self', 'batch_size'])
+    def sample_batch(self, key: PRNGKey, batch_size: int, drop_last_batch=True):
         """
         Sample a Batch of data without replacement
         """
         if not self._prepared_for_sampling(batch_size, drop_last_batch):
-            self.batch_idx = 0            
+            self.batch_idx = 0
             if self.full:
-                inds = np.arange(0, self.buffer_size).repeat(self.n_envs)
+                inds = jnp.arange(0, self.buffer_size).repeat(self.n_envs)
             else:
-                inds = np.arange(0, self.ptr).repeat(self.n_envs)
-            env_inds = np.tile(np.arange(self.n_envs), len(inds) // self.n_envs)
-            inds = np.vstack([inds, env_inds]).T
-            np.random.shuffle(inds)
+                inds = jnp.arange(0, self.ptr).repeat(self.n_envs)
+            env_inds = jnp.tile(jnp.arange(self.n_envs), len(inds) // self.n_envs)
+            inds = jnp.vstack([inds, env_inds]).T
+            inds = jax.random.shuffle(key=key, x=inds)
+            # np.random.shuffle(inds)
             self.batch_inds = inds[:, 0]
             self.batch_env_inds = inds[:, 1]
         batch_ids = self.batch_inds[self.batch_idx: self.batch_idx + batch_size]
