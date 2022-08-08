@@ -1,18 +1,18 @@
 import os.path as osp
 import pickle
+
 import gym
 import numpy as np
 import torch
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.utils import set_random_seed
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+
+from walle_rl.architecture.ac.mlp import MLPActorCritic
 from walle_rl.cfg import parse_cfg
 from walle_rl.common.rollout import Rollout
 from walle_rl.logger.logger import Logger
-
 from walle_rl.modelfree.ppo import PPO
-from walle_rl.architecture.ac.mlp import MLPActorCritic
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
-from stable_baselines3.common.utils import set_random_seed
-
-from stable_baselines3.common.env_util import make_vec_env
 
 # 2 ways to work with envs
 # mpi it and have one env per process, each process has its own copy
@@ -20,7 +20,11 @@ from stable_baselines3.common.env_util import make_vec_env
 
 if __name__ == "__main__":
     # env_id = "Pendulum-v0"
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "sample_configs/default_ppo.yml"))
+    cfg = parse_cfg(
+        default_cfg_path=osp.join(
+            osp.dirname(__file__), "sample_configs/default_ppo.yml"
+        )
+    )
     env_id = cfg["env_id"]
     num_cpu = cfg["cpu"]
     seed = cfg["seed"]
@@ -28,11 +32,19 @@ if __name__ == "__main__":
 
     torch.manual_seed(seed)
     np.random.seed(seed)
-    model = MLPActorCritic(env.observation_space, env.action_space, hidden_sizes=(64, 64))
+    model = MLPActorCritic(
+        env.observation_space, env.action_space, hidden_sizes=(64, 64)
+    )
     pi_optimizer = torch.optim.Adam(model.pi.parameters(), lr=1e-4)
     vf_optimizer = torch.optim.Adam(model.v.parameters(), lr=4e-4)
-    
-    logger = Logger(tensorboard=False, wandb=False, cfg=cfg, workspace=cfg["workspace"], exp_name=cfg["exp_name"])
+
+    logger = Logger(
+        tensorboard=False,
+        wandb=False,
+        cfg=cfg,
+        workspace=cfg["workspace"],
+        exp_name=cfg["exp_name"],
+    )
     steps_per_epoch = cfg["steps_per_epoch"] // num_cpu
     batch_size = cfg["batch_size"]
     algo = PPO(
@@ -44,7 +56,9 @@ if __name__ == "__main__":
         logger=logger,
         steps_per_epoch=steps_per_epoch,
         gamma=cfg["gamma"],
-        train_iters=cfg["train_iters"],  # 80 // (steps_per_epoch * num_cpu // batch_size)
+        train_iters=cfg[
+            "train_iters"
+        ],  # 80 // (steps_per_epoch * num_cpu // batch_size)
     )
 
     def train_callback(epoch):
@@ -94,12 +108,19 @@ if __name__ == "__main__":
 
     eval_env = make_vec_env(env_id, 2, seed=seed)
     obs = eval_env.reset()
-    
+
     rollout = Rollout()
+
     def policy(o):
         o = torch.as_tensor(o, dtype=torch.float32)
         return model.act(o, deterministic=True)
-    expert_trajectories = rollout.collect_trajectories(policy, eval_env, n_trajectories=10, n_envs=2,)
+
+    expert_trajectories = rollout.collect_trajectories(
+        policy,
+        eval_env,
+        n_trajectories=10,
+        n_envs=2,
+    )
     eval_env.close()
     for e in expert_trajectories:
         logger.store(tag="test", append=True, EpLen=len(e["observations"] - 1))

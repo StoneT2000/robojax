@@ -1,14 +1,16 @@
 import functools
 from typing import Any, Callable, Tuple, Union
-from chex import Array
+
 import distrax
-import flax.struct as struct
-import flax.linen as nn
 import flax
+import flax.linen as nn
+import flax.struct as struct
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from chex import Array
+
 from walle_rl.architecture.model import Model
 from walle_rl.common.random import PRNGSequence
 
@@ -44,7 +46,9 @@ class Actor(nn.Module):
         dist = self.explorer(a)
         return dist
 
-    def _log_prob_from_distribution(self, dist: distrax.Distribution, act: Array) -> Array:
+    def _log_prob_from_distribution(
+        self, dist: distrax.Distribution, act: Array
+    ) -> Array:
         return dist.log_prob(act)
 
     def __call__(self, x) -> distrax.Distribution:
@@ -54,14 +58,19 @@ class Actor(nn.Module):
 
 
 @functools.partial(jax.jit, static_argnames=["actor_apply_fn", "critic_apply_fn"])
-def _step(key, actor_apply_fn: Callable, actor_params: Params, critic_apply_fn: Callable, critic_params: Params, obs: np.ndarray):
+def _step(
+    key,
+    actor_apply_fn: Callable,
+    actor_params: Params,
+    critic_apply_fn: Callable,
+    critic_params: Params,
+    obs: np.ndarray,
+):
     dist, _ = actor_apply_fn(actor_params, obs)
     a = dist.sample(seed=key)
     logp_a = dist.log_prob(a)
     v = critic_apply_fn(critic_params, obs)
-    v = jnp.squeeze(
-        v, -1
-    )
+    v = jnp.squeeze(v, -1)
     return dict(actions=a, val=v, logp_a=logp_a)
 
 
@@ -81,8 +90,15 @@ class ActorCritic:
         critic_optim: optax.GradientTransformation,
     ) -> None:
         actor_module = Actor(actor=actor, explorer=explorer)
-        self.actor = Model.create(model=actor_module, key=next(rng), sample_input=sample_obs, optimizer=actor_optim)
-        self.critic = Model.create(model=critic, key=next(rng), sample_input=sample_obs, optimizer=critic_optim)
+        self.actor = Model.create(
+            model=actor_module,
+            key=next(rng),
+            sample_input=sample_obs,
+            optimizer=actor_optim,
+        )
+        self.critic = Model.create(
+            model=critic, key=next(rng), sample_input=sample_obs, optimizer=critic_optim
+        )
 
     def step(self, key, obs):
         res = _step(
@@ -104,6 +120,8 @@ class ActorCritic:
     def act(self, obs, key=None, deterministic=False):
         if deterministic:
             return self.actor(obs)
-        dist: distrax.Distribution = self.actor(obs, method=self.actor.model._distribution)
+        dist: distrax.Distribution = self.actor(
+            obs, method=self.actor.model._distribution
+        )
         # TODO remove np array here
         return np.array(dist.sample(seed=key))

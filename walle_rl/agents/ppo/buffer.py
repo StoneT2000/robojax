@@ -1,11 +1,14 @@
 from typing import TypedDict
-from chex import PRNGKey
-from gym import spaces
-from walle_rl.buffer.buffer import GenericBuffer
-from walle_rl.common.utils import get_action_dim, get_obs_shape
-from walle_rl.common.stats import discount_cumsum
+
 import numpy as np
+from chex import PRNGKey
 from flax import struct
+from gym import spaces
+
+from walle_rl.buffer.buffer import GenericBuffer
+from walle_rl.common.stats import discount_cumsum
+from walle_rl.common.utils import get_action_dim, get_obs_shape
+
 
 @struct.dataclass
 class Batch:
@@ -17,6 +20,8 @@ class Batch:
     val_buf: np.array
     logp_buf: np.array
     done_buf: np.array
+
+
 class PPOBuffer(GenericBuffer):
     """
     A buffer for storing trajectories experienced by a PPO agent interacting
@@ -31,7 +36,7 @@ class PPOBuffer(GenericBuffer):
         action_space: spaces.Space,
         n_envs: int = 1,
         gamma=0.99,
-        lam=0.95
+        lam=0.95,
     ):
         self.observation_space = observation_space
         self.action_space = action_space
@@ -42,32 +47,39 @@ class PPOBuffer(GenericBuffer):
         if isinstance(action_space, spaces.Discrete):
             act_buf_shape = ()
         buffer_config = dict(
-            act_buf = (act_buf_shape, action_space.dtype),
-            adv_buf = ((), np.float32),
-            rew_buf = ((), np.float32),
-            ret_buf = ((), np.float32),
-            val_buf = ((), np.float32),
-            logp_buf = ((), np.float32),
-            done_buf = ((), np.bool8)
+            act_buf=(act_buf_shape, action_space.dtype),
+            adv_buf=((), np.float32),
+            rew_buf=((), np.float32),
+            ret_buf=((), np.float32),
+            val_buf=((), np.float32),
+            logp_buf=((), np.float32),
+            done_buf=((), np.bool8),
         )
-        
+
         if isinstance(self.obs_shape, dict):
-            buffer_config["obs_buf"] = (self.obs_shape, {k: self.observation_space[k].dtype for k in self.observation_space})
+            buffer_config["obs_buf"] = (
+                self.obs_shape,
+                {k: self.observation_space[k].dtype for k in self.observation_space},
+            )
         else:
             buffer_config["obs_buf"] = (self.obs_shape, np.float32)
         super().__init__(
-            buffer_size=buffer_size + 1, # add one to buffer size to store one more frame for GAE computation
+            buffer_size=buffer_size
+            + 1,  # add one to buffer size to store one more frame for GAE computation
             n_envs=n_envs,
-            config=buffer_config
+            config=buffer_config,
         )
 
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, [0] * n_envs, self.buffer_size
         self.next_batch_idx = 0
 
-    def sample_batch(self, key: PRNGKey, batch_size: int, drop_last_batch=True) -> Batch:
+    def sample_batch(
+        self, key: PRNGKey, batch_size: int, drop_last_batch=True
+    ) -> Batch:
         batch = super().sample_batch(key, batch_size, drop_last_batch)
         return Batch(**batch)
+
     def sample_random_batch(self, key: PRNGKey, batch_size: int) -> Batch:
         batch = super().sample_random_batch(key, batch_size)
         return Batch(**batch)
@@ -91,17 +103,21 @@ class PPOBuffer(GenericBuffer):
 
         path_slice = slice(self.path_start_idx[env_id], self.ptr)
         if self.ptr < self.path_start_idx[env_id]:
-            path_slice = slice(self.path_start_idx[env_id],self.buffer_size)
+            path_slice = slice(self.path_start_idx[env_id], self.buffer_size)
         rews = np.append(self.buffers["rew_buf"][path_slice, env_id], last_val)
         vals = np.append(self.buffers["val_buf"][path_slice, env_id], last_val)
 
         # the next two lines implement GAE-Lambda advantage calculation
         deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
 
-        self.buffers["adv_buf"][path_slice, env_id] = discount_cumsum(deltas, self.gamma * self.lam)
+        self.buffers["adv_buf"][path_slice, env_id] = discount_cumsum(
+            deltas, self.gamma * self.lam
+        )
 
         # the next line computes rewards-to-go, to be targets for the value function
-        self.buffers["ret_buf"][path_slice, env_id] = discount_cumsum(rews, self.gamma)[:-1]
+        self.buffers["ret_buf"][path_slice, env_id] = discount_cumsum(rews, self.gamma)[
+            :-1
+        ]
 
         self.path_start_idx[env_id] = self.ptr
 

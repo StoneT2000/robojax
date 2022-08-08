@@ -1,2 +1,2 @@
-from .gaussian import Gaussian
 from .categorical import Categorical
+from .gaussian import Gaussian
