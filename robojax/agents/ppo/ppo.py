@@ -150,9 +150,8 @@ class PPO:
             ep_rets = np.asarray(buffer.ret)
             episode_ends = np.asarray(buffer.done)
             info = dict(
-                ep_lens=ep_lens[episode_ends].mean(),
-                ep_rets=ep_rets[episode_ends].mean(),
-                rollout_time=aux["rollout_time"]
+                avg_ep_len=ep_lens[episode_ends].mean(),
+                avg_ep_ret=ep_rets[episode_ends].mean(),
             )
             print(info)
             # import ipdb;ipdb.set_trace()

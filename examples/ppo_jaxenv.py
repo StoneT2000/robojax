@@ -41,6 +41,3 @@ algo.train(
     ac=ac,
     batch_size=512,
 )
-import ipdb
-
-ipdb.set_trace()
