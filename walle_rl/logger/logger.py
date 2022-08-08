@@ -7,9 +7,10 @@ import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Union
-from omegaconf import OmegaConf
+
 import numpy as np
 import pandas as pd
+from omegaconf import OmegaConf
 
 color2num = dict(
     gray=30,
@@ -23,6 +24,7 @@ color2num = dict(
     crimson=38,
 )
 import wandb as wb
+
 
 def colorize(string, color, bold=False, highlight=False):
     """
@@ -53,7 +55,7 @@ class Logger:
         exp_name: str = "default_exp",
         clear_out: bool = True,
         project_name: str = None,
-        wandb_cfg = None,
+        wandb_cfg=None,
         cfg: Union[Dict, OmegaConf] = {},
     ) -> None:
         """
@@ -84,12 +86,18 @@ class Logger:
             # from torch.utils.tensorboard import SummaryWriter
             # self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
-            
+
             if project_name is None:
                 project_name = workspace
             if not clear_out:
                 wandb_id = cfg["wandb_id"]
-                wb.init(project=project_name, name=exp_name, id=wandb_id, resume="allow", **wandb_cfg)
+                wb.init(
+                    project=project_name,
+                    name=exp_name,
+                    id=wandb_id,
+                    resume="allow",
+                    **wandb_cfg,
+                )
             else:
                 wandb_id = wb.util.generate_id()
                 wb.init(project=project_name, name=exp_name, id=wandb_id, **wandb_cfg)
@@ -216,7 +224,7 @@ class Logger:
                     self.stats[name] = scalar
                 if self.wandb and not local_only:
                     wb.log(data=key_vals, step=step)
-                    
+
         return self.stats
 
     def reset(self):

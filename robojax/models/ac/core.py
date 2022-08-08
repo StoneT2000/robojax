@@ -1,4 +1,4 @@
-import functools
+from functools import partial
 from typing import Any, Callable, Tuple, Union
 
 import distrax
@@ -9,10 +9,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from chex import Array
+from chex import Array, PRNGKey
 
-from walle_rl.architecture.model import Model
-from walle_rl.common.random import PRNGSequence
+from robojax.models import Model
 
 Params = flax.core.FrozenDict[str, Any]
 
@@ -56,31 +55,13 @@ class Actor(nn.Module):
         dist = self.explorer(a)
         return dist, a
 
-
-@functools.partial(jax.jit, static_argnames=["actor_apply_fn", "critic_apply_fn"])
-def _step(
-    key,
-    actor_apply_fn: Callable,
-    actor_params: Params,
-    critic_apply_fn: Callable,
-    critic_params: Params,
-    obs: np.ndarray,
-):
-    dist, _ = actor_apply_fn(actor_params, obs)
-    a = dist.sample(seed=key)
-    logp_a = dist.log_prob(a)
-    v = critic_apply_fn(critic_params, obs)
-    v = jnp.squeeze(v, -1)
-    return dict(actions=a, val=v, logp_a=logp_a)
-
-
 class ActorCritic:
     actor: Model
     critic: Model
 
     def __init__(
         self,
-        rng: PRNGSequence,
+        rng_key: PRNGKey,
         actor: nn.Module,
         critic: nn.Module,
         explorer,
@@ -90,38 +71,30 @@ class ActorCritic:
         critic_optim: optax.GradientTransformation,
     ) -> None:
         actor_module = Actor(actor=actor, explorer=explorer)
+        rng_key, actor_rng_key = jax.random.split(rng_key)
+        rng_key, critic_rng_key = jax.random.split(rng_key)
         self.actor = Model.create(
             model=actor_module,
-            key=next(rng),
+            key=actor_rng_key,
             sample_input=sample_obs,
-            optimizer=actor_optim,
+            tx=actor_optim,
         )
         self.critic = Model.create(
-            model=critic, key=next(rng), sample_input=sample_obs, optimizer=critic_optim
+            model=critic, key=critic_rng_key, sample_input=sample_obs, tx=critic_optim
         )
 
-    def step(self, key, obs):
-        res = _step(
-            key=key,
-            actor_apply_fn=self.actor.apply_fn,
-            actor_params=self.actor.params,
-            critic_apply_fn=self.critic.apply_fn,
-            critic_params=self.critic.params,
-            obs=obs,
-        )
-        return res
-        # dist = self.actor(obs, method=self.actor._distribution)
-        # a = dist.sample(seed=key)
-        # logp_a = self.actor._log_prob_from_distribution(dist, a)
-        # v = self.critic(obs)
-        # return dict(actions=a, val=v, logp_a=logp_a)
+    @partial(jax.jit, static_argnames=["self"])
+    def step(self, rng_key: PRNGKey, actor: Model, critic: Model, obs):
+        dist, _ = actor(obs)
+        a = dist.sample(seed=rng_key)
+        log_p = dist.log_prob(a)
+        v = critic(obs)
+        v = jnp.squeeze(v, -1)
+        return a, dict(value=v, log_p=log_p)
 
-    # @jax.jit
-    def act(self, obs, key=None, deterministic=False):
+    @partial(jax.jit, static_argnames=["self", "deterministic"])
+    def act(self, rng_key: PRNGKey, actor: Actor, obs, deterministic=False):
         if deterministic:
-            return self.actor(obs)
-        dist: distrax.Distribution = self.actor(
-            obs, method=self.actor.model._distribution
-        )
-        # TODO remove np array here
-        return np.array(dist.sample(seed=key))
+            return actor(obs)
+        dist, _ = actor(obs)
+        return dist.sample(seed=rng_key)

@@ -2,8 +2,8 @@
 Adapted from SB3
 """
 
-from cmath import isinf
 import warnings
+from cmath import isinf
 from typing import Dict, Tuple, Union
 
 import jax.numpy as jnp

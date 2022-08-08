@@ -4,7 +4,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 
-from walle_rl.architecture.model import Model
+from robojax.models import Model
 
 Array = chex.Array
 Scalar = chex.Scalar

@@ -9,13 +9,13 @@ import torch
 from gym import spaces
 from torch import optim
 from torch.nn import functional as F
+from walle_rl.modelfree.ppo.buffer import PPOBuffer
 
 from walle_rl.architecture.ac.core import ActorCritic, count_vars
 from walle_rl.buffer.buffer import GenericBuffer
 from walle_rl.common.rollout import Rollout
 from walle_rl.common.utils import to_torch
 from walle_rl.logger.logger import Logger
-from walle_rl.modelfree.ppo.buffer import PPOBuffer
 
 
 class PPO:
@@ -45,7 +45,6 @@ class PPO:
         # verbose: int = 0,
         seed: Optional[int] = None,
         device: Union[torch.device, str] = "cpu",
-
     ) -> None:
         # Random seed
         if seed is None:
@@ -111,12 +110,12 @@ class PPO:
         max_ep_len=None,
         start_epoch: int = 0,
         n_epochs: int = 10,
-        critic_warmup_epochs: int = 0, # number of epochs to collect rollouts and update critic only, freezing policy
+        critic_warmup_epochs: int = 0,  # number of epochs to collect rollouts and update critic only, freezing policy
         pi_optimizer: torch.optim.Optimizer = None,
         vf_optimizer: torch.optim.Optimizer = None,
         batch_size=1000,
         accumulate_grads=False,
-        demo_trajectory_sampler = None,
+        demo_trajectory_sampler=None,
         dapg_nll_loss=False,
         verbose=1,
     ):
@@ -124,12 +123,13 @@ class PPO:
         Parameters
         ----------
 
-        max_ep_len - max episode length. Can be set to infinity if environment returns a done signal to cap max episode length    
+        max_ep_len - max episode length. Can be set to infinity if environment returns a done signal to cap max episode length
 
         demo_trajectory_sampler - optional function that returns sampled demo trajectories to provide for DAPG training
         """
         dapg = False
-        if demo_trajectory_sampler is not None: dapg = True
+        if demo_trajectory_sampler is not None:
+            dapg = True
         if max_ep_len is None:
             # TODO: infer this
             raise ValueError("max_ep_len is missing")
@@ -143,6 +143,7 @@ class PPO:
         n_envs = self.n_envs
         device = self.device
         rollout = Rollout()
+
         def policy(o):
             if obs_to_tensor is None:
                 o = torch.as_tensor(o, dtype=torch.float32)
@@ -154,18 +155,24 @@ class PPO:
             all_demo_trajectories = None
             if dapg:
                 all_demo_trajectories = []
-                steps_per_train_iter = int(math.ceil(buf.buffer_size * buf.n_envs / batch_size))
+                steps_per_train_iter = int(
+                    math.ceil(buf.buffer_size * buf.n_envs / batch_size)
+                )
                 ac.eval()
                 with torch.no_grad():
                     for _ in range(steps_per_train_iter):
                         demo_trajectories = demo_trajectory_sampler(batch_size)
                         if not dapg_nll_loss:
                             # collect old logp
-                            pi, logp = ac.pi(to_torch(demo_trajectories["observations"], device=device), to_torch(demo_trajectories["actions"],  device=device))
+                            pi, logp = ac.pi(
+                                to_torch(
+                                    demo_trajectories["observations"], device=device
+                                ),
+                                to_torch(demo_trajectories["actions"], device=device),
+                            )
                             demo_trajectories["logp"] = logp
                         all_demo_trajectories.append(demo_trajectories)
                 ac.train()
-
 
             update_res = ppo_update(
                 buffer=buf,
@@ -184,7 +191,7 @@ class PPO:
                 update_pi=update_pi,
                 demo_trajectories=all_demo_trajectories,
                 dapg_lambda=self.dapg_lambda,
-                dapg_nll_loss=dapg_nll_loss
+                dapg_nll_loss=dapg_nll_loss,
             )
             pi_info, loss_pi, loss_v, update_step = (
                 update_res["pi_info"],
@@ -193,14 +200,20 @@ class PPO:
                 update_res["update_step"],
             )
             logger.store(tag="train", StopIter=update_step, append=False)
-            
+
             if loss_v is not None:
                 logger.store(
                     tag="train",
                     LossV=loss_v.cpu().item(),
                 )
             if pi_info is not None:
-                kl, ent, cf, loss_pi, ppo_loss = pi_info["kl"], pi_info["ent"], pi_info["cf"], pi_info["loss_pi"], pi_info["ppo_loss"]
+                kl, ent, cf, loss_pi, ppo_loss = (
+                    pi_info["kl"],
+                    pi_info["ent"],
+                    pi_info["cf"],
+                    pi_info["loss_pi"],
+                    pi_info["ppo_loss"],
+                )
                 logger.store(
                     tag="train",
                     LossPi=loss_pi,
@@ -218,36 +231,62 @@ class PPO:
             rollout_start_time = time.time_ns()
             buf.reset()
             ac.eval()
-            rollout.collect(policy=policy, env=env, n_envs=n_envs, buf=buf, steps=self.steps_per_epoch, rollout_callback=rollout_callback, max_ep_len=max_ep_len, logger=logger, verbose=verbose)
+            rollout.collect(
+                policy=policy,
+                env=env,
+                n_envs=n_envs,
+                buf=buf,
+                steps=self.steps_per_epoch,
+                rollout_callback=rollout_callback,
+                max_ep_len=max_ep_len,
+                logger=logger,
+                verbose=verbose,
+            )
             ac.train()
             rollout_end_time = time.time_ns()
             rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
-            logger.store("train", RolloutTime=rollout_delta_time, critic_warmup_epochs=critic_warmup_epochs, append=False)
+            logger.store(
+                "train",
+                RolloutTime=rollout_delta_time,
+                critic_warmup_epochs=critic_warmup_epochs,
+                append=False,
+            )
 
             update_start_time = time.time_ns()
             # advantage normalization before update
             update_pi = epoch >= critic_warmup_epochs
-            update(update_pi = update_pi)
+            update(update_pi=update_pi)
             update_end_time = time.time_ns()
 
             if dapg:
                 logger.store("train", dapg_lambda=self.dapg_lambda, append=False)
-                if update_pi: self.dapg_lambda *= self.dapg_damping
+                if update_pi:
+                    self.dapg_lambda *= self.dapg_damping
 
-            logger.store("train", UpdateTime=(update_end_time - update_start_time) * 1e-9, append=False)
+            logger.store(
+                "train",
+                UpdateTime=(update_end_time - update_start_time) * 1e-9,
+                append=False,
+            )
             logger.store("train", Epoch=epoch, append=False)
-            logger.store("train", TotalEnvInteractions=self.steps_per_epoch * self.n_envs * (epoch + 1), append=False)
+            logger.store(
+                "train",
+                TotalEnvInteractions=self.steps_per_epoch * self.n_envs * (epoch + 1),
+                append=False,
+            )
             if train_callback is not None:
                 early_stop = train_callback(epoch=epoch)
                 if early_stop is not None and early_stop:
                     break
 
+
 def compute_gae(
     buffer: GenericBuffer,
-):  
+):
     # TODO move out the gae computations from within buffer's finish_path function
-    buffer.buffers["adv_buf"] = (buffer.buffers["adv_buf"] - buffer.buffers["adv_buf"].mean()) / (buffer.buffers["adv_buf"].std())
-
+    buffer.buffers["adv_buf"] = (
+        buffer.buffers["adv_buf"] - buffer.buffers["adv_buf"].mean()
+    ) / (buffer.buffers["adv_buf"].std())
 
 
 def ppo_update(
@@ -270,7 +309,7 @@ def ppo_update(
     dapg_nll_loss=False,
 ):
     """
-    
+
     demo_trajectories - dict of ndarray or list of dicts
         if list, treats each element as a batch
 
@@ -279,10 +318,16 @@ def ppo_update(
         if true, uses negative log likelihood as the demo augmented loss. Otherwise uses PPO loss
     """
     dapg = False
-    if demo_trajectories is not None: dapg = True
+    if demo_trajectories is not None:
+        dapg = True
     # TODO ABSTRACT OBS TO DEVICE TO A SEPARATE FUNC
     def compute_loss_pi(data):
-        obs, act, adv, logp_old = data["obs_buf"], data["act_buf"].to(device), data["adv_buf"].to(device), data["logp_buf"].to(device)
+        obs, act, adv, logp_old = (
+            data["obs_buf"],
+            data["act_buf"].to(device),
+            data["adv_buf"].to(device),
+            data["logp_buf"].to(device),
+        )
         obs = to_torch(obs, device=device)
 
         # Policy loss)
@@ -292,7 +337,7 @@ def ppo_update(
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
         loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() * pi_coef
-        
+
         # Entropy loss for some basic extra exploration
         entropy = pi.entropy()
         with torch.no_grad():
@@ -301,13 +346,21 @@ def ppo_update(
             approx_kl = (torch.exp(logr) - 1 - logr).mean().cpu().item()
             clipped = ratio.gt(1 + clip_ratio) | ratio.lt(1 - clip_ratio)
             clipfrac = torch.as_tensor(clipped, dtype=torch.float32).mean().item()
-        pi_info = dict(kl=approx_kl, ent=entropy.mean().item(), cf=clipfrac, ppo_loss=loss_pi.cpu().item())
+        pi_info = dict(
+            kl=approx_kl,
+            ent=entropy.mean().item(),
+            cf=clipfrac,
+            ppo_loss=loss_pi.cpu().item(),
+        )
 
         # add dapg loss, the negative log likelihood in particular
         if dapg:
             demo_trajectories = data["demo_trajectories"]
             ac.pi.eval()
-            demo_pi, demo_logp = ac.pi(to_torch(demo_trajectories["observations"], device=device), to_torch(demo_trajectories["actions"], device=device))
+            demo_pi, demo_logp = ac.pi(
+                to_torch(demo_trajectories["observations"], device=device),
+                to_torch(demo_trajectories["actions"], device=device),
+            )
             ac.pi.train()
 
             if dapg_nll_loss:
@@ -351,27 +404,36 @@ def ppo_update(
 
         steps_per_train_iter = int(math.ceil(N / batch_size))
         if accumulate_grads:
-            if update_pi: pi_optimizer.zero_grad()
+            if update_pi:
+                pi_optimizer.zero_grad()
             vf_optimizer.zero_grad()
             average_kl = 0
         for batch_idx in range(steps_per_train_iter):
             batch_data = buffer.sample_batch(batch_size=batch_size)
             loss_v = compute_loss_v(batch_data) * vf_coef
-            if dapg: 
+            if dapg:
                 batch_demo_trajectories = demo_trajectories[batch_idx]
                 batch_data["demo_trajectories"] = batch_demo_trajectories
             if update_pi:
                 loss_pi_data = compute_loss_pi(batch_data)
-                loss_pi, logp, entropy, pi_info = loss_pi_data["loss_pi"], loss_pi_data["logp"], loss_pi_data["entropy"], loss_pi_data["pi_info"]
+                loss_pi, logp, entropy, pi_info = (
+                    loss_pi_data["loss_pi"],
+                    loss_pi_data["logp"],
+                    loss_pi_data["entropy"],
+                    loss_pi_data["pi_info"],
+                )
                 kl = pi_info["kl"]
                 if accumulate_grads:
                     average_kl += kl
                 if not accumulate_grads and target_kl is not None:
                     if kl > 1.5 * target_kl:
-                        logger.print("Early stopping at step %d due to reaching max kl." % update_step)
+                        logger.print(
+                            "Early stopping at step %d due to reaching max kl."
+                            % update_step
+                        )
                         early_stop_update = True
                         break
-            
+
             # TODO - entropy loss
             # if entropy is None:
             #     # Approximate entropy when no analytical form
@@ -391,19 +453,24 @@ def ppo_update(
                 update_step += 1
             if accumulate_grads:
                 # scale loss down
-                if update_pi: loss_pi /= steps_per_train_iter
+                if update_pi:
+                    loss_pi /= steps_per_train_iter
                 loss_v /= steps_per_train_iter
-                if update_pi: loss_pi.backward()
+                if update_pi:
+                    loss_pi.backward()
                 loss_v.backward()
-        
+
         if accumulate_grads and target_kl is not None:
             average_kl /= steps_per_train_iter
             if average_kl > 1.5 * target_kl:
-                logger.print("Early stopping at step %d due to reaching max kl." % update_step)
+                logger.print(
+                    "Early stopping at step %d due to reaching max kl." % update_step
+                )
                 early_stop_update = True
                 break
         if accumulate_grads:
-            if update_pi: pi_optimizer.step()
+            if update_pi:
+                pi_optimizer.step()
             vf_optimizer.step()
             update_step += 1
         if early_stop_update:

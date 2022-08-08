@@ -1,4 +1,6 @@
-# WALL-E RL
+# Robojax
+
+A high-performance reinforcement learning library in jax specialized for robotic learning
 
 <img src="https://user-images.githubusercontent.com/35373228/160072285-fb65294b-f6a6-4028-b60a-ac774191ac85.jpg" width=200/>
 

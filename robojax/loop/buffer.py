@@ -1,4 +1,3 @@
-
 class Buffer:
     def __init__(self, buffer_size: int, n_envs: int) -> None:
         pass

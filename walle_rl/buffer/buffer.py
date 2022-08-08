@@ -5,13 +5,13 @@ Adapted from SB3
 from abc import ABC, abstractmethod
 from functools import partial
 from typing import Any, Dict, List, Optional, Union
-from chex import PRNGKey
 
+import jax
 import jax.numpy as jnp
 import numpy as np
-import jax
-from gym import spaces
+from chex import PRNGKey
 from flax import struct
+from gym import spaces
 
 from walle_rl.common.utils import get_action_dim, get_obs_shape
 
@@ -26,12 +26,12 @@ class BaseBuffer(ABC):
     def __init__(
         self,
         buffer_size: int,
-        device = "cpu",
+        device="cpu",
         n_envs: int = 1,
     ):
         super(BaseBuffer, self).__init__()
         self.buffer_size = buffer_size
-        
+
         self.ptr = 0
         self.full = False
         self.n_envs = n_envs
@@ -56,6 +56,8 @@ class BaseBuffer(ABC):
         """
         self.ptr = 0
         self.full = False
+
+
 class GenericBuffer(BaseBuffer):
     """
     Generic buffer that stores key value items for vectorized environment outputs.
@@ -65,13 +67,7 @@ class GenericBuffer(BaseBuffer):
     config - dict(k->v) where k is buffer name and v[0] is shape, v[1] is numpy dtype, v[2] is data is dict or not. if is_dict, then shape and dtype should be a dict of shapes and dtypes
     """
 
-    def __init__(
-        self,
-        buffer_size: int,
-        device = "cpu",
-        n_envs: int = 1,
-        config=dict() 
-    ):
+    def __init__(self, buffer_size: int, device="cpu", n_envs: int = 1, config=dict()):
         super().__init__(
             buffer_size=buffer_size,
             device=device,
@@ -80,9 +76,9 @@ class GenericBuffer(BaseBuffer):
         self.is_dict = dict()
         self.config = config
         self.buffers = dict()
-        
-        self.ptr, self.path_start_idx, self.max_size = 0, [0]*n_envs, self.buffer_size
-        
+
+        self.ptr, self.path_start_idx, self.max_size = 0, [0] * n_envs, self.buffer_size
+
         self.batch_idx = None
         self.batch_inds = None
         self.batch_env_inds = None
@@ -105,9 +101,14 @@ class GenericBuffer(BaseBuffer):
             if is_dict:
                 self.buffers[k] = dict()
                 for part_key in shape.keys():
-                    self.buffers[k][part_key] = np.zeros((self.buffer_size, self.n_envs) + shape[part_key], dtype=dtype[part_key])
+                    self.buffers[k][part_key] = np.zeros(
+                        (self.buffer_size, self.n_envs) + shape[part_key],
+                        dtype=dtype[part_key],
+                    )
             else:
-                self.buffers[k] = np.zeros((self.buffer_size, self.n_envs) + shape, dtype=dtype)
+                self.buffers[k] = np.zeros(
+                    (self.buffer_size, self.n_envs) + shape, dtype=dtype
+                )
 
     def store(self, **kwargs):
         """
@@ -130,8 +131,7 @@ class GenericBuffer(BaseBuffer):
             self.full = True
             self.ptr = 0
 
-
-    @partial(jax.jit, static_argnames=['self'])
+    @partial(jax.jit, static_argnames=["self"])
     def _get_batch_by_ids(self, buffers, batch_ids, env_ids):
         """
         statefully retrieve batch of data
@@ -146,11 +146,17 @@ class GenericBuffer(BaseBuffer):
             else:
                 batch_data[k] = jnp.array(data[batch_ids, env_ids])
         return batch_data
-    
+
     def _prepared_for_sampling(self, batch_size, drop_last_batch=True):
-        if self.batch_idx == None: return False
-        if drop_last_batch and self.batch_idx + batch_size > self.buffer_size * self.n_envs: return False
-        if self.batch_idx > self.buffer_size * self.n_envs: return False
+        if self.batch_idx == None:
+            return False
+        if (
+            drop_last_batch
+            and self.batch_idx + batch_size > self.buffer_size * self.n_envs
+        ):
+            return False
+        if self.batch_idx > self.buffer_size * self.n_envs:
+            return False
         return True
 
     def buffer_to_jax(self):
@@ -166,7 +172,7 @@ class GenericBuffer(BaseBuffer):
                 self.buffers[k] = jnp.array(self.buffers[k])
 
     # TODO make this jittable.
-    @partial(jax.jit, static_argnames=['self', 'batch_size'])
+    @partial(jax.jit, static_argnames=["self", "batch_size"])
     def sample_batch(self, key: PRNGKey, batch_size: int, drop_last_batch=True):
         """
         Sample a Batch of data without replacement
@@ -183,19 +189,25 @@ class GenericBuffer(BaseBuffer):
             # np.random.shuffle(inds)
             self.batch_inds = inds[:, 0]
             self.batch_env_inds = inds[:, 1]
-        batch_ids = self.batch_inds[self.batch_idx: self.batch_idx + batch_size]
-        env_ids = self.batch_env_inds[self.batch_idx: self.batch_idx + batch_size]
+        batch_ids = self.batch_inds[self.batch_idx : self.batch_idx + batch_size]
+        env_ids = self.batch_env_inds[self.batch_idx : self.batch_idx + batch_size]
         self.batch_idx = self.batch_idx + batch_size
-        return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
-            
+        return self._get_batch_by_ids(
+            buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
+        )
+
     def sample_random_batch(self, batch_size: int):
         """
         Sample a batch of data with replacement
         """
         if self.full:
-            batch_ids = (np.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
+            batch_ids = (
+                np.random.randint(0, self.buffer_size, size=batch_size) + self.ptr
+            ) % self.buffer_size
         else:
             batch_ids = np.random.randint(0, self.ptr, size=batch_size)
         env_ids = np.random.randint(0, high=self.n_envs, size=(len(batch_ids),))
 
-        return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
+        return self._get_batch_by_ids(
+            buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
+        )

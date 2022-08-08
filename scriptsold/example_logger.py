@@ -1,11 +1,13 @@
+import argparse
+
 import gym
 import torch
+from omegaconf import OmegaConf
 
-from walle_rl.modelfree.ppo import PPO
 from walle_rl.architecture.ac.mlp import MLPActorCritic
 from walle_rl.logger import Logger
-from omegaconf import OmegaConf
-import argparse
+from walle_rl.modelfree.ppo import PPO
+
 parser = argparse.ArgumentParser()
 # parser.add_argument("fpath", type=str)
 
@@ -15,7 +17,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("--cpu", type=int, default=4)
 args = parser.parse_args()
-listkwargs = [f"{a}={b}" for a,b in args._get_kwargs()]
+listkwargs = [f"{a}={b}" for a, b in args._get_kwargs()]
 conf = OmegaConf.from_cli(listkwargs)
 print(conf)
 logger = Logger(wandb=True, workspace="examplelog", exp_name="", cfg=conf)

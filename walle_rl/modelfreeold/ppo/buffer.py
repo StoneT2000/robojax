@@ -23,7 +23,7 @@ class PPOBuffer(GenericBuffer):
         action_space: spaces.Space,
         n_envs: int = 1,
         gamma=0.99,
-        lam=0.95
+        lam=0.95,
     ):
         self.observation_space = observation_space
         self.action_space = action_space
@@ -31,23 +31,22 @@ class PPOBuffer(GenericBuffer):
 
         self.action_dim = get_action_dim(action_space)
         buffer_config = dict(
-            act_buf = ((self.action_dim,), action_space.dtype),
-            adv_buf = ((), np.float32),
-            rew_buf = ((), np.float32),
-            ret_buf = ((), np.float32),
-            val_buf = ((), np.float32),
-            logp_buf = ((), np.float32),
-            done_buf = ((), np.bool8)
+            act_buf=((self.action_dim,), action_space.dtype),
+            adv_buf=((), np.float32),
+            rew_buf=((), np.float32),
+            ret_buf=((), np.float32),
+            val_buf=((), np.float32),
+            logp_buf=((), np.float32),
+            done_buf=((), np.bool8),
         )
         if isinstance(self.obs_shape, dict):
-            buffer_config["obs_buf"] = (self.obs_shape, {k: self.observation_space[k].dtype for k in self.observation_space})
+            buffer_config["obs_buf"] = (
+                self.obs_shape,
+                {k: self.observation_space[k].dtype for k in self.observation_space},
+            )
         else:
             buffer_config["obs_buf"] = (self.obs_shape, np.float32)
-        super().__init__(
-            buffer_size=buffer_size,
-            n_envs=n_envs,
-            config=buffer_config
-        )
+        super().__init__(buffer_size=buffer_size, n_envs=n_envs, config=buffer_config)
 
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, [0] * n_envs, self.buffer_size
@@ -72,17 +71,21 @@ class PPOBuffer(GenericBuffer):
 
         path_slice = slice(self.path_start_idx[env_id], self.ptr)
         if self.ptr < self.path_start_idx[env_id]:
-            path_slice = slice(self.path_start_idx[env_id],self.buffer_size)
+            path_slice = slice(self.path_start_idx[env_id], self.buffer_size)
         rews = np.append(self.buffers["rew_buf"][path_slice, env_id], last_val)
         vals = np.append(self.buffers["val_buf"][path_slice, env_id], last_val)
 
         # the next two lines implement GAE-Lambda advantage calculation
         deltas = rews[:-1] + self.gamma * vals[1:] - vals[:-1]
 
-        self.buffers["adv_buf"][path_slice, env_id] = discount_cumsum(deltas, self.gamma * self.lam)
+        self.buffers["adv_buf"][path_slice, env_id] = discount_cumsum(
+            deltas, self.gamma * self.lam
+        )
 
         # the next line computes rewards-to-go, to be targets for the value function
-        self.buffers["ret_buf"][path_slice, env_id] = discount_cumsum(rews, self.gamma)[:-1]
+        self.buffers["ret_buf"][path_slice, env_id] = discount_cumsum(rews, self.gamma)[
+            :-1
+        ]
 
         self.path_start_idx[env_id] = self.ptr
 
