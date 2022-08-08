@@ -46,13 +46,13 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
 
 
 class PPO:
-    def __init__(self, env: gym.Env, jax_env: bool, cfg: PPOConfig = {}) -> None:
+    def __init__(self, jax_env: bool, env=None, env_step = None, env_reset = None, cfg: PPOConfig = {}) -> None:
         self.jax_env = jax_env
 
         # if env.step.__class__.__name__ == "CompiledFunction":
         # self.jax = True
         self.cfg = PPOConfig(**cfg)
-        self.env = env
+        # self.env = env
         if self.jax_env:
 
             def rollout_callback(
@@ -72,7 +72,7 @@ class PPO:
                 )
 
             self.loop = JaxLoop(
-                self.env.reset, self.env.step, rollout_callback=rollout_callback
+                env_reset, env_step, rollout_callback=rollout_callback
             )
             self.train_step = jax.jit(
                 self.train_step,

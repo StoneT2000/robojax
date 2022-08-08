@@ -1,25 +1,37 @@
 import gym
-import gymnax
+import brax
+from brax import envs
+from brax.io import html, image
+from IPython.display import HTML, Image 
+
 import jax
 import jax.numpy as jnp
+from matplotlib import pyplot as plt
+import numpy as np
 import optax
+from stable_baselines3.common.env_util import make_vec_env
 
 from robojax.agents.ppo.ppo import PPO
 from robojax.models import explore
 from robojax.models.ac.core import ActorCritic
 from robojax.models.mlp import MLP
 
-env_id = "CartPole-v1"
+environment = "ant"
+env = envs.create(env_name=environment)
+state = env.reset(rng=jax.random.PRNGKey(0))
+
 num_envs = 4
-env, env_params = gymnax.make("CartPole-v1")
-algo = PPO(env.step, env.reset, jax_env=True)
+def env_step(rng_key, state, action):
+    print("ACTION", action)
+    return env.step(state, action)
+def env_reset(rng_key):
+    state = env.reset(rng_key)
+    return state.obs, state
+# env.step = env_step
+# env.reset = env_reset
+algo = PPO(env_step, env_reset, jax_env=True)
 
-
-def random_policy(rng_key, env_obs):
-    return env.action_space().sample(rng_key), {"log_p": 0, "value": 0}
-
-
-act_dims = int(env.action_space().n)
+act_dims = env.action_size
 actor = MLP([64, 64, act_dims], output_activation=None)
 critic = MLP([64, 64, 1], output_activation=None)
 ac = ActorCritic(
@@ -27,7 +39,7 @@ ac = ActorCritic(
     actor=actor,
     critic=critic,
     explorer=explore.Categorical(),
-    sample_obs=env.reset(jax.random.PRNGKey(0))[0],
+    sample_obs=env.reset(jax.random.PRNGKey(0)).obs,
     act_dims=act_dims,
     actor_optim=optax.adam(learning_rate=1e-4),
     critic_optim=optax.adam(learning_rate=4e-4),
