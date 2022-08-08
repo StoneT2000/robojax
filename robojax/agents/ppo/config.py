@@ -34,6 +34,7 @@ class TimeStep:
     env_obs: chex.Array
     adv: chex.Array
     reward: chex.Array
+    orig_ret: chex.Array
     ret: chex.Array
     value: chex.Array
     done: chex.Array

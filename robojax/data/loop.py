@@ -45,7 +45,6 @@ class GymLoop(BaseEnvLoop):
         perform a rollout on a non jittable environment
         """
         num_envs = len(rng_keys)
-        rollout_start_time = time.time_ns()
         rng_key = rng_keys[-1]
         observations, ep_returns, ep_lengths = (
             self.env.reset(),
@@ -81,8 +80,6 @@ class GymLoop(BaseEnvLoop):
                 if terminal or epoch_ended:
                     ep_returns[idx] = 0
                     ep_lengths[idx] = 0
-        rollout_end_time = time.time_ns()
-        rollout_delta_time = (rollout_end_time - rollout_start_time) * 1e-9
 
         # stack data
         for k in data:

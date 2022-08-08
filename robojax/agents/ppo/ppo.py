@@ -1,4 +1,5 @@
 from functools import partial
+import time
 from typing import Any, Callable, Tuple
 
 import chex
@@ -64,6 +65,7 @@ class PPO:
                     adv=0,
                     log_p=aux["log_p"],
                     ret=ep_ret,
+                    orig_ret=ep_ret,
                     value=aux["value"],
                     done=done,
                     ep_len=ep_len,
@@ -96,6 +98,7 @@ class PPO:
                     adv=jnp.zeros((batch_size)),
                     log_p=aux["log_p"],
                     ret=ep_ret,
+                    orig_ret=ep_ret,
                     value=aux["value"],
                     done=done,
                     ep_len=jnp.array(ep_len),
@@ -149,6 +152,7 @@ class PPO:
             info = dict(
                 ep_lens=ep_lens[episode_ends].mean(),
                 ep_rets=ep_rets[episode_ends].mean(),
+                rollout_time=aux["rollout_time"]
             )
             print(info)
             # import ipdb;ipdb.set_trace()
@@ -281,6 +285,8 @@ class PPO:
         if self.cfg.normalize_advantage:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         returns = advantages + buffer.value[-1, :]
+
+        # TODO can we speed up this replace op?
         buffer = buffer.replace(
             adv=advantages,
             ret=returns,
