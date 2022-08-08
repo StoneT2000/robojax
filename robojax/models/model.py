@@ -1,3 +1,6 @@
+"""
+Model class
+"""
 from typing import Any, Callable, Optional, Tuple, TypeVar, Union
 
 import flax
@@ -15,7 +18,7 @@ Params = flax.core.FrozenDict[str, Any]
 @struct.dataclass
 class Model:
     """
-    Model class that holds the model parameters and training state. 
+    Model class that holds the model parameters and training state.
     Provides wrapped functions to execute forward passes in OOP style.
     similar to flax TrainState
 
@@ -27,7 +30,8 @@ class Model:
     model: nn.Module = struct.field(pytree_node=False)
     params: Params
     apply_fn: Callable = struct.field(pytree_node=False)
-    tx: Optional[optax.GradientTransformation] = struct.field(pytree_node=False)
+    tx: Optional[optax.GradientTransformation] = struct.field(
+        pytree_node=False)
     opt_state: Optional[optax.OptState] = None
     step: int = 0
 
@@ -55,7 +59,8 @@ class Model:
         return self.apply_fn(self.params, *args, **kwargs)
 
     def apply_gradients(self, grads):
-        updates, updated_opt_state = self.tx.update(grads, self.opt_state, self.params)
+        updates, updated_opt_state = self.tx.update(
+            grads, self.opt_state, self.params)
         updated_params = optax.apply_updates(self.params, updates)
         return self.replace(
             step=self.step + 1, params=updated_params, opt_state=updated_opt_state

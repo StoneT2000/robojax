@@ -1,3 +1,4 @@
+"""Categorical class"""
 import chex
 import distrax
 import flax.linen as nn
@@ -11,6 +12,9 @@ Scalar = chex.Scalar
 
 
 class Categorical(nn.Module):
+    """
+    Categorical exploration module, returning a distribution over given logits
+    """
     categorical = True
 
     def __call__(self, a) -> distrax.Distribution:

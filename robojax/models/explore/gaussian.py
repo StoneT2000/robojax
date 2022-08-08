@@ -1,3 +1,4 @@
+"""Gaussian class"""
 import chex
 import distrax
 import flax.linen as nn
@@ -11,6 +12,7 @@ Scalar = chex.Scalar
 
 
 class Gaussian(nn.Module):
+    """Gaussian exploration module, returning a gaussian distribution with a given mean and scale"""
     categorical = False
     act_dims: int
     log_std_scale: float = -0.5
@@ -18,7 +20,8 @@ class Gaussian(nn.Module):
     def setup(self) -> None:
         self.log_std = self.param(
             "log_std",
-            lambda rng, act_dims, log_std_scale: jnp.ones(act_dims) * log_std_scale,
+            lambda rng, act_dims, log_std_scale: jnp.ones(
+                act_dims) * log_std_scale,
             self.act_dims,
             self.log_std_scale,
         )

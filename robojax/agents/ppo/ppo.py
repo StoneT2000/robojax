@@ -45,7 +45,8 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
 
 
 class PPO:
-    def __init__(self, env: gym.Env, jax_env: bool, cfg: PPOConfig = {}) -> None:
+    def __init__(self, env: gym.Env, jax_env: bool,
+                 cfg: PPOConfig = {}) -> None:
         self.jax_env = jax_env
 
         # if env.step.__class__.__name__ == "CompiledFunction":
@@ -219,7 +220,8 @@ class PPO:
         def update_step_fn(data: Tuple[PRNGKey, Model, Model], unused):
             rng_key, actor, critic = data
             rng_key, sample_rng_key = jax.random.split(rng_key)
-            batch = TimeStep(**sampler.sample_random_batch(sample_rng_key, batch_size))
+            batch = TimeStep(
+                **sampler.sample_random_batch(sample_rng_key, batch_size))
             info_a, info_c = None, None
             new_actor = actor
             new_critic = critic
@@ -236,7 +238,8 @@ class PPO:
                 new_actor = actor.apply_gradients(grads=grads)
             if update_critic:
                 grads_c_fn = jax.grad(
-                    critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch),
+                    critic_loss_fn(
+                        critic_apply_fn=critic.apply_fn, batch=batch),
                     has_aux=True,
                 )
                 grads, info_c = grads_c_fn(critic.params)
@@ -255,7 +258,8 @@ class PPO:
         self, rng_key, rollout_steps_per_env: int, num_envs: int, apply_fn: Callable
     ):
         # buffer collection is not jitted if env is not jittable
-        # regardless this function returns a struct.dataclass object with all the data in jax.numpy arrays for use
+        # regardless this function returns a struct.dataclass object with all
+        # the data in jax.numpy arrays for use
 
         rng_key, *env_rng_keys = jax.random.split(rng_key, num_envs + 1)
         buffer: TimeStep = self.loop.rollout(
@@ -265,7 +269,8 @@ class PPO:
         )
 
         if not self.jax_env:
-            # if not a jax based env, then buffer is a python dictionary and we convert it
+            # if not a jax based env, then buffer is a python dictionary and we
+            # convert it
             buffer = TimeStep(**buffer)
 
         # rest of the code here is jitted and / or vmapped
@@ -277,7 +282,8 @@ class PPO:
             self.cfg.gae_lambda,
         )
         if self.cfg.normalize_advantage:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+            advantages = (advantages - advantages.mean()) / \
+                (advantages.std() + 1e-8)
         returns = advantages + buffer.value[-1, :]
         buffer = buffer.replace(
             adv=advantages,

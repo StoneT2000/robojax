@@ -31,7 +31,8 @@ def assert_is_prng_key(key: PRNGKey):
             default_impl = jax.random.default_prng_impl()
             expected_shapes = (default_impl.key_shape,)
             if default_impl.key_shape != (2,):
-                # Default PRNG impl is set to something different from threefry.
+                # Default PRNG impl is set to something different from
+                # threefry.
                 config_hint = (
                     "\nHint: jax_default_prng_impl has been set to "
                     f"'{jax_config.jax_default_prng_impl}', the shape "
@@ -99,7 +100,8 @@ class PRNGSequence(Iterator[PRNGKey]):
             #     key, subkey1, subkey2 = jax.random.split(key, 3)  # reserve(2)
             #     key, subkey3, subkey4 = jax.random.split(key, 3)  # reserve(2)
             #
-            # Where subkey1->subkey4 are provided to the user in order when requested.
+            # Where subkey1->subkey4 are provided to the user in order when
+            # requested.
             new_keys = tuple(jax.random.split(self._key, num + 1))
             self._key = new_keys[0]
             self._subkeys.extend(new_keys[1:])

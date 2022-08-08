@@ -37,12 +37,14 @@ class GymLoop(BaseEnvLoop):
     RL loop with an environment
     """
 
-    def __init__(self, env: gym.Env, rollout_callback: Callable = None) -> None:
+    def __init__(self, env: gym.Env,
+                 rollout_callback: Callable = None) -> None:
         self.env = env
         self.rollout_callback = rollout_callback
         pass
 
-    def rollout(self, rng_keys: List[PRNGKey], apply_fn: Callable, steps_per_env: int):
+    def rollout(self, rng_keys: List[PRNGKey],
+                apply_fn: Callable, steps_per_env: int):
         """
         perform a rollout on a non jittable environment
         """
@@ -120,7 +122,7 @@ class JaxLoop(BaseEnvLoop):
         rng_key, reset_rng_key = jax.random.split(rng_key)
         env_obs, env_state = self.env_reset(reset_rng_key)
 
-        def step_fn(data: Tuple[Env_Obs, Env_State, float, int], i):
+        def step_fn(data: Tuple[Env_Obs, Env_State, float, int], _):
             rng_key, env_obs, env_state, ep_ret, ep_len = data
             rng_key, rng_reset, rng_step, rng_fn = jax.random.split(rng_key, 4)
             action, aux = apply_fn(rng_fn, env_obs)
@@ -169,7 +171,8 @@ class JaxLoop(BaseEnvLoop):
                 new_ep_len,
             ), rb
 
-        step_init = (rng_key, env_obs, env_state, jnp.zeros((1,)), jnp.zeros((1,)))
+        step_init = (rng_key, env_obs, env_state,
+                     jnp.zeros((1,)), jnp.zeros((1,)))
         _, rollout_data = jax.lax.scan(step_fn, step_init, (), steps)
         return rollout_data
 

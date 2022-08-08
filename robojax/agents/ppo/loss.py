@@ -1,3 +1,7 @@
+"""
+Loss functions for the PPO agent
+"""
+
 from typing import Callable
 
 import distrax
@@ -8,7 +12,8 @@ from robojax.agents.ppo.config import TimeStep
 from robojax.models import Model, Params
 
 
-def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: TimeStep):
+def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable,
+                  batch: TimeStep):
     def loss_fn(actor_params: Params):
         obs, act, adv, logp_old = batch.env_obs, batch.action, batch.adv, batch.log_p
         # ac.pi.val()
@@ -18,7 +23,8 @@ def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: TimeStep):
         # ac.pi.train()
 
         ratio = jnp.exp(logp - logp_old)
-        clip_adv = jax.lax.clamp(1.0 - clip_ratio, ratio, 1.0 + clip_ratio) * adv
+        clip_adv = jax.lax.clamp(
+            1.0 - clip_ratio, ratio, 1.0 + clip_ratio) * adv
         loss_pi = -jnp.mean(jnp.minimum(ratio * adv, clip_adv), axis=0)
         entropy = dist.entropy().mean()
 

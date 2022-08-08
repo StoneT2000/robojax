@@ -1,3 +1,5 @@
+"""MLP class"""
+
 from typing import Callable, Sequence
 
 import flax.linen as nn

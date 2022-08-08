@@ -55,6 +55,7 @@ class Actor(nn.Module):
         dist = self.explorer(a)
         return dist, a
 
+
 class ActorCritic:
     actor: Model
     critic: Model
