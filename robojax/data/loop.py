@@ -91,6 +91,7 @@ class JaxLoop(BaseEnvLoop):
     """
     Env loop for jax based environments
     """
+
     def __init__(
         self,
         env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState]],
