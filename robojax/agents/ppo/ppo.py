@@ -45,8 +45,7 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
 
 
 class PPO:
-    def __init__(self, env: gym.Env, jax_env: bool,
-                 cfg: PPOConfig = {}) -> None:
+    def __init__(self, env: gym.Env, jax_env: bool, cfg: PPOConfig = {}) -> None:
         self.jax_env = jax_env
 
         # if env.step.__class__.__name__ == "CompiledFunction":
@@ -146,7 +145,7 @@ class PPO:
             buffer = aux["buffer"]
             ep_lens = np.asarray(buffer.ep_len)
             ep_rets = np.asarray(buffer.ret)
-            episode_ends = np.asarray(buffer.done) == True
+            episode_ends = np.asarray(buffer.done)
             info = dict(
                 ep_lens=ep_lens[episode_ends].mean(),
                 ep_rets=ep_rets[episode_ends].mean(),
@@ -220,8 +219,7 @@ class PPO:
         def update_step_fn(data: Tuple[PRNGKey, Model, Model], unused):
             rng_key, actor, critic = data
             rng_key, sample_rng_key = jax.random.split(rng_key)
-            batch = TimeStep(
-                **sampler.sample_random_batch(sample_rng_key, batch_size))
+            batch = TimeStep(**sampler.sample_random_batch(sample_rng_key, batch_size))
             info_a, info_c = None, None
             new_actor = actor
             new_critic = critic
@@ -238,8 +236,7 @@ class PPO:
                 new_actor = actor.apply_gradients(grads=grads)
             if update_critic:
                 grads_c_fn = jax.grad(
-                    critic_loss_fn(
-                        critic_apply_fn=critic.apply_fn, batch=batch),
+                    critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch),
                     has_aux=True,
                 )
                 grads, info_c = grads_c_fn(critic.params)
@@ -282,8 +279,7 @@ class PPO:
             self.cfg.gae_lambda,
         )
         if self.cfg.normalize_advantage:
-            advantages = (advantages - advantages.mean()) / \
-                (advantages.std() + 1e-8)
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         returns = advantages + buffer.value[-1, :]
         buffer = buffer.replace(
             adv=advantages,

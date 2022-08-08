@@ -14,6 +14,7 @@ class PPOConfig:
     """
     Configuration datalcass for PPO
     """
+
     normalize_advantage: Optional[bool] = True
     gamma: Optional[float] = 0.99
     gae_lambda: Optional[float] = 0.97

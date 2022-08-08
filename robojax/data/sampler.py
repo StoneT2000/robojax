@@ -1,7 +1,7 @@
 """
 Samplers for data collected from environment loops
 """
-from dataclasses import dataclass, fields
+from dataclasses import fields
 from functools import partial
 
 import jax
@@ -9,17 +9,23 @@ from chex import PRNGKey
 
 
 class BufferSampler:
+    """
+    Samples batches of data from a given buffer. Expects buffer to be of type `flax.struct.dataclass`
+    """
+
     def __init__(self, buffer, buffer_size: int, num_envs: int) -> None:
         self.buffer = buffer
         self.buffer_size = buffer_size
         self.num_envs = num_envs
         self.buffer_keys = fields(self.buffer)
 
-    @partial(jax.jit, static_argnames=["self",
-             "batch_size", "drop_last_batch"])
+    @partial(jax.jit, static_argnames=["self", "batch_size", "drop_last_batch"])
     def sample_batch(
         self, rng_key: PRNGKey, batch_size: int, drop_last_batch: bool = True
     ):
+        """
+        Sample a batch of data without replacement
+        """
         pass
 
     @partial(jax.jit, static_argnames=["self", "batch_size"])
@@ -41,10 +47,9 @@ class BufferSampler:
     @partial(jax.jit, static_argnames=["self"])
     def _get_batch_by_ids(self, batch_ids, env_ids):
         """
-        statefully retrieve batch of data
+        retrieve batch of data via batch ids and env ids
         """
-        data = dict()
+        data = {}
         for field in self.buffer_keys:
-            data[field.name] = getattr(self.buffer, field.name)[
-                batch_ids, env_ids]
+            data[field.name] = getattr(self.buffer, field.name)[batch_ids, env_ids]
         return data

@@ -2,10 +2,6 @@
 import chex
 import distrax
 import flax.linen as nn
-import jax
-import jax.numpy as jnp
-
-from robojax.models import Model
 
 Array = chex.Array
 Scalar = chex.Scalar
@@ -15,6 +11,7 @@ class Categorical(nn.Module):
     """
     Categorical exploration module, returning a distribution over given logits
     """
+
     categorical = True
 
     def __call__(self, a) -> distrax.Distribution:

@@ -4,21 +4,19 @@ Environment Loops
 
 import time
 from abc import ABC, abstractmethod
-from argparse import Namespace
 from collections import defaultdict
 from functools import partial
 from typing import Any, Callable, List, Tuple, TypeVar
 
-import chex
 import gym
 import jax
 import jax.numpy as jnp
 import numpy as np
-from chex import ArrayTree, PRNGKey
+from chex import PRNGKey
 
-Env_Obs = TypeVar("Env_Obs")
-Env_State = TypeVar("Env_State")
-Env_Action = TypeVar("Env_Action")
+EnvObs = TypeVar("EnvObs")
+EnvState = TypeVar("EnvState")
+EnvAction = TypeVar("EnvAction")
 
 
 class BaseEnvLoop(ABC):
@@ -37,14 +35,12 @@ class GymLoop(BaseEnvLoop):
     RL loop with an environment
     """
 
-    def __init__(self, env: gym.Env,
-                 rollout_callback: Callable = None) -> None:
+    def __init__(self, env: gym.Env, rollout_callback: Callable = None) -> None:
         self.env = env
         self.rollout_callback = rollout_callback
-        pass
+        super().__init__()
 
-    def rollout(self, rng_keys: List[PRNGKey],
-                apply_fn: Callable, steps_per_env: int):
+    def rollout(self, rng_keys: List[PRNGKey], apply_fn: Callable, steps_per_env: int):
         """
         perform a rollout on a non jittable environment
         """
@@ -95,12 +91,15 @@ class GymLoop(BaseEnvLoop):
 
 
 class JaxLoop(BaseEnvLoop):
+    """
+    Env loop for jax based environments
+    """
     def __init__(
         self,
-        env_reset: Callable[[PRNGKey], Tuple[Env_Obs, Env_State]],
+        env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState]],
         env_step: Callable[
-            [PRNGKey, Env_State, Env_Action],
-            Tuple[Env_Obs, Env_State, float, bool, Any],
+            [PRNGKey, EnvState, EnvAction],
+            Tuple[EnvObs, EnvState, float, bool, Any],
         ],
         rollout_callback: Callable = None,
     ) -> None:
@@ -122,7 +121,7 @@ class JaxLoop(BaseEnvLoop):
         rng_key, reset_rng_key = jax.random.split(rng_key)
         env_obs, env_state = self.env_reset(reset_rng_key)
 
-        def step_fn(data: Tuple[Env_Obs, Env_State, float, int], _):
+        def step_fn(data: Tuple[EnvObs, EnvState, float, int], _):
             rng_key, env_obs, env_state, ep_ret, ep_len = data
             rng_key, rng_reset, rng_step, rng_fn = jax.random.split(rng_key, 4)
             action, aux = apply_fn(rng_fn, env_obs)
@@ -171,8 +170,7 @@ class JaxLoop(BaseEnvLoop):
                 new_ep_len,
             ), rb
 
-        step_init = (rng_key, env_obs, env_state,
-                     jnp.zeros((1,)), jnp.zeros((1,)))
+        step_init = (rng_key, env_obs, env_state, jnp.zeros((1,)), jnp.zeros((1,)))
         _, rollout_data = jax.lax.scan(step_fn, step_init, (), steps)
         return rollout_data
 
@@ -184,15 +182,19 @@ class JaxLoop(BaseEnvLoop):
         steps_per_env: int,
     ):
         """
-        Rolls out on len(rng_keys) parallelized environments with a given policy and returns a buffer produced by rollout_callback
+        Rolls out on len(rng_keys) parallelized environments with a given policy and returns a
+        buffer produced by rollout_callback
 
-        This rollout style vmaps rollouts on each parallel env, which are all continuous. Once an episode is done, the next immediately starts
+        This rollout style vmaps rollouts on each parallel env, which are all continuous.
+        Once an episode is done, the next immediately starts
 
 
         Note: This is faster than only jitting an episode rollout and using a valid mask to remove
-        time steps in rollouts that occur after the environment is done. The speed increase is noticeable for low number of parallel envs
+        time steps in rollouts that occur after the environment is done.
+        The speed increase is noticeable for low number of parallel envs
 
-        The downside here is that the first run will always take extra time but this is generally quite minimal overhead over the long term.
+        The downside here is that the first run will always take extra time but this is
+        generally quite minimal overhead over the long term.
 
         """
         batch_rollout = jax.vmap(
