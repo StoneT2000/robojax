@@ -1,8 +1,8 @@
 # Robojax
 
-A high-performance reinforcement learning library in jax specialized for robotic learning
+A high-performance reinforcement learning library in jax specialized for robotic learning. Works out of the box with jax based environments like [Gymnax](https://github.com/RobertTLange/gymnax) and [Brax](https://github.com/google/brax/tree/main/brax) and non-jax based environments like ...
 
-<img src="https://user-images.githubusercontent.com/35373228/160072285-fb65294b-f6a6-4028-b60a-ac774191ac85.jpg" width=200/>
+<!-- <img src="https://user-images.githubusercontent.com/35373228/160072285-fb65294b-f6a6-4028-b60a-ac774191ac85.jpg" width=200/> -->
 
 My personal RL library (at the moment). Frequently changed and edited, but feel free to use as potential reference code (its mostly correct)
 
@@ -20,9 +20,3 @@ I highly recommend using conda. Otherwise you can try and install all the packag
 ```
 conda env create -f environment.yml
 ```
-
-## Contributors
-
-
-
-- name credits to @jonzamora
