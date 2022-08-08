@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from robojax.agents.ppo.config import TimeStep
-from robojax.models.model import Model, Params
+from robojax.models import Model, Params
 
 
 def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: TimeStep):

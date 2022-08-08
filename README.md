@@ -4,14 +4,7 @@ A high-performance reinforcement learning library in jax specialized for robotic
 
 <!-- <img src="https://user-images.githubusercontent.com/35373228/160072285-fb65294b-f6a6-4028-b60a-ac774191ac85.jpg" width=200/> -->
 
-My personal RL library (at the moment). Frequently changed and edited, but feel free to use as potential reference code (its mostly correct)
-
-Implements PPO, DAPG w/ PPO, and GAIL (probably broken)
-
-Main Features:
-- Always seeded, we love reproducibility
-- Highly configurable with functional capabilities. You can pull out specific parts of algorithms out and tweak it (e.g. the PPO update is written functionally)
-- WALL-E might have endorsed this repository
+How is it specialized? It includes popular algorithms often used in robotic learning research like PPO and SAC, as well as architectures often used for visual / 3D RL like transformers, point nets, etc.
 
 ## Setup
 

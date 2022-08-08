@@ -11,7 +11,7 @@ import numpy as np
 import optax
 from chex import Array, PRNGKey
 
-from robojax.models import Model
+from robojax.models.model import Model
 
 Params = flax.core.FrozenDict[str, Any]
 
