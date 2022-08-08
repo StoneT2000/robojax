@@ -15,7 +15,8 @@ Params = flax.core.FrozenDict[str, Any]
 @struct.dataclass
 class Model:
     """
-    model class that holds the model parameters and training state. Provides wrapped functions to execute forward passes in OOP style.
+    Model class that holds the model parameters and training state. 
+    Provides wrapped functions to execute forward passes in OOP style.
     similar to flax TrainState
 
     calling Model.create returns the original nn.Module but additional functions

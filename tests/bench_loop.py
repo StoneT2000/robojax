@@ -5,7 +5,7 @@ import jax
 import numpy as np
 from gymnax.experimental import RolloutWrapper
 
-from robojax.loop import JaxLoop
+from robojax.data import JaxLoop
 
 
 def speed_gymnax_random(env_name, num_env_steps, num_envs, rng, env_kwargs):

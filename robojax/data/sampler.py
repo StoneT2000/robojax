@@ -1,3 +1,6 @@
+"""
+Samplers for data collected from environment loops
+"""
 from dataclasses import dataclass, fields
 from functools import partial
 
@@ -27,7 +30,6 @@ class BufferSampler:
         batch_ids = jax.random.randint(
             batch_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.buffer_size
         )
-        # batch_ids = (np.random.randint(0, self.buffer_size, size=batch_size) + self.ptr) % self.buffer_size
         rng_key, env_ids_rng_key = jax.random.split(rng_key)
         env_ids = jax.random.randint(
             env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.num_envs

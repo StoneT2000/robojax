@@ -1,3 +1,7 @@
+"""
+Configurations and utility classes
+"""
+
 import dataclasses
 from typing import Optional
 
@@ -7,6 +11,9 @@ from flax import struct
 
 @dataclasses.dataclass
 class PPOConfig:
+    """
+    Configuration datalcass for PPO
+    """
     normalize_advantage: Optional[bool] = True
     gamma: Optional[float] = 0.99
     gae_lambda: Optional[float] = 0.97
