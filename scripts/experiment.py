@@ -41,6 +41,7 @@ def main(cfg):
                 return state.obs, state
             act_dims = env.action_size
             explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
+            sample_obs = env.reset(jax.random.PRNGKey(0)).obs
         algo = PPO(env_step=env_step, env_reset=env_reset, jax_env=cfg.jax_env)
     else:
         env = gym.make(env_id)
