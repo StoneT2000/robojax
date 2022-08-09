@@ -47,7 +47,14 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
 
 
 class PPO:
-    def __init__(self, jax_env: bool, env=None, env_step=None, env_reset=None, cfg: PPOConfig = {}) -> None:
+    def __init__(
+        self,
+        jax_env: bool,
+        env=None,
+        env_step=None,
+        env_reset=None,
+        cfg: PPOConfig = {},
+    ) -> None:
         self.jax_env = jax_env
 
         # if env.step.__class__.__name__ == "CompiledFunction":
@@ -56,7 +63,9 @@ class PPO:
         # self.env = env
         if self.jax_env:
 
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux):
+            def rollout_callback(
+                action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux
+            ):
                 return TimeStep(
                     action=action,
                     env_obs=env_obs,
@@ -70,8 +79,7 @@ class PPO:
                     info=info,
                 )
 
-            self.loop = JaxLoop(env_reset, env_step,
-                                rollout_callback=rollout_callback)
+            self.loop = JaxLoop(env_reset, env_step, rollout_callback=rollout_callback)
             self.eval_loop = JaxLoop(env_reset, env_step)
             # self.train_step = jax.jit(
             #     self.train_step,
@@ -85,12 +93,14 @@ class PPO:
             #     ],
             # )
             self.collect_buffer = jax.jit(
-                self.collect_buffer, static_argnames=[
-                    "rollout_steps_per_env", "num_envs", "apply_fn"]
+                self.collect_buffer,
+                static_argnames=["rollout_steps_per_env", "num_envs", "apply_fn"],
             )
         else:
             # we expect env to be a vectorized env now
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux):
+            def rollout_callback(
+                action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux
+            ):
                 batch_size = len(env_obs)
                 return dict(
                     action=action,
@@ -158,8 +168,6 @@ class PPO:
             # EVALUATe
             rng_key, *eval_env_rng_keys = jax.random.split(rng_key, 20 + 1)
 
-            
-
             if logger is not None:
                 total_env_steps = (t + 1) * env_steps_per_epoch
                 pi_loss_aux = aux["update_aux"][0]
@@ -208,11 +216,19 @@ class PPO:
                 if verbose > 0:
                     if verbose == 1:
                         filtered_stat_keys = [
-                            "train/ep_len_avg", "train/ep_ret_avg",
-                            "time/rollout", "time/update", "time/total",
-                                              "time/sps", "time/epoch", "test/ep_ret_avg", "test/ep_len_avg"]
-                        filtered_stats = {k: stats[k]
-                                          for k in filtered_stat_keys if k in stats}
+                            "train/ep_len_avg",
+                            "train/ep_ret_avg",
+                            "time/rollout",
+                            "time/update",
+                            "time/total",
+                            "time/sps",
+                            "time/epoch",
+                            "test/ep_ret_avg",
+                            "test/ep_len_avg",
+                        ]
+                        filtered_stats = {
+                            k: stats[k] for k in filtered_stat_keys if k in stats
+                        }
                         logger.pretty_print_table(filtered_stats)
                     else:
                         logger.pretty_print_table(stats)
@@ -257,8 +273,12 @@ class PPO:
         return (
             actor,
             critic,
-            dict(buffer=buffer, update_aux=update_aux,
-                 rollout_time=rollout_time, update_time=update_time),
+            dict(
+                buffer=buffer,
+                update_aux=update_aux,
+                rollout_time=rollout_time,
+                update_time=update_time,
+            ),
         )
 
     @partial(
@@ -284,14 +304,17 @@ class PPO:
         batch_size: int,
         buffer: TimeStep,
     ):
-        sampler = BufferSampler(['action', 'env_obs', 'log_p', 'ep_ret', 'adv'],
-                                buffer, buffer_size=buffer.action.shape[0], num_envs=num_envs)
+        sampler = BufferSampler(
+            ["action", "env_obs", "log_p", "ep_ret", "adv"],
+            buffer,
+            buffer_size=buffer.action.shape[0],
+            num_envs=num_envs,
+        )
 
         def update_step_fn(data: Tuple[PRNGKey, Model, Model], unused):
             rng_key, actor, critic = data
             rng_key, sample_rng_key = jax.random.split(rng_key)
-            batch = TimeStep(
-                **sampler.sample_random_batch(sample_rng_key, batch_size))
+            batch = TimeStep(**sampler.sample_random_batch(sample_rng_key, batch_size))
             info_a, info_c = None, None
             new_actor = actor
             new_critic = critic
@@ -309,8 +332,7 @@ class PPO:
                 new_actor = actor.apply_gradients(grads=grads)
             if update_critic:
                 grads_c_fn = jax.grad(
-                    critic_loss_fn(
-                        critic_apply_fn=critic.apply_fn, batch=batch),
+                    critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch),
                     has_aux=True,
                 )
                 grads, info_c = grads_c_fn(critic.params)
@@ -319,12 +341,21 @@ class PPO:
 
         update_init = (rng_key, actor, critic)
         carry, update_aux = jax.lax.scan(
-            update_step_fn, update_init, (), length=update_iters)
+            update_step_fn, update_init, (), length=update_iters
+        )
         _, actor, critic = carry
 
         return actor, critic, update_aux
 
-    def collect_buffer(self, rng_key, rollout_steps_per_env: int, num_envs: int, actor, critic, apply_fn: Callable):
+    def collect_buffer(
+        self,
+        rng_key,
+        rollout_steps_per_env: int,
+        num_envs: int,
+        actor,
+        critic,
+        apply_fn: Callable,
+    ):
         # buffer collection is not jitted if env is not jittable
         # regardless this function returns a struct.dataclass object with all
         # the data in jax.numpy arrays for use
@@ -350,8 +381,7 @@ class PPO:
         )
         returns = advantages + buffer.value[-1, :]
         if self.cfg.normalize_advantage:
-            advantages = (advantages - advantages.mean()) / \
-                (advantages.std() + 1e-8)
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         # TODO can we speed up this replace op?
         buffer = buffer.replace(

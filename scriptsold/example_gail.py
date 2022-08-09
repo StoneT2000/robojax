@@ -5,11 +5,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 from stable_baselines3.common.env_util import make_vec_env
-from walle_rl.modelfree.gail import GAIL
-
 from walle_rl.architecture.ac.core import mlp
 from walle_rl.architecture.ac.mlp import MLPActorCritic
 from walle_rl.logger.logger import Logger
+from walle_rl.modelfree.gail import GAIL
 
 # 2 ways to work with envs
 # mpi it and have one env per process, each process has its own copy

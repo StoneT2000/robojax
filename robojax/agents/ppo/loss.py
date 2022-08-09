@@ -12,7 +12,10 @@ import jax.numpy as jnp
 from robojax.agents.ppo.config import TimeStep
 from robojax.models import Model, Params
 
-def actor_loss_fn(clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep):
+
+def actor_loss_fn(
+    clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep
+):
     def loss_fn(actor_params: Params):
         obs, act, adv, logp_old = batch.env_obs, batch.action, batch.adv, batch.log_p
         # ac.pi.val()
@@ -31,13 +34,12 @@ def actor_loss_fn(clip_ratio: float, entropy_coef: float, actor_apply_fn: Callab
 
         total_loss = pi_loss + entropy_loss
         info = dict(
-            pi_loss=pi_loss,
-            entropy=entropy,
-            approx_kl=jax.lax.stop_gradient(approx_kl)
+            pi_loss=pi_loss, entropy=entropy, approx_kl=jax.lax.stop_gradient(approx_kl)
         )
         return total_loss, info
 
     return loss_fn
+
 
 def critic_loss_fn(critic_apply_fn: Callable, batch: TimeStep):
     def loss_fn(critic_params: Params):

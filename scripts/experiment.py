@@ -1,19 +1,23 @@
+import os.path as osp
+
 import gym
 import gymnax
 import jax
 import jax.numpy as jnp
-from brax import envs
 import optax
-import os.path as osp
+from brax import envs
+from stable_baselines3.common.env_util import make_vec_env
+
 from robojax.agents.ppo import PPO
 from robojax.agents.ppo.config import PPOConfig
+from robojax.cfg.parse import parse_cfg
 from robojax.logger import Logger
 from robojax.models import explore
 from robojax.models.ac.core import ActorCritic
 from robojax.models.mlp import MLP
-from robojax.cfg.parse import parse_cfg
-from stable_baselines3.common.env_util import make_vec_env
 from robojax.utils.spaces import get_action_dim
+
+
 def main(cfg):
     env_id = cfg.env_id
     num_envs = cfg.train.num_envs
@@ -33,12 +37,21 @@ def main(cfg):
             sample_obs = env_reset(jax.random.PRNGKey(0))[0]
         elif is_brax_env:
             env = envs.create(env_id, auto_reset=False)
+
             def env_step(rng_key, state, action):
                 state = env.step(state, action)
-                return state.obs, state, state.reward, state.done != 0.0, dict(**state.info, metrics=state.metrics)
+                return (
+                    state.obs,
+                    state,
+                    state.reward,
+                    state.done != 0.0,
+                    dict(**state.info, metrics=state.metrics),
+                )
+
             def env_reset(rng_key):
                 state = env.reset(rng_key)
                 return state.obs, state
+
             act_dims = env.action_size
             explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
             sample_obs = env.reset(jax.random.PRNGKey(0)).obs
@@ -49,12 +62,12 @@ def main(cfg):
         algo = PPO(env=env, jax_env=cfg.jax_env)
         act_dims = get_action_dim(env.action_space)
         sample_obs = env.reset()
-    
+
     assert env != None
     assert act_dims != None
 
     algo.cfg = PPOConfig(**cfg.ppo)
-    
+
     actor = MLP([256, 256, act_dims], output_activation=None)
     critic = MLP([256, 256, 1], output_activation=None)
     ac = ActorCritic(
@@ -68,11 +81,12 @@ def main(cfg):
         critic_optim=optax.adam(learning_rate=cfg.model.critic_lr),
     )
     logger = Logger(
-        cfg=cfg, **cfg.logger,
+        cfg=cfg,
+        **cfg.logger,
     )
-    model_path = "weights.jx" #osp.join(logger.exp_path, "weights.jx")
+    model_path = "weights.jx"  # osp.join(logger.exp_path, "weights.jx")
     # ac.load(model_path)
-    
+
     algo.train(
         rng_key=jax.random.PRNGKey(cfg.seed),
         steps_per_epoch=cfg.train.steps_per_epoch,
@@ -84,8 +98,6 @@ def main(cfg):
         logger=logger,
     )
     ac.save(model_path)
-
-
 
 
 if __name__ == "__main__":

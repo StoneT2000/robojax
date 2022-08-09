@@ -1,14 +1,13 @@
-import gym
 import brax
-from brax import envs
-from brax.io import html, image
-from IPython.display import HTML, Image 
-
+import gym
 import jax
 import jax.numpy as jnp
-from matplotlib import pyplot as plt
 import numpy as np
 import optax
+from brax import envs
+from brax.io import html, image
+from IPython.display import HTML, Image
+from matplotlib import pyplot as plt
 from stable_baselines3.common.env_util import make_vec_env
 
 from robojax.agents.ppo.ppo import PPO
@@ -21,12 +20,18 @@ env = envs.create(env_name=environment, auto_reset=False, episode_length=1000)
 state = env.reset(rng=jax.random.PRNGKey(0))
 
 num_envs = 32
+
+
 def env_step(rng_key, state, action):
     state = env.step(state, action * 0)
     return state.obs, state, state.reward, state.done != 0.0, state.info
+
+
 def env_reset(rng_key):
     state = env.reset(rng_key)
     return state.obs, state
+
+
 algo = PPO(env_step=env_step, env_reset=env_reset, jax_env=True)
 
 act_dims = env.action_size
@@ -44,7 +49,7 @@ ac = ActorCritic(
 )
 algo.train(
     rng_key=jax.random.PRNGKey(0),
-    steps_per_epoch=2048*4,
+    steps_per_epoch=2048 * 4,
     update_iters=80,
     num_envs=num_envs,
     epochs=4000,

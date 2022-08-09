@@ -1,7 +1,6 @@
 """
 Samplers for data collected from environment loops
 """
-from dataclasses import fields
 from functools import partial
 
 import jax
@@ -17,7 +16,7 @@ class BufferSampler:
         self.buffer = buffer
         self.buffer_size = buffer_size
         self.num_envs = num_envs
-        self.buffer_keys=buffer_keys
+        self.buffer_keys = buffer_keys
 
     @partial(jax.jit, static_argnames=["self", "batch_size", "drop_last_batch"])
     def sample_batch(

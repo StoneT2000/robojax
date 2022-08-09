@@ -72,7 +72,14 @@ class GymLoop(BaseEnvLoop):
                     aux=aux,
                 )
             else:
-                rb = dict(env_obs=observations, action=actions, reward=rewards, ep_ret=ep_returns.copy(), ep_len=ep_lengths.copy(),done=dones)
+                rb = dict(
+                    env_obs=observations,
+                    action=actions,
+                    reward=rewards,
+                    ep_ret=ep_returns.copy(),
+                    ep_len=ep_lengths.copy(),
+                    done=dones,
+                )
             for k, v in rb.items():
                 data[k].append(v)
             observations = next_observations
@@ -159,7 +166,14 @@ class JaxLoop(BaseEnvLoop):
                     aux=aux,
                 )
             else:
-                rb = dict(env_obs=env_obs, action=action, reward=reward, ep_ret=ep_ret, ep_len=ep_len,done=done)
+                rb = dict(
+                    env_obs=env_obs,
+                    action=action,
+                    reward=reward,
+                    ep_ret=ep_ret,
+                    ep_len=ep_len,
+                    done=done,
+                )
             return (
                 rng_key,
                 next_env_obs,

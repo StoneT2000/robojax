@@ -3,7 +3,6 @@ import argparse
 import gym
 import torch
 from omegaconf import OmegaConf
-
 from walle_rl.architecture.ac.mlp import MLPActorCritic
 from walle_rl.logger import Logger
 from walle_rl.modelfree.ppo import PPO

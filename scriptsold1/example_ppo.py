@@ -2,9 +2,8 @@ import flax.linen as nn
 import gym
 import jax
 import jax.numpy as jnp
-from stable_baselines3.common.env_util import make_vec_env
-
 import walle_rl.agents.ppo
+from stable_baselines3.common.env_util import make_vec_env
 from walle_rl.architecture.mlp import MLP
 from walle_rl.common.random import PRNGSequence
 

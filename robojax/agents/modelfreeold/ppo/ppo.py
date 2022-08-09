@@ -9,13 +9,12 @@ import torch
 from gym import spaces
 from torch import optim
 from torch.nn import functional as F
-from walle_rl.modelfree.ppo.buffer import PPOBuffer
-
 from walle_rl.architecture.ac.core import ActorCritic, count_vars
 from walle_rl.buffer.buffer import GenericBuffer
 from walle_rl.common.rollout import Rollout
 from walle_rl.common.utils import to_torch
 from walle_rl.logger.logger import Logger
+from walle_rl.modelfree.ppo.buffer import PPOBuffer
 
 
 class PPO:
