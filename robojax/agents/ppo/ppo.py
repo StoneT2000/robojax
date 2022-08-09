@@ -313,9 +313,10 @@ class PPO:
             self.cfg.gamma,
             self.cfg.gae_lambda,
         )
+        returns = advantages + buffer.value[-1, :]
         if self.cfg.normalize_advantage:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-        returns = advantages + buffer.value[-1, :]
+        
 
         # TODO can we speed up this replace op?
         buffer = buffer.replace(
