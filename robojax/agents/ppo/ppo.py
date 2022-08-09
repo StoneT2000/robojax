@@ -63,15 +63,16 @@ class PPO:
                     reward=reward,
                     adv=0,
                     log_p=aux["log_p"],
-                    ret=ep_ret,
-                    orig_ret=ep_ret,
+                    ep_ret=ep_ret,
                     value=aux["value"],
                     done=done,
                     ep_len=ep_len,
                     info=info,
                 )
 
-            self.loop = JaxLoop(env_reset, env_step, rollout_callback=rollout_callback)
+            self.loop = JaxLoop(env_reset, env_step,
+                                rollout_callback=rollout_callback)
+            self.eval_loop = JaxLoop(env_reset, env_step)
             # self.train_step = jax.jit(
             #     self.train_step,
             #     static_argnames=[
@@ -84,7 +85,8 @@ class PPO:
             #     ],
             # )
             self.collect_buffer = jax.jit(
-                self.collect_buffer, static_argnames=["rollout_steps_per_env", "num_envs", "apply_fn"]
+                self.collect_buffer, static_argnames=[
+                    "rollout_steps_per_env", "num_envs", "apply_fn"]
             )
         else:
             # we expect env to be a vectorized env now
@@ -96,8 +98,7 @@ class PPO:
                     reward=reward,
                     adv=jnp.zeros((batch_size)),
                     log_p=aux["log_p"],
-                    ret=ep_ret,
-                    orig_ret=ep_ret,
+                    ep_ret=ep_ret,
                     value=aux["value"],
                     done=done,
                     ep_len=jnp.array(ep_len),
@@ -120,13 +121,15 @@ class PPO:
         train_start_time = time.time()
         if self.jax_env:
 
-            def apply_fn(rng_key, actor, critic, obs):
+            def apply_fn(rng_key, params, obs):
+                actor, critic = params
                 res = ac.step(rng_key, actor, critic, obs)
                 return res
 
         else:
 
-            def apply_fn(rng_key, actor, critic, obs):
+            def apply_fn(rng_key, params, obs):
+                actor, critic = params
                 res = ac.step(rng_key, actor, critic, obs)
                 return np.array(res[0]), res[1]
 
@@ -151,6 +154,12 @@ class PPO:
             ep_rets = np.asarray(buffer.orig_ret)
             ep_rews = np.asarray(buffer.reward)
             episode_ends = np.asarray(buffer.done)
+
+            # EVALUATe
+            rng_key, *eval_env_rng_keys = jax.random.split(rng_key, 20 + 1)
+
+            
+
             if logger is not None:
                 total_env_steps = (t + 1) * env_steps_per_epoch
                 pi_loss_aux = aux["update_aux"][0]
@@ -168,6 +177,24 @@ class PPO:
                     pi_loss=np.asarray(pi_loss_aux["pi_loss"]),
                     critic_loss=np.asarray(vf_loss_aux["critic_loss"]),
                 )
+                # if t % 20 == 0:
+                #     def eval_apply(rng_key, obs):
+                #         return ac.actor(obs)[1], {}
+                #     eval_buffer: TimeStep = self.eval_loop.rollout(
+                #         eval_env_rng_keys,
+                #         eval_apply,
+                #         1000
+                #     )
+                #     eval_buffer = TimeStep(**eval_buffer)
+                #     eval_episode_ends = np.asarray(eval_buffer.done)
+                #     logger.store(
+                #         tag="test",
+                #         append=False,
+                #         ep_ret=np.asarray(eval_buffer.ep_ret)[
+                #             eval_episode_ends].flatten(),
+                #         ep_len=np.asarray(eval_buffer.ep_len)[
+                #             eval_episode_ends].flatten(),
+                #     )
                 logger.store(
                     tag="time",
                     append=False,
@@ -180,11 +207,16 @@ class PPO:
                 stats = logger.log(total_env_steps)
                 if verbose > 0:
                     if verbose == 1:
-                        filtered_stat_keys = ["train/ep_len_avg", "time/rollout", "time/update", "time/total", "time/sps", "train/ep_ret_avg", "time/epoch"]
-                        filtered_stats = { k: stats[k] for k in filtered_stat_keys }
+                        filtered_stat_keys = [
+                            "train/ep_len_avg", "train/ep_ret_avg",
+                            "time/rollout", "time/update", "time/total",
+                                              "time/sps", "time/epoch", "test/ep_ret_avg", "test/ep_len_avg"]
+                        filtered_stats = {k: stats[k]
+                                          for k in filtered_stat_keys if k in stats}
                         logger.pretty_print_table(filtered_stats)
                     else:
                         logger.pretty_print_table(stats)
+                    logger.reset()
 
     def train_step(
         self,
@@ -225,7 +257,8 @@ class PPO:
         return (
             actor,
             critic,
-            dict(buffer=buffer, update_aux=update_aux, rollout_time=rollout_time, update_time=update_time),
+            dict(buffer=buffer, update_aux=update_aux,
+                 rollout_time=rollout_time, update_time=update_time),
         )
 
     @partial(
@@ -251,12 +284,14 @@ class PPO:
         batch_size: int,
         buffer: TimeStep,
     ):
-        sampler = BufferSampler(['action','env_obs', 'log_p', 'ret', 'adv'], buffer, buffer_size=buffer.action.shape[0], num_envs=num_envs)
+        sampler = BufferSampler(['action', 'env_obs', 'log_p', 'ep_ret', 'adv'],
+                                buffer, buffer_size=buffer.action.shape[0], num_envs=num_envs)
 
         def update_step_fn(data: Tuple[PRNGKey, Model, Model], unused):
             rng_key, actor, critic = data
             rng_key, sample_rng_key = jax.random.split(rng_key)
-            batch = TimeStep(**sampler.sample_random_batch(sample_rng_key, batch_size))
+            batch = TimeStep(
+                **sampler.sample_random_batch(sample_rng_key, batch_size))
             info_a, info_c = None, None
             new_actor = actor
             new_critic = critic
@@ -274,7 +309,8 @@ class PPO:
                 new_actor = actor.apply_gradients(grads=grads)
             if update_critic:
                 grads_c_fn = jax.grad(
-                    critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch),
+                    critic_loss_fn(
+                        critic_apply_fn=critic.apply_fn, batch=batch),
                     has_aux=True,
                 )
                 grads, info_c = grads_c_fn(critic.params)
@@ -282,7 +318,8 @@ class PPO:
             return (rng_key, new_actor, new_critic), (info_a, info_c)
 
         update_init = (rng_key, actor, critic)
-        carry, update_aux = jax.lax.scan(update_step_fn, update_init, (), length=update_iters)
+        carry, update_aux = jax.lax.scan(
+            update_step_fn, update_init, (), length=update_iters)
         _, actor, critic = carry
 
         return actor, critic, update_aux
@@ -291,16 +328,14 @@ class PPO:
         # buffer collection is not jitted if env is not jittable
         # regardless this function returns a struct.dataclass object with all
         # the data in jax.numpy arrays for use
-        def apply_fn_wrapped(rng_key, obs):
-            return apply_fn(rng_key, actor, critic, obs)
-
         rng_key, *env_rng_keys = jax.random.split(rng_key, num_envs + 1)
         buffer: TimeStep = self.loop.rollout(
             env_rng_keys,
-            apply_fn_wrapped,
+            (actor, critic),
+            apply_fn,
             rollout_steps_per_env + 1,  # extra 1 for final value computation
         )
-        
+
         if not self.jax_env:
             # if not a jax based env, then buffer is a python dictionary and we
             # convert it
@@ -315,15 +350,15 @@ class PPO:
         )
         returns = advantages + buffer.value[-1, :]
         if self.cfg.normalize_advantage:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-        
+            advantages = (advantages - advantages.mean()) / \
+                (advantages.std() + 1e-8)
 
         # TODO can we speed up this replace op?
         buffer = buffer.replace(
             adv=advantages,
-            ret=returns,
+            ep_ret=returns,
             reward=buffer.reward[:-1],
-            orig_ret=buffer.orig_ret[:-1],
+            orig_ret=buffer.ep_ret[:-1],
             log_p=buffer.log_p[:-1],
             action=buffer.action[:-1],
             env_obs=buffer.env_obs[:-1],

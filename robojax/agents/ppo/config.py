@@ -35,7 +35,7 @@ class TimeStep:
     adv: chex.Array = None
     reward: chex.Array = None
     orig_ret: chex.Array = None
-    ret: chex.Array = None
+    ep_ret: chex.Array = None
     value: chex.Array = None
     done: chex.Array = None
     ep_len: chex.Array = None

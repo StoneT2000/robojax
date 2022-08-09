@@ -72,7 +72,7 @@ class GymLoop(BaseEnvLoop):
                     aux=aux,
                 )
             else:
-                rb = [observations, actions, rewards, next_observations, dones]
+                rb = dict(env_obs=observations, action=actions, reward=rewards, ep_ret=ep_returns.copy(), ep_len=ep_lengths.copy(),done=dones)
             for k, v in rb.items():
                 data[k].append(v)
             observations = next_observations
@@ -110,6 +110,7 @@ class JaxLoop(BaseEnvLoop):
     def _rollout_single_env(
         self,
         rng_key: PRNGKey,
+        params: Any,
         apply_fn: Callable,
         steps: int,
     ):
@@ -122,7 +123,7 @@ class JaxLoop(BaseEnvLoop):
         def step_fn(data: Tuple[EnvObs, EnvState, float, int], _):
             rng_key, env_obs, env_state, ep_ret, ep_len = data
             rng_key, rng_reset, rng_step, rng_fn = jax.random.split(rng_key, 4)
-            action, aux = apply_fn(rng_fn, env_obs)
+            action, aux = apply_fn(rng_fn, params, env_obs)
             next_env_obs, next_env_state, reward, done, info = self.env_step(
                 rng_step, env_state, action
             )
@@ -158,7 +159,7 @@ class JaxLoop(BaseEnvLoop):
                     aux=aux,
                 )
             else:
-                rb = [env_obs, action, reward, next_env_obs, done]
+                rb = dict(env_obs=env_obs, action=action, reward=reward, ep_ret=ep_ret, ep_len=ep_len,done=done)
             return (
                 rng_key,
                 next_env_obs,
@@ -175,6 +176,7 @@ class JaxLoop(BaseEnvLoop):
     def rollout(
         self,
         rng_keys: List[PRNGKey],
+        params: any,
         apply_fn: Callable,
         steps_per_env: int,
     ):
@@ -195,6 +197,6 @@ class JaxLoop(BaseEnvLoop):
 
         """
         batch_rollout = jax.vmap(
-            self._rollout_single_env, in_axes=(0, None, None), out_axes=(1)
+            self._rollout_single_env, in_axes=(0, None, None, None), out_axes=(1)
         )
-        return batch_rollout(jnp.stack(rng_keys), apply_fn, steps_per_env)
+        return batch_rollout(jnp.stack(rng_keys), params, apply_fn, steps_per_env)

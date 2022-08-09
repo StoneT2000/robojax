@@ -41,10 +41,10 @@ def actor_loss_fn(clip_ratio: float, entropy_coef: float, actor_apply_fn: Callab
 
 def critic_loss_fn(critic_apply_fn: Callable, batch: TimeStep):
     def loss_fn(critic_params: Params):
-        obs, ret = batch.env_obs, batch.ret
+        obs, ep_ret = batch.env_obs, batch.ep_ret
         v = critic_apply_fn(critic_params, obs)
         v = jnp.squeeze(v, -1)
-        critic_loss = jnp.mean(jnp.square(v - ret), axis=0)
+        critic_loss = jnp.mean(jnp.square(v - ep_ret), axis=0)
         return critic_loss, dict(critic_loss=critic_loss)
 
     return loss_fn
