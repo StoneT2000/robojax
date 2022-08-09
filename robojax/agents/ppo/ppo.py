@@ -68,6 +68,7 @@ class PPO:
                     value=aux["value"],
                     done=done,
                     ep_len=ep_len,
+                    info=info,
                 )
 
             self.loop = JaxLoop(env_reset, env_step, rollout_callback=rollout_callback)
@@ -152,7 +153,6 @@ class PPO:
             episode_ends = np.asarray(buffer.done)
             if logger is not None:
                 total_env_steps = (t + 1) * env_steps_per_epoch
-                # import ipdb;ipdb.set_trace()
                 pi_loss_aux = aux["update_aux"][0]
                 vf_loss_aux = aux["update_aux"][1]
                 total_time = time.time() - train_start_time
@@ -174,12 +174,13 @@ class PPO:
                     rollout=aux["rollout_time"],
                     update=aux["update_time"],
                     total=total_time,
-                    sps=total_env_steps / total_time
+                    sps=total_env_steps / total_time,
+                    epoch=t,
                 )
                 stats = logger.log(total_env_steps)
                 if verbose > 0:
                     if verbose == 1:
-                        filtered_stat_keys = ["train/ep_len_avg", "time/rollout", "time/update", "time/total", "time/sps", "train/ep_ret_avg"]
+                        filtered_stat_keys = ["train/ep_len_avg", "time/rollout", "time/update", "time/total", "time/sps", "train/ep_ret_avg", "time/epoch"]
                         filtered_stats = { k: stats[k] for k in filtered_stat_keys }
                         logger.pretty_print_table(filtered_stats)
                     else:
@@ -250,7 +251,7 @@ class PPO:
         batch_size: int,
         buffer: TimeStep,
     ):
-        sampler = BufferSampler(buffer, buffer_size=buffer.action.shape[0], num_envs=num_envs)
+        sampler = BufferSampler(['action','env_obs', 'log_p', 'ret', 'adv'], buffer, buffer_size=buffer.action.shape[0], num_envs=num_envs)
 
         def update_step_fn(data: Tuple[PRNGKey, Model, Model], unused):
             rng_key, actor, critic = data
@@ -263,6 +264,7 @@ class PPO:
                 grads_a_fn = jax.grad(
                     actor_loss_fn(
                         clip_ratio=self.cfg.clip_ratio,
+                        entropy_coef=self.cfg.ent_coef,
                         actor_apply_fn=actor.apply_fn,
                         batch=batch,
                     ),
@@ -303,7 +305,6 @@ class PPO:
             # if not a jax based env, then buffer is a python dictionary and we
             # convert it
             buffer = TimeStep(**buffer)
-
         # rest of the code here is jitted and / or vmapped
         advantages = gae_advantages(
             buffer.reward[:-1],

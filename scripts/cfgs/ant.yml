@@ -1,29 +1,33 @@
-env_id: CartPole-v1
+env_id: ant
 jax_env: True
+
+jax_platform_name: gpu
 
 seed: 0
 
 ppo:
   gamma: 0.95
+  ent_coef: 1e-2
   
 model:
-  actor_lr: 1e-4
+  actor_lr: 3e-4
   critic_lr: 4e-4
+ 
 
 train:
-  num_envs: 4
-  batch_size: 512
-  update_iters: 80
+  num_envs: 160
+  batch_size: 4096
+  update_iters: 160
   epochs: 40
   steps_per_epoch: 1000
 
 
 logger:
   tensorboard: True
-  wandb: True
+  wandb: False
 
   workspace: "robojax_exps"
   project_name: "robojax"
-  exp_name: "ppo/cartpole"
+  exp_name: "ppo/ant"
   wandb_cfg:
     group: "benchmark"

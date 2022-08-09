@@ -12,7 +12,7 @@ from robojax.agents.ppo.config import TimeStep
 from robojax.models import Model, Params
 
 
-def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: TimeStep):
+def actor_loss_fn(clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep):
     def loss_fn(actor_params: Params):
         obs, act, adv, logp_old = batch.env_obs, batch.action, batch.adv, batch.log_p
         # ac.pi.val()
@@ -25,14 +25,15 @@ def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: TimeStep):
         clip_adv = jax.lax.clamp(1.0 - clip_ratio, ratio, 1.0 + clip_ratio) * adv
         pi_loss = -jnp.mean(jnp.minimum(ratio * adv, clip_adv), axis=0)
         entropy = dist.entropy().mean()
-
+        entropy_loss = -entropy * entropy_coef
+        total_loss = pi_loss + entropy_loss
         info = dict(
             pi_loss=pi_loss,
             entropy=entropy,
             logp_old=logp_old.mean(),
             clip_adv=clip_adv,
         )
-        return pi_loss, info
+        return total_loss, info
 
     return loss_fn
 

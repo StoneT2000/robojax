@@ -34,8 +34,8 @@ def main(cfg):
         elif is_brax_env:
             env = envs.create(env_id, auto_reset=False)
             def env_step(rng_key, state, action):
-                state = env.step(state, action * 0)
-                return state.obs, state, state.reward, state.done != 0.0, state.info
+                state = env.step(state, action)
+                return state.obs, state, state.reward, state.done != 0.0, dict(**state.info, metrics=state.metrics)
             def env_reset(rng_key):
                 state = env.reset(rng_key)
                 return state.obs, state
@@ -55,8 +55,8 @@ def main(cfg):
 
     algo.cfg = PPOConfig(**cfg.ppo)
     
-    actor = MLP([64, 64, act_dims], output_activation=None)
-    critic = MLP([64, 64, 1], output_activation=None)
+    actor = MLP([256, 256, act_dims], output_activation=None)
+    critic = MLP([256, 256, 1], output_activation=None)
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,
@@ -89,6 +89,6 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ant.yml"))
     print(cfg)
     main(cfg)

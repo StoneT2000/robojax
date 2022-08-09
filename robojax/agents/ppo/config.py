@@ -29,13 +29,14 @@ class PPOConfig:
 
 @struct.dataclass
 class TimeStep:
-    log_p: chex.Array
-    action: chex.Array
-    env_obs: chex.Array
-    adv: chex.Array
-    reward: chex.Array
-    orig_ret: chex.Array
-    ret: chex.Array
-    value: chex.Array
-    done: chex.Array
-    ep_len: chex.Array
+    log_p: chex.Array = None
+    action: chex.Array = None
+    env_obs: chex.Array = None
+    adv: chex.Array = None
+    reward: chex.Array = None
+    orig_ret: chex.Array = None
+    ret: chex.Array = None
+    value: chex.Array = None
+    done: chex.Array = None
+    ep_len: chex.Array = None
+    info: chex.Array = None

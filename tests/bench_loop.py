@@ -78,7 +78,7 @@ if __name__ == "__main__":
     env_name = "CartPole-v1"
 
     num_runs = 3
-    num_envs = 2
+    num_envs = 2000
     total_env_steps = 1_000_000
     rng_key = jax.random.PRNGKey(0)
     r_times = []

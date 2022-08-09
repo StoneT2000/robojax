@@ -13,11 +13,11 @@ class BufferSampler:
     Samples batches of data from a given buffer. Expects buffer to be of type `flax.struct.dataclass`
     """
 
-    def __init__(self, buffer, buffer_size: int, num_envs: int) -> None:
+    def __init__(self, buffer_keys, buffer, buffer_size: int, num_envs: int) -> None:
         self.buffer = buffer
         self.buffer_size = buffer_size
         self.num_envs = num_envs
-        self.buffer_keys = fields(self.buffer)
+        self.buffer_keys=buffer_keys
 
     @partial(jax.jit, static_argnames=["self", "batch_size", "drop_last_batch"])
     def sample_batch(
@@ -50,6 +50,6 @@ class BufferSampler:
         retrieve batch of data via batch ids and env ids
         """
         data = {}
-        for field in self.buffer_keys:
-            data[field.name] = getattr(self.buffer, field.name)[batch_ids, env_ids]
+        for k in self.buffer_keys:
+            data[k] = getattr(self.buffer, k)[batch_ids, env_ids]
         return data
