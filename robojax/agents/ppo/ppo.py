@@ -14,6 +14,7 @@ from robojax.agents.ppo.config import PPOConfig, TimeStep
 from robojax.agents.ppo.loss import actor_loss_fn, critic_loss_fn
 from robojax.data.loop import GymLoop, JaxLoop
 from robojax.data.sampler import BufferSampler
+from robojax.logger.logger import Logger
 from robojax.models.ac.core import ActorCritic
 from robojax.models.model import Model, Params
 
@@ -46,7 +47,7 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
 
 
 class PPO:
-    def __init__(self, jax_env: bool, env=None, env_step = None, env_reset = None, cfg: PPOConfig = {}) -> None:
+    def __init__(self, jax_env: bool, env=None, env_step=None, env_reset=None, cfg: PPOConfig = {}) -> None:
         self.jax_env = jax_env
 
         # if env.step.__class__.__name__ == "CompiledFunction":
@@ -55,9 +56,7 @@ class PPO:
         # self.env = env
         if self.jax_env:
 
-            def rollout_callback(
-                action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux
-            ):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux):
                 return TimeStep(
                     action=action,
                     env_obs=env_obs,
@@ -71,25 +70,24 @@ class PPO:
                     ep_len=ep_len,
                 )
 
-            self.loop = JaxLoop(
-                env_reset, env_step, rollout_callback=rollout_callback
-            )
-            self.train_step = jax.jit(
-                self.train_step,
-                static_argnames=[
-                    "self",
-                    "update_iters",
-                    "rollout_steps_per_env",
-                    "num_envs",
-                    "apply_fn",
-                    "batch_size",
-                ],
+            self.loop = JaxLoop(env_reset, env_step, rollout_callback=rollout_callback)
+            # self.train_step = jax.jit(
+            #     self.train_step,
+            #     static_argnames=[
+            #         "self",
+            #         "update_iters",
+            #         "rollout_steps_per_env",
+            #         "num_envs",
+            #         "apply_fn",
+            #         "batch_size",
+            #     ],
+            # )
+            self.collect_buffer = jax.jit(
+                self.collect_buffer, static_argnames=["self", "rollout_steps_per_env", "num_envs", "apply_fn"]
             )
         else:
             # we expect env to be a vectorized env now
-            def rollout_callback(
-                action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux
-            ):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux):
                 batch_size = len(env_obs)
                 return dict(
                     action=action,
@@ -115,6 +113,7 @@ class PPO:
         epochs: int,
         ac: ActorCritic,
         batch_size: int,
+        logger: Logger,
     ):
 
         if self.jax_env:
@@ -129,9 +128,10 @@ class PPO:
                 res = ac.step(rng_key, actor, critic, obs)
                 return np.array(res[0]), res[1]
 
+        env_steps_per_epoch = num_envs * steps_per_epoch
         for t in range(epochs):
+            iter_time = time.time()
             rng_key, train_rng_key = jax.random.split(rng_key)
-            print(f"=== {t} ===")
             actor, critic, aux = self.train_step(
                 rng_key=train_rng_key,
                 update_iters=update_iters,
@@ -147,14 +147,24 @@ class PPO:
 
             buffer = aux["buffer"]
             ep_lens = np.asarray(buffer.ep_len)
-            ep_rets = np.asarray(buffer.ret)
+            ep_rets = np.asarray(buffer.orig_ret)
+            ep_rews = np.asarray(buffer.reward)
             episode_ends = np.asarray(buffer.done)
-            info = dict(
-                avg_ep_len=ep_lens[episode_ends].mean(),
-                avg_ep_ret=ep_rets[episode_ends].mean(),
-            )
-            print(info)
-            # import ipdb;ipdb.set_trace()
+            if logger is not None:
+                total_env_steps = (t + 1) * env_steps_per_epoch
+                logger.store(
+                    tag="train",
+                    append=False,
+                    ep_ret=ep_rets[episode_ends].flatten(),
+                    ep_rew=ep_rews.flatten(),
+                    ep_len=ep_lens[episode_ends].flatten(),
+                    rollout_time=aux["rollout_time"],
+                    update_time=aux["update_time"],
+                    fps=env_steps_per_epoch / aux["rollout_time"],
+                    env_steps=total_env_steps
+                )
+                stats = logger.log(total_env_steps)
+                logger.pretty_print_table(stats)
 
     def train_step(
         self,
@@ -168,17 +178,18 @@ class PPO:
         batch_size: int,
     ):
         rng_key, buffer_rng_key = jax.random.split(rng_key)
-
-        def apply_fn_wrapped(rng_key, obs):
-            return apply_fn(rng_key, actor, critic, obs)
-
+        rollout_s_time = time.time()
         buffer, info = self.collect_buffer(
             rng_key=buffer_rng_key,
             rollout_steps_per_env=rollout_steps_per_env,
             num_envs=num_envs,
-            apply_fn=apply_fn_wrapped,
+            actor=actor,
+            critic=critic,
+            apply_fn=apply_fn,
         )
 
+        rollout_time = time.time() - rollout_s_time
+        update_s_time = time.time()
         actor, critic, update_aux = self.update_parameters(
             rng_key=rng_key,
             actor=actor,
@@ -190,7 +201,12 @@ class PPO:
             batch_size=batch_size,
             buffer=buffer,
         )
-        return actor, critic, dict(buffer=buffer, update_aux=update_aux)
+        update_time = time.time() - update_s_time
+        return (
+            actor,
+            critic,
+            dict(buffer=buffer, update_aux=update_aux, rollout_time=rollout_time, update_time=update_time),
+        )
 
     @partial(
         jax.jit,
@@ -215,9 +231,7 @@ class PPO:
         batch_size: int,
         buffer: TimeStep,
     ):
-        sampler = BufferSampler(
-            buffer, buffer_size=buffer.action.shape[0], num_envs=num_envs
-        )
+        sampler = BufferSampler(buffer, buffer_size=buffer.action.shape[0], num_envs=num_envs)
 
         def update_step_fn(data: Tuple[PRNGKey, Model, Model], unused):
             rng_key, actor, critic = data
@@ -247,27 +261,25 @@ class PPO:
             return (rng_key, new_actor, new_critic), (info_a, info_c)
 
         update_init = (rng_key, actor, critic)
-        carry, update_aux = jax.lax.scan(
-            update_step_fn, update_init, (), length=update_iters
-        )
+        carry, update_aux = jax.lax.scan(update_step_fn, update_init, (), length=update_iters)
         _, actor, critic = carry
 
         return actor, critic, update_aux
 
-    def collect_buffer(
-        self, rng_key, rollout_steps_per_env: int, num_envs: int, apply_fn: Callable
-    ):
+    def collect_buffer(self, rng_key, rollout_steps_per_env: int, num_envs: int, actor, critic, apply_fn: Callable):
         # buffer collection is not jitted if env is not jittable
         # regardless this function returns a struct.dataclass object with all
         # the data in jax.numpy arrays for use
+        def apply_fn_wrapped(rng_key, obs):
+            return apply_fn(rng_key, actor, critic, obs)
 
         rng_key, *env_rng_keys = jax.random.split(rng_key, num_envs + 1)
         buffer: TimeStep = self.loop.rollout(
             env_rng_keys,
-            apply_fn,
+            apply_fn_wrapped,
             rollout_steps_per_env + 1,  # extra 1 for final value computation
         )
-
+        
         if not self.jax_env:
             # if not a jax based env, then buffer is a python dictionary and we
             # convert it
@@ -289,6 +301,8 @@ class PPO:
         buffer = buffer.replace(
             adv=advantages,
             ret=returns,
+            reward=buffer.reward[:-1],
+            orig_ret=buffer.orig_ret[:-1],
             log_p=buffer.log_p[:-1],
             action=buffer.action[:-1],
             env_obs=buffer.env_obs[:-1],

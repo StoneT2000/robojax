@@ -64,8 +64,8 @@ class GymLoop(BaseEnvLoop):
                     action=actions,
                     env_obs=observations,
                     reward=rewards,
-                    ep_ret=ep_returns,
-                    ep_len=ep_lengths,
+                    ep_ret=ep_returns.copy(),
+                    ep_len=ep_lengths.copy(),
                     next_env_obs=next_observations,
                     done=dones,
                     info=infos,
@@ -127,6 +127,7 @@ class JaxLoop(BaseEnvLoop):
                 rng_step, env_state, action
             )
 
+            # auto reset
             def episode_end_update(ep_ret, ep_len, env_state, env_obs):
                 env_obs, env_state = self.env_reset(rng_reset)
                 return ep_ret * 0, ep_len * 0, env_state, env_obs
@@ -143,8 +144,6 @@ class JaxLoop(BaseEnvLoop):
                 next_env_state,
                 next_env_obs,
             )
-            # new_ep_return = ep_ret + reward
-            # new_ep_len = ep_len + 1
 
             if self.rollout_callback is not None:
                 rb = self.rollout_callback(

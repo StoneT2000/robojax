@@ -71,6 +71,8 @@ class Logger:
             wandb_cfg = {}
         self.tensorboard = tensorboard
 
+        self.start_step = 0
+
         self.exp_path = osp.join(workspace, exp_name)
         self.log_path = osp.join(self.exp_path, "logs")
         self.raw_log_file = osp.join(self.log_path, "raw.csv")
@@ -82,9 +84,8 @@ class Logger:
 
         # set up external loggers
         if self.tensorboard:
-            pass
-            # from torch.utils.tensorboard import SummaryWriter
-            # self.tb_writer = SummaryWriter(log_dir=self.log_path)
+            from torch.utils.tensorboard import SummaryWriter
+            self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
 
             if project_name is None:
@@ -202,7 +203,7 @@ class Logger:
         for tag in self.data.keys():
             data_dict = self.data[tag]
             for k, v in data_dict.items():
-                if isinstance(v, list):
+                if isinstance(v, list) or isinstance(v, np.ndarray):
                     vals = np.array(v)
                     vals_sum, n = vals.sum(), len(vals)
                     avg = vals_sum / n
@@ -220,10 +221,10 @@ class Logger:
                     key_vals = {f"{tag}/{k}": v}
                 for name, scalar in key_vals.items():
                     if self.tensorboard and not local_only:
-                        self.tb_writer.add_scalar(name, scalar, step)
+                        self.tb_writer.add_scalar(name, scalar, self.start_step + step)
                     self.stats[name] = scalar
                 if self.wandb and not local_only:
-                    wb.log(data=key_vals, step=step)
+                    wb.log(data=key_vals, step=self.start_step + step)
 
         return self.stats
 
