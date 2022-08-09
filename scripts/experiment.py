@@ -68,8 +68,11 @@ def main(cfg):
         critic_optim=optax.adam(learning_rate=cfg.model.critic_lr),
     )
     logger = Logger(
-        cfg=cfg, **cfg.logger
+        cfg=cfg, **cfg.logger,
     )
+    model_path = "weights.jx" #osp.join(logger.exp_path, "weights.jx")
+    # ac.load(model_path)
+    
     algo.train(
         rng_key=jax.random.PRNGKey(cfg.seed),
         steps_per_epoch=cfg.train.steps_per_epoch,
@@ -80,6 +83,7 @@ def main(cfg):
         batch_size=cfg.train.batch_size,
         logger=logger,
     )
+    ac.save(model_path)
 
 
 

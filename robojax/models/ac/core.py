@@ -1,8 +1,11 @@
 from functools import partial
+import os
+from pathlib import Path
 from typing import Any, Callable, Tuple, Union
 
 import distrax
 import flax
+import flax.serialization
 import flax.linen as nn
 import flax.struct as struct
 import jax
@@ -57,6 +60,9 @@ class Actor(nn.Module):
 
 
 class ActorCritic:
+    """
+    ActorCritic model. Manages the actor and critic models
+    """
     actor: Model
     critic: Model
 
@@ -99,3 +105,20 @@ class ActorCritic:
             return actor(obs)
         dist, _ = actor(obs)
         return dist.sample(seed=rng_key)
+
+    def _state_dict(self):
+        return dict(
+                actor=self.actor._state_dict(),
+                critic=self.critic._state_dict(),
+            )
+    def save(self, save_path: str):
+        Path(os.path.dirname(save_path)).mkdir(parents=True, exist_ok=True)
+        with open(save_path, 'wb') as f:
+            f.write(flax.serialization.to_bytes(self._state_dict()))
+
+    def load(self, load_path: str):
+        with open(load_path, 'rb') as f:
+            params_dict = flax.serialization.from_bytes(self._state_dict(), f.read())
+        self.actor = self.actor.replace(**params_dict['actor'])
+        self.critic = self.critic.replace(**params_dict['critic'])
+

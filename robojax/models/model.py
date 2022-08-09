@@ -1,9 +1,11 @@
 """
 Model class
 """
+import os
 from typing import Any, Callable, Optional
 
 import flax
+import flax.serialization
 import flax.linen as nn
 import optax
 from chex import PRNGKey
@@ -61,11 +63,26 @@ class Model:
         return self.replace(
             step=self.step + 1, params=updated_params, opt_state=updated_opt_state
         )
+    def save(self, save_path: str):
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        with open(save_path, 'wb') as f:
+            f.write(flax.serialization.to_bytes(self._state_dict()))
 
-    # def __getattribute__(self, name: str) -> Any:
-    #     try:
-    #         return object.__getattribute__(self, name)
-    #     except AttributeError:
-    #         # if attribute is another module, can we scope it?
-    #         attr = self.model.__getattribute__(name)
-    #         return attr
+    def load(self, load_path: str) -> 'Model':
+        with open(load_path, 'rb') as f:
+            data = flax.serialization.from_bytes(self._state_dict(), f.read())
+        return self.replace(**data)
+
+    def _state_dict(self):
+        return dict(
+            params=self.params,
+            opt_state=self.opt_state,
+        )
+
+    def __getattribute__(self, name: str) -> Any:
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            # if attribute is another module, can we scope it?
+            attr = self.model.__getattribute__(name)
+            return attr
