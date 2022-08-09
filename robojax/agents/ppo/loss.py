@@ -23,16 +23,16 @@ def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: TimeStep):
 
         ratio = jnp.exp(logp - logp_old)
         clip_adv = jax.lax.clamp(1.0 - clip_ratio, ratio, 1.0 + clip_ratio) * adv
-        loss_pi = -jnp.mean(jnp.minimum(ratio * adv, clip_adv), axis=0)
+        pi_loss = -jnp.mean(jnp.minimum(ratio * adv, clip_adv), axis=0)
         entropy = dist.entropy().mean()
 
         info = dict(
-            loss_pi=loss_pi,
+            pi_loss=pi_loss,
             entropy=entropy,
             logp_old=logp_old.mean(),
             clip_adv=clip_adv,
         )
-        return loss_pi, info
+        return pi_loss, info
 
     return loss_fn
 

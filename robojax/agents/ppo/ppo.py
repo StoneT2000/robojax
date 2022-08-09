@@ -83,7 +83,7 @@ class PPO:
             #     ],
             # )
             self.collect_buffer = jax.jit(
-                self.collect_buffer, static_argnames=["self", "rollout_steps_per_env", "num_envs", "apply_fn"]
+                self.collect_buffer, static_argnames=["rollout_steps_per_env", "num_envs", "apply_fn"]
             )
         else:
             # we expect env to be a vectorized env now
@@ -114,8 +114,9 @@ class PPO:
         ac: ActorCritic,
         batch_size: int,
         logger: Logger,
+        verbose: int = 1,
     ):
-
+        train_start_time = time.time()
         if self.jax_env:
 
             def apply_fn(rng_key, actor, critic, obs):
@@ -130,7 +131,6 @@ class PPO:
 
         env_steps_per_epoch = num_envs * steps_per_epoch
         for t in range(epochs):
-            iter_time = time.time()
             rng_key, train_rng_key = jax.random.split(rng_key)
             actor, critic, aux = self.train_step(
                 rng_key=train_rng_key,
@@ -152,19 +152,38 @@ class PPO:
             episode_ends = np.asarray(buffer.done)
             if logger is not None:
                 total_env_steps = (t + 1) * env_steps_per_epoch
+                # import ipdb;ipdb.set_trace()
+                pi_loss_aux = aux["update_aux"][0]
+                vf_loss_aux = aux["update_aux"][1]
+                total_time = time.time() - train_start_time
                 logger.store(
                     tag="train",
                     append=False,
                     ep_ret=ep_rets[episode_ends].flatten(),
                     ep_rew=ep_rews.flatten(),
                     ep_len=ep_lens[episode_ends].flatten(),
-                    rollout_time=aux["rollout_time"],
-                    update_time=aux["update_time"],
                     fps=env_steps_per_epoch / aux["rollout_time"],
-                    env_steps=total_env_steps
+                    env_steps=total_env_steps,
+                    entropy=np.asarray(pi_loss_aux["entropy"]),
+                    pi_loss=np.asarray(pi_loss_aux["pi_loss"]),
+                    critic_loss=np.asarray(vf_loss_aux["critic_loss"]),
+                )
+                logger.store(
+                    tag="time",
+                    append=False,
+                    rollout=aux["rollout_time"],
+                    update=aux["update_time"],
+                    total=total_time,
+                    sps=total_env_steps / total_time
                 )
                 stats = logger.log(total_env_steps)
-                logger.pretty_print_table(stats)
+                if verbose > 0:
+                    if verbose == 1:
+                        filtered_stat_keys = ["train/ep_len_avg", "time/rollout", "time/update", "time/total", "time/sps", "train/ep_ret_avg"]
+                        filtered_stats = { k: stats[k] for k in filtered_stat_keys }
+                        logger.pretty_print_table(filtered_stats)
+                    else:
+                        logger.pretty_print_table(stats)
 
     def train_step(
         self,
