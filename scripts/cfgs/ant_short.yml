@@ -35,6 +35,6 @@ logger:
 
   workspace: "robojax_exps"
   project_name: "robojax"
-  exp_name: "ppo/ant"
+  exp_name: "ppo/ant_short"
   wandb_cfg:
     group: "benchmark"
