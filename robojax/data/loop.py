@@ -113,13 +113,14 @@ class JaxLoop(BaseEnvLoop):
         self.rollout_callback = rollout_callback
         super().__init__()
 
-    @partial(jax.jit, static_argnames=["self", "steps", "apply_fn"])
+    @partial(jax.jit, static_argnames=["self", "steps", "apply_fn", "max_episode_length"])
     def _rollout_single_env(
         self,
         rng_key: PRNGKey,
         params: Any,
         apply_fn: Callable,
         steps: int,
+        max_episode_length: int = -1
     ):
         """
         Rollsout on a single env
@@ -134,6 +135,7 @@ class JaxLoop(BaseEnvLoop):
             next_env_obs, next_env_state, reward, done, info = self.env_step(
                 rng_step, env_state, action
             )
+            done = jax.lax.cond((ep_len == max_episode_length - 1)[0], lambda x: True, lambda x: x, done)
 
             # auto reset
             def episode_end_update(ep_ret, ep_len, env_state, env_obs):
@@ -186,13 +188,14 @@ class JaxLoop(BaseEnvLoop):
         _, rollout_data = jax.lax.scan(step_fn, step_init, (), steps)
         return rollout_data
 
-    @partial(jax.jit, static_argnames=["self", "steps_per_env", "apply_fn"])
+    @partial(jax.jit, static_argnames=["self", "steps_per_env", "apply_fn", "max_episode_length"])
     def rollout(
         self,
         rng_keys: List[PRNGKey],
         params: any,
         apply_fn: Callable,
         steps_per_env: int,
+        max_episode_length: int = -1,
     ):
         """
         Rolls out on len(rng_keys) parallelized environments with a given policy and returns a
@@ -211,6 +214,6 @@ class JaxLoop(BaseEnvLoop):
 
         """
         batch_rollout = jax.vmap(
-            self._rollout_single_env, in_axes=(0, None, None, None), out_axes=(1)
+            self._rollout_single_env, in_axes=(0, None, None, None, None), out_axes=(1)
         )
-        return batch_rollout(jnp.stack(rng_keys), params, apply_fn, steps_per_env)
+        return batch_rollout(jnp.stack(rng_keys), params, apply_fn, steps_per_env, max_episode_length)

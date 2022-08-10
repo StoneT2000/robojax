@@ -25,17 +25,20 @@ PRNGKey = chex.PRNGKey
 @partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
 def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
     N = len(rewards)
+    # values is of shape (N+1,)
     advantages = jnp.zeros((N + 1))
     not_dones = ~dones
 
     value_diffs = gamma * values[1:] * not_dones - values[:-1]
+    # in value_diffs we zero out whenever an episode was finished.
+    # steps where done = True, then values[1:] is zeroed as it is the value for the next episode
     deltas = rewards + value_diffs
 
     def body_fun(gae, t):
         gae = deltas[t] + gamma * gae_lambda * not_dones[t] * gae
         return gae, gae
 
-    indices = jnp.arange(N)[::-1]
+    indices = jnp.arange(N)[::-1] # N - 1, N - 2, ..., 0
     _, advantages = jax.lax.scan(
         body_fun,
         0.0,
@@ -177,7 +180,6 @@ class PPO:
                 vf_loss_aux = aux["update_aux"][1]
                 total_time = time.time() - train_start_time
                 if episode_ends.any():
-                    import ipdb;ipdb.set_trace()
                     logger.store(
                         tag="train",
                         append=False,
@@ -357,6 +359,7 @@ class PPO:
             (actor, critic),
             apply_fn,
             rollout_steps_per_env + 1,  # extra 1 for final value computation
+            self.cfg.max_episode_length
         )
 
         if not self.jax_env:

@@ -6,6 +6,7 @@ jax_platform_name: gpu
 seed: 0
 
 ppo:
+  max_episode_length: 16
   gamma: 0.95
   ent_coef: 1e-2
   
