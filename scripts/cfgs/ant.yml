@@ -17,7 +17,7 @@ model:
 train:
   num_envs: 32
   batch_size: 8192
-  update_iters: 16
+  update_iters: 80
   epochs: 300
   steps_per_epoch: 1000
 

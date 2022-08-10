@@ -169,7 +169,6 @@ class PPO:
             ep_rews = np.asarray(buffer.reward)
             episode_ends = np.asarray(buffer.done)
 
-            # EVALUATE
             if train_callback is not None:
                 rng_key, train_callback_rng_key = jax.random.split(rng_key)
                 train_callback(epoch=t, ac=ac, rng_key=train_callback_rng_key)

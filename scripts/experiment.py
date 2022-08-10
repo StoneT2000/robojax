@@ -118,7 +118,9 @@ def main(cfg):
                 ep_len=np.asarray(eval_buffer['ep_len'])[
                     eval_episode_ends].flatten(),
             )
-            if ep_rets.mean() > best_ep_ret:
+            ep_ret_avg = ep_rets.mean()
+            if ep_ret_avg > best_ep_ret:
+                best_ep_ret = ep_ret_avg
                 ac.save(model_path)
     model_path = "weights.jx"  # osp.join(logger.exp_path, "weights.jx")
     # ac.load(model_path)
@@ -139,6 +141,6 @@ def main(cfg):
 
 if __name__ == "__main__":
     cfg = parse_cfg(default_cfg_path=osp.join(
-        osp.dirname(__file__), "cfgs/ant_short.yml"))
+        osp.dirname(__file__), "cfgs/ant.yml"))
     print(cfg)
     main(cfg)
