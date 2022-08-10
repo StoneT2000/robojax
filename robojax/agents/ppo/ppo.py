@@ -126,6 +126,7 @@ class PPO:
         ac: ActorCritic,
         batch_size: int,
         logger: Logger,
+        train_callback: Callable = None,
         verbose: int = 1,
     ):
         train_start_time = time.time()
@@ -165,44 +166,35 @@ class PPO:
             ep_rews = np.asarray(buffer.reward)
             episode_ends = np.asarray(buffer.done)
 
-            # EVALUATe
-            rng_key, *eval_env_rng_keys = jax.random.split(rng_key, 20 + 1)
+            # EVALUATE
+            if train_callback is not None:
+                rng_key, train_callback_rng_key = jax.random.split(rng_key)
+                train_callback(epoch=t, ac=ac, rng_key=train_callback_rng_key)
 
             if logger is not None:
                 total_env_steps = (t + 1) * env_steps_per_epoch
                 pi_loss_aux = aux["update_aux"][0]
                 vf_loss_aux = aux["update_aux"][1]
                 total_time = time.time() - train_start_time
+                if episode_ends.any():
+                    import ipdb;ipdb.set_trace()
+                    logger.store(
+                        tag="train",
+                        append=False,
+                        ep_ret=ep_rets[episode_ends].flatten(),
+                        ep_len=ep_lens[episode_ends].flatten(),
+                    )
                 logger.store(
                     tag="train",
                     append=False,
-                    ep_ret=ep_rets[episode_ends].flatten(),
                     ep_rew=ep_rews.flatten(),
-                    ep_len=ep_lens[episode_ends].flatten(),
                     fps=env_steps_per_epoch / aux["rollout_time"],
                     env_steps=total_env_steps,
                     entropy=np.asarray(pi_loss_aux["entropy"]),
                     pi_loss=np.asarray(pi_loss_aux["pi_loss"]),
                     critic_loss=np.asarray(vf_loss_aux["critic_loss"]),
                 )
-                # if t % 20 == 0:
-                #     def eval_apply(rng_key, obs):
-                #         return ac.actor(obs)[1], {}
-                #     eval_buffer: TimeStep = self.eval_loop.rollout(
-                #         eval_env_rng_keys,
-                #         eval_apply,
-                #         1000
-                #     )
-                #     eval_buffer = TimeStep(**eval_buffer)
-                #     eval_episode_ends = np.asarray(eval_buffer.done)
-                #     logger.store(
-                #         tag="test",
-                #         append=False,
-                #         ep_ret=np.asarray(eval_buffer.ep_ret)[
-                #             eval_episode_ends].flatten(),
-                #         ep_len=np.asarray(eval_buffer.ep_len)[
-                #             eval_episode_ends].flatten(),
-                #     )
+                
                 logger.store(
                     tag="time",
                     append=False,

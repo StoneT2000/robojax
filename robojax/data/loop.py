@@ -25,7 +25,7 @@ class BaseEnvLoop(ABC):
 
     @abstractmethod
     def rollout(
-        self, rng_keys: List[PRNGKey], apply_fn: Callable, steps_per_env: int
+        self, rng_keys: List[PRNGKey], params: Any, apply_fn: Callable, steps_per_env: int
     ) -> None:
         raise not NotImplementedError("Rollout not defined")
 
@@ -40,7 +40,7 @@ class GymLoop(BaseEnvLoop):
         self.rollout_callback = rollout_callback
         super().__init__()
 
-    def rollout(self, rng_keys: List[PRNGKey], apply_fn: Callable, steps_per_env: int):
+    def rollout(self, rng_keys: List[PRNGKey], params: Any, apply_fn: Callable, steps_per_env: int):
         """
         perform a rollout on a non jittable environment
         """

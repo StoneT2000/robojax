@@ -15,11 +15,11 @@ model:
  
 
 train:
-  num_envs: 32
+  num_envs: 2048
   batch_size: 8192
-  update_iters: 16
-  epochs: 300
-  steps_per_epoch: 1000
+  update_iters: 40
+  epochs: 800
+  steps_per_epoch: 16
 
 eval:
   num_eval_envs: 16
