@@ -11,7 +11,13 @@ import jax.numpy as jnp
 
 from robojax.agents.ppo.config import TimeStep
 from robojax.models import Model, Params
-
+from flax import struct
+import chex
+@struct.dataclass
+class ActorAux:
+    pi_loss: chex.Array = 0.
+    entropy: chex.Array = 0.
+    approx_kl: chex.Array = 0.
 
 def actor_loss_fn(
     clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep
@@ -33,7 +39,7 @@ def actor_loss_fn(
         approx_kl = (ratio - 1 - log_r).mean()
 
         total_loss = pi_loss + entropy_loss
-        info = dict(
+        info = ActorAux(
             pi_loss=pi_loss, entropy=entropy, approx_kl=jax.lax.stop_gradient(approx_kl)
         )
         return total_loss, info

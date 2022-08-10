@@ -74,7 +74,7 @@ def main(cfg):
     algo.cfg = PPOConfig(**cfg.ppo)
 
     actor = MLP([256, 256, act_dims], output_activation=None)
-    critic = MLP([256, 256, 1], output_activation=None)
+    critic = MLP([256, 256, 256, 256, 1], output_activation=None)
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,
@@ -97,6 +97,7 @@ def main(cfg):
     best_ep_ret = 0
 
     def train_callback(epoch, ac, rng_key, **kwargs):
+        nonlocal best_ep_ret
         # every cfg.eval.eval_freq training epochs, evaluate our current model
         if epoch % cfg.eval.eval_freq == 0:
             rng_key, * \

@@ -1,6 +1,6 @@
 import time
 from functools import partial
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Dict, Tuple
 
 import chex
 import distrax
@@ -11,7 +11,7 @@ import numpy as np
 from flax import struct
 
 from robojax.agents.ppo.config import PPOConfig, TimeStep
-from robojax.agents.ppo.loss import actor_loss_fn, critic_loss_fn
+from robojax.agents.ppo.loss import ActorAux, actor_loss_fn, critic_loss_fn
 from robojax.data.loop import GymLoop, JaxLoop
 from robojax.data.sampler import BufferSampler
 from robojax.logger.logger import Logger
@@ -175,8 +175,8 @@ class PPO:
 
             if logger is not None:
                 total_env_steps = (t + 1) * env_steps_per_epoch
-                pi_loss_aux = aux["update_aux"][0]
-                vf_loss_aux = aux["update_aux"][1]
+                actor_loss_aux: ActorAux = aux["update_aux"]["actor_loss_aux"]
+                critic_loss_aux = aux["update_aux"]["critic_loss_aux"]
                 total_time = time.time() - train_start_time
                 if episode_ends.any():
                     logger.store(
@@ -191,11 +191,14 @@ class PPO:
                     ep_rew=ep_rews.flatten(),
                     fps=env_steps_per_epoch / aux["rollout_time"],
                     env_steps=total_env_steps,
-                    entropy=np.asarray(pi_loss_aux["entropy"]),
-                    pi_loss=np.asarray(pi_loss_aux["pi_loss"]),
-                    critic_loss=np.asarray(vf_loss_aux["critic_loss"]),
+                    entropy=np.asarray(actor_loss_aux.entropy),
+                    pi_loss=np.asarray(actor_loss_aux.pi_loss),
+                    kl=np.asarray(actor_loss_aux.approx_kl),
+                    critic_loss=np.asarray(critic_loss_aux["critic_loss"]),
+                    actor_updates=aux["update_aux"]["actor_updates"].item(),
+                    critic_updates=aux["update_aux"]["critic_updates"].item()
                 )
-                
+
                 logger.store(
                     tag="time",
                     append=False,
@@ -262,6 +265,13 @@ class PPO:
             batch_size=batch_size,
             buffer=buffer,
         )
+
+        # remove entries where we skipped updating actor due to early stopping
+        actor_loss_aux: ActorAux = update_aux["actor_loss_aux"]
+        actor_loss_aux.replace(
+            approx_kl=actor_loss_aux.approx_kl
+        )
+
         update_time = time.time() - update_s_time
         return (
             actor,
@@ -296,7 +306,7 @@ class PPO:
         num_envs: int,
         batch_size: int,
         buffer: TimeStep,
-    ):
+    ) -> Tuple[Model, Model, Dict]:
         sampler = BufferSampler(
             ["action", "env_obs", "log_p", "ep_ret", "adv"],
             buffer,
@@ -305,13 +315,16 @@ class PPO:
         )
 
         def update_step_fn(data: Tuple[PRNGKey, Model, Model], unused):
-            rng_key, actor, critic = data
+            rng_key, actor, critic, update_actor, actor_updates, critic_updates = data
             rng_key, sample_rng_key = jax.random.split(rng_key)
             batch = TimeStep(**sampler.sample_random_batch(sample_rng_key, batch_size))
-            info_a, info_c = None, None
+            info_a: ActorAux = None
+            info_c = None
             new_actor = actor
             new_critic = critic
-            if update_actor:
+
+
+            def update_actor_fn(actor):
                 grads_a_fn = jax.grad(
                     actor_loss_fn(
                         clip_ratio=self.cfg.clip_ratio,
@@ -321,8 +334,17 @@ class PPO:
                     ),
                     has_aux=True,
                 )
+                # TODO move aux data to CPU
                 grads, info_a = grads_a_fn(actor.params)
                 new_actor = actor.apply_gradients(grads=grads)
+
+                return new_actor, info_a
+            def skip_update_actor_fn(actor):
+                return actor, ActorAux()
+            new_actor, info_a = jax.lax.cond(update_actor, update_actor_fn, skip_update_actor_fn, actor)
+            update_actor = jax.lax.cond(info_a.approx_kl > self.cfg.target_kl * 1.5, lambda : False, lambda : True)
+            actor_updates += 1 * update_actor
+            
             if update_critic:
                 grads_c_fn = jax.grad(
                     critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch),
@@ -330,15 +352,16 @@ class PPO:
                 )
                 grads, info_c = grads_c_fn(critic.params)
                 new_critic = critic.apply_gradients(grads=grads)
-            return (rng_key, new_actor, new_critic), (info_a, info_c)
+                critic_updates += 1
+            return (rng_key, new_actor, new_critic, update_actor, actor_updates, critic_updates), dict(actor_loss_aux=info_a, critic_loss_aux=info_c)
 
-        update_init = (rng_key, actor, critic)
+        update_init = (rng_key, actor, critic, update_actor, 0, 0)
         carry, update_aux = jax.lax.scan(
             update_step_fn, update_init, (), length=update_iters
         )
-        _, actor, critic = carry
+        _, actor, critic, _, actor_updates, critic_updates = carry
 
-        return actor, critic, update_aux
+        return actor, critic, dict(**update_aux, actor_updates=actor_updates, critic_updates=critic_updates)
 
     def collect_buffer(
         self,
