@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from flax import linen as nn
 from brax import envs
 from stable_baselines3.common.env_util import make_vec_env
 
@@ -75,7 +76,7 @@ def main(cfg):
 
     algo.cfg = PPOConfig(**cfg.ppo)
 
-    actor = MLP([256, 256, act_dims], output_activation=None)
+    actor = MLP([256, 256, act_dims], output_activation=nn.tanh)
     critic = MLP([256, 256, 256, 256, 1], output_activation=None)
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),
@@ -144,5 +145,5 @@ def main(cfg):
 
 if __name__ == "__main__":
     cfg = parse_cfg(default_cfg_path=osp.join(
-        osp.dirname(__file__), "cfgs/ant_short.yml"))
+        osp.dirname(__file__), "cfgs/halfcheetah_short.yml"))
     main(cfg)
