@@ -25,6 +25,7 @@ class PPOConfig:
     dapg_lambda: Optional[float] = 0.1
     dapg_damping: Optional[float] = 0.99
     target_kl: Optional[float] = 0.01
+    reset_env: Optional[bool] = True # if false, when collecting interactions we will not reset env directly and carry over env states
 
 
 @struct.dataclass

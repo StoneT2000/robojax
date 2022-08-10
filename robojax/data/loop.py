@@ -18,6 +18,12 @@ EnvObs = TypeVar("EnvObs")
 EnvState = TypeVar("EnvState")
 EnvAction = TypeVar("EnvAction")
 
+from flax import struct
+
+@struct.dataclass
+class RolloutAux:
+    final_env_obs: EnvObs
+    final_env_state: EnvState
 
 class BaseEnvLoop(ABC):
     def __init__(self) -> None:
@@ -97,6 +103,12 @@ class GymLoop(BaseEnvLoop):
 class JaxLoop(BaseEnvLoop):
     """
     Env loop for jax based environments
+
+
+    Args :
+        reset_env : Whether this env loop class will reset environments when done = True.
+            If False, when done = True, the loop only resets recorded episode returns and length. 
+            The environment itself should have some auto reset functionality.
     """
 
     def __init__(
@@ -107,10 +119,12 @@ class JaxLoop(BaseEnvLoop):
             Tuple[EnvObs, EnvState, float, bool, Any],
         ],
         rollout_callback: Callable = None,
+        reset_env: bool = True
     ) -> None:
         self.env_reset = env_reset
         self.env_step = env_step
         self.rollout_callback = rollout_callback
+        self.reset_env = reset_env
         super().__init__()
 
     @partial(jax.jit, static_argnames=["self", "steps", "apply_fn", "max_episode_length"])
@@ -120,13 +134,17 @@ class JaxLoop(BaseEnvLoop):
         params: Any,
         apply_fn: Callable,
         steps: int,
-        max_episode_length: int = -1
+        max_episode_length: int = -1,
+        init_env_obs_states: Tuple[EnvObs, EnvState] = None
     ):
         """
         Rollsout on a single env
         """
         rng_key, reset_rng_key = jax.random.split(rng_key)
-        env_obs, env_state = self.env_reset(reset_rng_key)
+        if init_env_obs_states is not None:
+            env_obs, env_state = init_env_obs_states
+        else:
+            env_obs, env_state = self.env_reset(reset_rng_key)
 
         def step_fn(data: Tuple[EnvObs, EnvState, float, int], _):
             rng_key, env_obs, env_state, ep_ret, ep_len = data
@@ -139,7 +157,8 @@ class JaxLoop(BaseEnvLoop):
 
             # auto reset
             def episode_end_update(ep_ret, ep_len, env_state, env_obs):
-                env_obs, env_state = self.env_reset(rng_reset)
+                if self.reset_env:
+                    env_obs, env_state = self.env_reset(rng_reset)
                 return ep_ret * 0, ep_len * 0, env_state, env_obs
 
             def episode_mid_update(ep_ret, ep_len, env_state, env_obs):
@@ -185,8 +204,10 @@ class JaxLoop(BaseEnvLoop):
             ), rb
 
         step_init = (rng_key, env_obs, env_state, jnp.zeros((1,)), jnp.zeros((1,)))
-        _, rollout_data = jax.lax.scan(step_fn, step_init, (), steps)
-        return rollout_data
+        (_, final_env_obs, final_env_state, _, _), rollout_data = jax.lax.scan(step_fn, step_init, (), steps)
+        aux = RolloutAux(final_env_obs=final_env_obs, final_env_state=final_env_state)
+        aux = jax.tree_util.tree_map(lambda x : jnp.expand_dims(x, 0), aux) # add batch dimension so it plays nice with vmap in the rollout function
+        return rollout_data, aux
 
     @partial(jax.jit, static_argnames=["self", "steps_per_env", "apply_fn", "max_episode_length"])
     def rollout(
@@ -196,7 +217,8 @@ class JaxLoop(BaseEnvLoop):
         apply_fn: Callable,
         steps_per_env: int,
         max_episode_length: int = -1,
-    ):
+        init_env_obs_states: Tuple[EnvObs, EnvState] = None
+    ) -> Tuple[Any, RolloutAux]:
         """
         Rolls out on len(rng_keys) parallelized environments with a given policy and returns a
         buffer produced by rollout_callback
@@ -214,6 +236,8 @@ class JaxLoop(BaseEnvLoop):
 
         """
         batch_rollout = jax.vmap(
-            self._rollout_single_env, in_axes=(0, None, None, None, None), out_axes=(1)
+            self._rollout_single_env, in_axes=(0, None, None, None, None, 0), out_axes=(1)
         )
-        return batch_rollout(jnp.stack(rng_keys), params, apply_fn, steps_per_env, max_episode_length)
+        data, aux = batch_rollout(jnp.stack(rng_keys), params, apply_fn, steps_per_env, max_episode_length, init_env_obs_states)
+        aux = jax.tree_util.tree_map(lambda x : x[0], aux) # remove batch dimension
+        return data, aux

@@ -1,5 +1,6 @@
 env_id: ant
 jax_env: True
+auto_reset: False
 
 jax_platform_name: gpu
 
@@ -8,6 +9,7 @@ seed: 0
 ppo:
   gamma: 0.95
   ent_coef: 1e-2
+  reset_env: True
   
 model:
   actor_lr: 3e-4

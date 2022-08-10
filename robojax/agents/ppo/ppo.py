@@ -12,7 +12,7 @@ from flax import struct
 
 from robojax.agents.ppo.config import PPOConfig, TimeStep
 from robojax.agents.ppo.loss import ActorAux, actor_loss_fn, critic_loss_fn
-from robojax.data.loop import GymLoop, JaxLoop
+from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
 from robojax.logger.logger import Logger
 from robojax.models.ac.core import ActorCritic
@@ -57,13 +57,12 @@ class PPO:
         env_step=None,
         env_reset=None,
         cfg: PPOConfig = {},
+        
     ) -> None:
         self.jax_env = jax_env
-
-        # if env.step.__class__.__name__ == "CompiledFunction":
-        # self.jax = True
         self.cfg = PPOConfig(**cfg)
-        # self.env = env
+
+        self.last_env_obs_states = None
         if self.jax_env:
 
             def rollout_callback(
@@ -82,19 +81,8 @@ class PPO:
                     info=info,
                 )
 
-            self.loop = JaxLoop(env_reset, env_step, rollout_callback=rollout_callback)
-            self.eval_loop = JaxLoop(env_reset, env_step)
-            # self.train_step = jax.jit(
-            #     self.train_step,
-            #     static_argnames=[
-            #         "self",
-            #         "update_iters",
-            #         "rollout_steps_per_env",
-            #         "num_envs",
-            #         "apply_fn",
-            #         "batch_size",
-            #     ],
-            # )
+            self.loop = JaxLoop(env_reset, env_step, rollout_callback=rollout_callback, reset_env=self.cfg.reset_env)
+            self.last_env_states = None
             self.collect_buffer = jax.jit(
                 self.collect_buffer,
                 static_argnames=["rollout_steps_per_env", "num_envs", "apply_fn"],
@@ -243,6 +231,8 @@ class PPO:
     ):
         rng_key, buffer_rng_key = jax.random.split(rng_key)
         rollout_s_time = time.time()
+        
+        # TODO can we prevent compilation here where init_env_obs_states=None the first time for reset_env=False?
         buffer, info = self.collect_buffer(
             rng_key=buffer_rng_key,
             rollout_steps_per_env=rollout_steps_per_env,
@@ -250,7 +240,11 @@ class PPO:
             actor=actor,
             critic=critic,
             apply_fn=apply_fn,
+            init_env_obs_states=self.last_env_obs_states
         )
+        if not self.cfg.reset_env:
+            info: RolloutAux
+            self.last_env_obs_states = (info.final_env_obs, info.final_env_state) 
 
         rollout_time = time.time() - rollout_s_time
         update_s_time = time.time()
@@ -265,7 +259,7 @@ class PPO:
             batch_size=batch_size,
             buffer=buffer,
         )
-
+        
         # remove entries where we skipped updating actor due to early stopping
         actor_loss_aux: ActorAux = update_aux["actor_loss_aux"]
         actor_loss_aux.replace(
@@ -371,19 +365,26 @@ class PPO:
         actor,
         critic,
         apply_fn: Callable,
-    ):
+        init_env_obs_states = None,
+    ):  
         # buffer collection is not jitted if env is not jittable
+        if not self.cfg.reset_env:
+            if init_env_obs_states is None:
+                rng_key, *env_reset_rng_keys = jax.random.split(rng_key, num_envs + 1)
+                init_env_obs_states = jax.vmap(self.loop.env_reset)(jnp.stack(env_reset_rng_keys))
         # regardless this function returns a struct.dataclass object with all
         # the data in jax.numpy arrays for use
         rng_key, *env_rng_keys = jax.random.split(rng_key, num_envs + 1)
-        buffer: TimeStep = self.loop.rollout(
+        buffer, aux = self.loop.rollout(
             env_rng_keys,
-            (actor, critic),
-            apply_fn,
-            rollout_steps_per_env + 1,  # extra 1 for final value computation
-            self.cfg.max_episode_length
+            params=(actor, critic),
+            apply_fn=apply_fn,
+            steps_per_env=rollout_steps_per_env + 1,  # extra 1 for final value computation
+            max_episode_length=self.cfg.max_episode_length,
+            init_env_obs_states=init_env_obs_states
         )
-
+        buffer: TimeStep
+        
         if not self.jax_env:
             # if not a jax based env, then buffer is a python dictionary and we
             # convert it
@@ -413,4 +414,4 @@ class PPO:
             ep_len=buffer.ep_len[:-1],
         )
 
-        return buffer, {}
+        return buffer, aux

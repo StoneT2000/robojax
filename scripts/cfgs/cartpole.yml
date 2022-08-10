@@ -1,10 +1,12 @@
 env_id: CartPole-v1
 jax_env: True
+auto_reset: False
 
 seed: 0
 
 ppo:
   gamma: 0.95
+  reset_env: True
   
 model:
   actor_lr: 1e-4

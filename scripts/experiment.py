@@ -39,7 +39,7 @@ def main(cfg):
             act_dims = int(env.action_space().n)
             sample_obs = env_reset(jax.random.PRNGKey(0))[0]
         elif is_brax_env:
-            env = envs.create(env_id, auto_reset=False)
+            env = envs.create(env_id, auto_reset=cfg.auto_reset)
 
             def env_step(rng_key, state, action):
                 state = env.step(state, action)
@@ -103,7 +103,7 @@ def main(cfg):
             rng_key, * \
                 eval_env_rng_keys = jax.random.split(
                     rng_key, cfg.eval.num_eval_envs+1)
-            eval_buffer = eval_loop.rollout(
+            eval_buffer, _ = eval_loop.rollout(
                 eval_env_rng_keys,
                 ac.actor,
                 eval_apply,
@@ -142,6 +142,6 @@ def main(cfg):
 
 if __name__ == "__main__":
     cfg = parse_cfg(default_cfg_path=osp.join(
-        osp.dirname(__file__), "cfgs/ant.yml"))
+        osp.dirname(__file__), "cfgs/ant_short.yml"))
     print(cfg)
     main(cfg)
