@@ -31,7 +31,12 @@ ac = ActorCritic(
     critic_optim=optax.adam(learning_rate=4e-4),
 )
 logger = Logger(
-    tensorboard=True, wandb=True, cfg=dict(), workspace="robojax_exps", exp_name="ppo/cart_pole", project_name="robojax"
+    tensorboard=True,
+    wandb=True,
+    cfg=dict(),
+    workspace="robojax_exps",
+    exp_name="ppo/cart_pole",
+    project_name="robojax",
 )
 algo.train(
     rng_key=jax.random.PRNGKey(0),

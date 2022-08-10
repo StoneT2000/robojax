@@ -14,13 +14,15 @@ I highly recommend using conda. Otherwise you can try and install all the packag
 conda env create -f environment.yml
 ```
 
+To install jax with cuda support, follow the instructions on their README.
+
 ## Benchmarking
 See https://wandb.ai/stonet2000/robojax?workspace=user-stonet2000 for all benchmarked results on this library
 
 To benchmark the code yourself, you can run the following:
 ```
-python scripts/experiment.py jax_env=False logger.exp_name="ppo/cartpole_gym
-python scripts/experiment.py jax_env=True logger.exp_name="ppo/cartpole_gymnax
+python scripts/experiment.py jax_env=False logger.exp_name="ppo/cartpole_gym"
+python scripts/experiment.py jax_env=True logger.exp_name="ppo/cartpole_gymnax"
 
 python scripts/experiment.py jax_env=True logger.exp_name="ppo/ant_brax" logger.wandb=False env_id="ant"
 ```

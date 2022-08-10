@@ -2,6 +2,7 @@
 Loss functions for the PPO agent
 """
 
+from functools import partial
 from typing import Callable
 
 import distrax
@@ -10,9 +11,17 @@ import jax.numpy as jnp
 
 from robojax.agents.ppo.config import TimeStep
 from robojax.models import Model, Params
+from flax import struct
+import chex
+@struct.dataclass
+class ActorAux:
+    pi_loss: chex.Array = 0.
+    entropy: chex.Array = 0.
+    approx_kl: chex.Array = 0.
 
-
-def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: TimeStep):
+def actor_loss_fn(
+    clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep
+):
     def loss_fn(actor_params: Params):
         obs, act, adv, logp_old = batch.env_obs, batch.action, batch.adv, batch.log_p
         # ac.pi.val()
@@ -20,29 +29,30 @@ def actor_loss_fn(clip_ratio: float, actor_apply_fn: Callable, batch: TimeStep):
         dist: distrax.Distribution
         logp = dist.log_prob(act)
         # ac.pi.train()
-
-        ratio = jnp.exp(logp - logp_old)
+        log_r = logp - logp_old
+        ratio = jnp.exp(log_r)
         clip_adv = jax.lax.clamp(1.0 - clip_ratio, ratio, 1.0 + clip_ratio) * adv
         pi_loss = -jnp.mean(jnp.minimum(ratio * adv, clip_adv), axis=0)
         entropy = dist.entropy().mean()
+        entropy_loss = -entropy * entropy_coef
 
-        info = dict(
-            pi_loss=pi_loss,
-            entropy=entropy,
-            logp_old=logp_old.mean(),
-            clip_adv=clip_adv,
+        approx_kl = (ratio - 1 - log_r).mean()
+
+        total_loss = pi_loss + entropy_loss
+        info = ActorAux(
+            pi_loss=pi_loss, entropy=entropy, approx_kl=jax.lax.stop_gradient(approx_kl)
         )
-        return pi_loss, info
+        return total_loss, info
 
     return loss_fn
 
 
-def critic_loss_fn(critic_apply_fn: Model, batch: TimeStep):
+def critic_loss_fn(critic_apply_fn: Callable, batch: TimeStep):
     def loss_fn(critic_params: Params):
-        obs, ret = batch.env_obs, batch.ret
+        obs, ep_ret = batch.env_obs, batch.ep_ret
         v = critic_apply_fn(critic_params, obs)
         v = jnp.squeeze(v, -1)
-        critic_loss = jnp.mean(jnp.square(v - ret), axis=0)
+        critic_loss = jnp.mean(jnp.square(v - ep_ret), axis=0)
         return critic_loss, dict(critic_loss=critic_loss)
 
     return loss_fn

@@ -7,10 +7,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from stable_baselines3.common.env_util import make_vec_env
-
 import walle_rl.agents.ppo
 import walle_rl.explore as explore
+from stable_baselines3.common.env_util import make_vec_env
 from walle_rl.agents.ppo.agent import PPO
 from walle_rl.agents.ppo.buffer import PPOBuffer
 from walle_rl.architecture.ac.core import ActorCritic

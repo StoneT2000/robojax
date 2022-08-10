@@ -85,6 +85,7 @@ class Logger:
         # set up external loggers
         if self.tensorboard:
             from torch.utils.tensorboard import SummaryWriter
+
             self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
 

@@ -7,7 +7,6 @@ import torch
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
-
 from walle_rl.architecture.ac.mlp import MLPActorCritic
 from walle_rl.cfg import parse_cfg
 from walle_rl.common.rollout import Rollout

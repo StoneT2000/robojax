@@ -5,8 +5,8 @@ import os
 from typing import Any, Callable, Optional
 
 import flax
-import flax.serialization
 import flax.linen as nn
+import flax.serialization
 import optax
 from chex import PRNGKey
 from flax import struct
@@ -63,13 +63,14 @@ class Model:
         return self.replace(
             step=self.step + 1, params=updated_params, opt_state=updated_opt_state
         )
+
     def save(self, save_path: str):
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        with open(save_path, 'wb') as f:
+        with open(save_path, "wb") as f:
             f.write(flax.serialization.to_bytes(self._state_dict()))
 
-    def load(self, load_path: str) -> 'Model':
-        with open(load_path, 'rb') as f:
+    def load(self, load_path: str) -> "Model":
+        with open(load_path, "rb") as f:
             data = flax.serialization.from_bytes(self._state_dict(), f.read())
         return self.replace(**data)
 
