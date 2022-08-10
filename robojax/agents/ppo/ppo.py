@@ -217,7 +217,7 @@ class PPO:
                     else:
                         logger.pretty_print_table(stats)
                     logger.reset()
-
+    
     def train_step(
         self,
         rng_key: PRNGKey,
@@ -233,6 +233,10 @@ class PPO:
         rollout_s_time = time.time()
         
         # TODO can we prevent compilation here where init_env_obs_states=None the first time for reset_env=False?
+        if not self.cfg.reset_env:
+            if self.last_env_obs_states is None:
+                rng_key, *env_reset_rng_keys = jax.random.split(rng_key, num_envs + 1)
+                self.last_env_obs_states = jax.jit(jax.vmap(self.loop.env_reset))(jnp.stack(env_reset_rng_keys))
         buffer, info = self.collect_buffer(
             rng_key=buffer_rng_key,
             rollout_steps_per_env=rollout_steps_per_env,
@@ -368,10 +372,7 @@ class PPO:
         init_env_obs_states = None,
     ):  
         # buffer collection is not jitted if env is not jittable
-        if not self.cfg.reset_env:
-            if init_env_obs_states is None:
-                rng_key, *env_reset_rng_keys = jax.random.split(rng_key, num_envs + 1)
-                init_env_obs_states = jax.vmap(self.loop.env_reset)(jnp.stack(env_reset_rng_keys))
+        
         # regardless this function returns a struct.dataclass object with all
         # the data in jax.numpy arrays for use
         rng_key, *env_rng_keys = jax.random.split(rng_key, num_envs + 1)

@@ -142,6 +142,6 @@ def main(cfg):
 
 if __name__ == "__main__":
     cfg = parse_cfg(default_cfg_path=osp.join(
-        osp.dirname(__file__), "cfgs/ant_short.yml"))
+        osp.dirname(__file__), "cfgs/ant.yml"))
     print(cfg)
     main(cfg)
