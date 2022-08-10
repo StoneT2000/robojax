@@ -18,7 +18,9 @@ from robojax.models import explore
 from robojax.models.ac.core import ActorCritic
 from robojax.models.mlp import MLP
 from robojax.utils.spaces import get_action_dim
-
+import warnings
+import os
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 def main(cfg):
     env_id = cfg.env_id
@@ -142,6 +144,5 @@ def main(cfg):
 
 if __name__ == "__main__":
     cfg = parse_cfg(default_cfg_path=osp.join(
-        osp.dirname(__file__), "cfgs/ant.yml"))
-    print(cfg)
+        osp.dirname(__file__), "cfgs/ant_short.yml"))
     main(cfg)
