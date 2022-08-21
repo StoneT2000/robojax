@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from flax import struct
+from robojax.agents.base import BasePolicy
 
 from robojax.agents.ppo.config import PPOConfig, TimeStep
 from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_loss_fn
@@ -49,7 +50,7 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
     return jax.lax.stop_gradient(advantages)
 
 
-class PPO:
+class PPO(BasePolicy):
     def __init__(
         self,
         jax_env: bool,
