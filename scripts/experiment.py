@@ -145,5 +145,5 @@ def main(cfg):
 
 if __name__ == "__main__":
     cfg = parse_cfg(default_cfg_path=osp.join(
-        osp.dirname(__file__), "cfgs/halfcheetah_short.yml"))
+        osp.dirname(__file__), "cfgs/hopper_short.yml"))
     main(cfg)
