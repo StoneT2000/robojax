@@ -38,7 +38,6 @@ def mlp(sizes, activation, output_activation=None):  # TODO
 class Actor(nn.Module):
     actor: nn.Module
     explorer: nn.Module
-    log_std_scale: float = -0.5
 
     def __hash__(self) -> int:
         return id(self)
@@ -94,6 +93,7 @@ class ActorCritic:
     @partial(jax.jit, static_argnames=["self"])
     def step(self, rng_key: PRNGKey, actor: Model, critic: Model, obs):
         dist, _ = actor(obs)
+        dist: distrax.Distribution
         a = dist.sample(seed=rng_key)
         log_p = dist.log_prob(a)
         v = critic(obs)
