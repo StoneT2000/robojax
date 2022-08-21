@@ -38,7 +38,7 @@ class BaseEnvLoop(ABC):
 
 class GymLoop(BaseEnvLoop):
     """
-    RL loop with an environment
+    RL loop for non jittable environments environment
     """
 
     def __init__(self, env: gym.Env, rollout_callback: Callable = None) -> None:
@@ -106,9 +106,22 @@ class JaxLoop(BaseEnvLoop):
 
 
     Args :
+        env_reset : An environment reset function thta takes a PRNGKey and returns the initial environment observation and state
+
+        env_step : An environment step function that takes a PRNGKey, state, and action and 
+            returns the next environment observation, state, reward, done, and info
+
         reset_env : Whether this env loop class will reset environments when done = True.
             If False, when done = True, the loop only resets recorded episode returns and length. 
             The environment itself should have some auto reset functionality.
+
+        rollout_callback : A callback function that takes action, env_obs, reward, 
+            ep_ret, ep_len, next_env_obs, done, info, aux as input
+            note that aux is the auxilliary output of the rolled out policy apply_fn when calling rollout().
+
+            The output of this function is used to create the rollout/replay buffer.
+
+            If this function is set to None, the default generated buffer will contain env_obs, action, reward, ep_ret, ep_len, done
     """
 
     def __init__(
@@ -132,13 +145,29 @@ class JaxLoop(BaseEnvLoop):
         self,
         rng_key: PRNGKey,
         params: Any,
-        apply_fn: Callable,
+        apply_fn: Callable[[PRNGKey, Any, EnvObs], Tuple[EnvAction, Any]],
         steps: int,
         max_episode_length: int = -1,
         init_env_obs_states: Tuple[EnvObs, EnvState] = None
-    ):
+    ) -> Tuple[Any, RolloutAux]:
         """
-        Rollsout on a single env
+        Rollout on a single env and return the rollout_callback outputs and the last environment observation and state
+
+        Args : 
+            rng_key : initial PRNGKey to use for any randomness
+
+            params : any function parameters passed to apply_fn
+
+            apply_fn : a function that takes as input a PRNGKey, params, and an environment observation
+                and returns a tuple with the action and any auxilliary data
+
+            steps : number of steps to rollout
+
+            max_episode_length : max number of steps before we truncate the current episode. If -1, we will not truncate any environments
+
+            init_env_obs_states : Initial environment observation and state to step forward from. If None, this calls the given self.env_reset function 
+                to obtain the initial environment observation and state
+
         """
         rng_key, reset_rng_key = jax.random.split(rng_key)
         if init_env_obs_states is not None:
@@ -205,27 +234,42 @@ class JaxLoop(BaseEnvLoop):
 
         step_init = (rng_key, env_obs, env_state, jnp.zeros((1,)), jnp.zeros((1,)))
         (_, final_env_obs, final_env_state, _, _), rollout_data = jax.lax.scan(step_fn, step_init, (), steps)
+        
         aux = RolloutAux(final_env_obs=final_env_obs, final_env_state=final_env_state)
-        aux = jax.tree_util.tree_map(lambda x : jnp.expand_dims(x, 0), aux) # add batch dimension so it plays nice with vmap in the rollout function
+        # add batch dimension so it plays nice with vmap in the rollout function
+        aux = jax.tree_util.tree_map(lambda x : jnp.expand_dims(x, 0), aux)
         return rollout_data, aux
 
     @partial(jax.jit, static_argnames=["self", "steps_per_env", "apply_fn", "max_episode_length"])
     def rollout(
         self,
         rng_keys: List[PRNGKey],
-        params: any,
-        apply_fn: Callable,
+        params: Any,
+        apply_fn: Callable[[PRNGKey, Any, EnvObs], Tuple[EnvAction, Any]],
         steps_per_env: int,
         max_episode_length: int = -1,
         init_env_obs_states: Tuple[EnvObs, EnvState] = None
     ) -> Tuple[Any, RolloutAux]:
         """
-        Rolls out on len(rng_keys) parallelized environments with a given policy and returns a
-        buffer produced by rollout_callback
+        Rollout across N parallelized environments with an actor function apply_fn and return the rollout buffer as well as final environment observations and states
 
-        This rollout style vmaps rollouts on each parallel env, which are all continuous.
-        Once an episode is done, the next immediately starts
+        Args : 
+            rng_keys : initial PRNGKeys to use for any randomness. len(rng_keys) is the number of parallel environments that will be run
 
+            params : any function parameters passed to apply_fn
+
+            apply_fn : a function that takes as input a PRNGKey, params, and an environment observation
+                and returns a tuple with the action and any auxilliary data
+
+            steps_per_env : number of steps to rollout per parallel environment
+
+            max_episode_length : max number of steps before we truncate the current episode. If -1, we will not truncate any environments
+
+            init_env_obs_states : Initial environment observation and state to step forward from. If None, this calls the given self.env_reset function 
+                to obtain the initial environment observation and state
+
+
+        This rollout style vmaps rollouts on each parallel env. Once an episode is done, the next immediately starts
 
         Note: This is faster than only jitting an episode rollout and using a valid mask to remove
         time steps in rollouts that occur after the environment is done.
