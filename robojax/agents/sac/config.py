@@ -23,8 +23,8 @@ class SACConfig:
 
     tau: Optional[float] = 0.005
     discount: Optional[float] = 0.99
-    backup_entropy: Optional[bool] = False
-    target_entropy: Optional[float] = None
+    backup_entropy: Optional[bool] = True
+    target_entropy: Optional[float] = None # defaults to - act_dims / 2
     learnable_temp: Optional[bool] = True
 
     eval_freq: Optional[int] = -1

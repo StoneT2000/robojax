@@ -181,7 +181,6 @@ class SAC(BasePolicy):
             critic.params,
             target_critic.params,
         )
-
         return target_critic.replace(params=new_target_critic_params)
 
     @partial(jax.jit, static_argnames=["self"])
