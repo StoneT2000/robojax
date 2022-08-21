@@ -144,7 +144,11 @@ class SAC(BasePolicy):
                     temp=temp_update_aux.temp,
                 )
                 if update_actor:
-                    logger.store(tag="train", actor_loss=actor_update_aux.actor_loss, entropy=actor_update_aux.entropy)
+                    logger.store(
+                        tag="train",
+                        actor_loss=actor_update_aux.actor_loss,
+                        entropy=actor_update_aux.entropy,
+                    )
                     if self.cfg.learnable_temp:
                         logger.store(tag="train", temp_loss=temp_update_aux.temp_loss)
 
