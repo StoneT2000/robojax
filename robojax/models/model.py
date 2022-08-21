@@ -42,7 +42,10 @@ class Model:
         sample_input: Any,
         tx: Optional[optax.GradientTransformation] = None,
     ) -> "Model":
-        model_vars = model.init(key, sample_input)
+        if isinstance(sample_input, list):
+            model_vars = model.init(key, *sample_input)
+        else:
+            model_vars = model.init(key, sample_input)
         opt_state = None
         if tx is not None:
             opt_state = tx.init(model_vars)

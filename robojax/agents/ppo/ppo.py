@@ -9,10 +9,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from flax import struct
-from robojax.agents.base import BasePolicy
 
+from robojax.agents.base import BasePolicy
 from robojax.agents.ppo.config import PPOConfig, TimeStep
-from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_loss_fn
+from robojax.agents.ppo.loss import (ActorAux, CriticAux, actor_loss_fn,
+                                     critic_loss_fn)
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
 from robojax.logger.logger import Logger
@@ -39,7 +40,7 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
         gae = deltas[t] + gamma * gae_lambda * not_dones[t] * gae
         return gae, gae
 
-    indices = jnp.arange(N)[::-1] # N - 1, N - 2, ..., 0
+    indices = jnp.arange(N)[::-1]  # N - 1, N - 2, ..., 0
     _, advantages = jax.lax.scan(
         body_fun,
         0.0,
@@ -58,7 +59,6 @@ class PPO(BasePolicy):
         env_step=None,
         env_reset=None,
         cfg: PPOConfig = {},
-        
     ) -> None:
         self.jax_env = jax_env
         self.cfg = PPOConfig(**cfg)
@@ -82,7 +82,12 @@ class PPO(BasePolicy):
                     info=info,
                 )
 
-            self.loop = JaxLoop(env_reset, env_step, rollout_callback=rollout_callback, reset_env=self.cfg.reset_env)
+            self.loop = JaxLoop(
+                env_reset,
+                env_step,
+                rollout_callback=rollout_callback,
+                reset_env=self.cfg.reset_env,
+            )
             self.last_env_states = None
             self.collect_buffer = jax.jit(
                 self.collect_buffer,
@@ -186,7 +191,7 @@ class PPO(BasePolicy):
                     approx_kl=np.asarray(actor_loss_aux.approx_kl),
                     critic_loss=np.asarray(critic_loss_aux.critic_loss),
                     actor_updates=aux["update_aux"]["actor_updates"].item(),
-                    critic_updates=aux["update_aux"]["critic_updates"].item()
+                    critic_updates=aux["update_aux"]["critic_updates"].item(),
                 )
 
                 logger.store(
@@ -219,7 +224,7 @@ class PPO(BasePolicy):
                     else:
                         logger.pretty_print_table(stats)
                 logger.reset()
-    
+
     def train_step(
         self,
         rng_key: PRNGKey,
@@ -233,12 +238,14 @@ class PPO(BasePolicy):
     ):
         rng_key, buffer_rng_key = jax.random.split(rng_key)
         rollout_s_time = time.time()
-        
+
         # TODO can we prevent compilation here where init_env_obs_states=None the first time for reset_env=False?
         if not self.cfg.reset_env:
             if self.last_env_obs_states is None:
                 rng_key, *env_reset_rng_keys = jax.random.split(rng_key, num_envs + 1)
-                self.last_env_obs_states = jax.jit(jax.vmap(self.loop.env_reset))(jnp.stack(env_reset_rng_keys))
+                self.last_env_obs_states = jax.jit(jax.vmap(self.loop.env_reset))(
+                    jnp.stack(env_reset_rng_keys)
+                )
         buffer, info = self.collect_buffer(
             rng_key=buffer_rng_key,
             rollout_steps_per_env=rollout_steps_per_env,
@@ -246,11 +253,11 @@ class PPO(BasePolicy):
             actor=actor,
             critic=critic,
             apply_fn=apply_fn,
-            init_env_obs_states=self.last_env_obs_states
+            init_env_obs_states=self.last_env_obs_states,
         )
         if not self.cfg.reset_env:
             info: RolloutAux
-            self.last_env_obs_states = (info.final_env_obs, info.final_env_state) 
+            self.last_env_obs_states = (info.final_env_obs, info.final_env_state)
 
         rollout_time = time.time() - rollout_s_time
         update_s_time = time.time()
@@ -265,12 +272,10 @@ class PPO(BasePolicy):
             batch_size=batch_size,
             buffer=buffer,
         )
-        
+
         # remove entries where we skipped updating actor due to early stopping
         actor_loss_aux: ActorAux = update_aux["actor_loss_aux"]
-        actor_loss_aux.replace(
-            approx_kl=actor_loss_aux.approx_kl
-        )
+        actor_loss_aux.replace(approx_kl=actor_loss_aux.approx_kl)
 
         update_time = time.time() - update_s_time
         return (
@@ -307,7 +312,7 @@ class PPO(BasePolicy):
         batch_size: int,
         buffer: TimeStep,
     ) -> Tuple[Model, Model, Dict]:
-        """ Update the actor and critic parameters """
+        """Update the actor and critic parameters"""
         sampler = BufferSampler(
             ["action", "env_obs", "log_p", "ep_ret", "adv"],
             buffer,
@@ -324,7 +329,6 @@ class PPO(BasePolicy):
             new_actor = actor
             new_critic = critic
 
-
             def update_actor_fn(actor):
                 grads_a_fn = jax.grad(
                     actor_loss_fn(
@@ -339,12 +343,18 @@ class PPO(BasePolicy):
                 new_actor = actor.apply_gradients(grads=grads)
 
                 return new_actor, info_a
+
             def skip_update_actor_fn(actor):
                 return actor, ActorAux()
-            new_actor, info_a = jax.lax.cond(update_actor, update_actor_fn, skip_update_actor_fn, actor)
-            update_actor = jax.lax.cond(info_a.approx_kl > self.cfg.target_kl, lambda : False, lambda : True)
+
+            new_actor, info_a = jax.lax.cond(
+                update_actor, update_actor_fn, skip_update_actor_fn, actor
+            )
+            update_actor = jax.lax.cond(
+                info_a.approx_kl > self.cfg.target_kl, lambda: False, lambda: True
+            )
             actor_updates += 1 * update_actor
-            
+
             if update_critic:
                 grads_c_fn = jax.grad(
                     critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch),
@@ -353,7 +363,14 @@ class PPO(BasePolicy):
                 grads, info_c = grads_c_fn(critic.params)
                 new_critic = critic.apply_gradients(grads=grads)
                 critic_updates += 1
-            return (rng_key, new_actor, new_critic, update_actor, actor_updates, critic_updates), dict(actor_loss_aux=info_a, critic_loss_aux=info_c)
+            return (
+                rng_key,
+                new_actor,
+                new_critic,
+                update_actor,
+                actor_updates,
+                critic_updates,
+            ), dict(actor_loss_aux=info_a, critic_loss_aux=info_c)
 
         update_init = (rng_key, actor, critic, update_actor, 0, 0)
         carry, update_aux = jax.lax.scan(
@@ -361,7 +378,13 @@ class PPO(BasePolicy):
         )
         _, actor, critic, _, actor_updates, critic_updates = carry
 
-        return actor, critic, dict(**update_aux, actor_updates=actor_updates, critic_updates=critic_updates)
+        return (
+            actor,
+            critic,
+            dict(
+                **update_aux, actor_updates=actor_updates, critic_updates=critic_updates
+            ),
+        )
 
     def collect_buffer(
         self,
@@ -371,10 +394,10 @@ class PPO(BasePolicy):
         actor,
         critic,
         apply_fn: Callable,
-        init_env_obs_states = None,
-    ):  
+        init_env_obs_states=None,
+    ):
         # buffer collection is not jitted if env is not jittable
-        
+
         # regardless this function returns a struct.dataclass object with all
         # the data in jax.numpy arrays for use
         rng_key, *env_rng_keys = jax.random.split(rng_key, num_envs + 1)
@@ -382,12 +405,13 @@ class PPO(BasePolicy):
             env_rng_keys,
             params=(actor, critic),
             apply_fn=apply_fn,
-            steps_per_env=rollout_steps_per_env + 1,  # extra 1 for final value computation
+            steps_per_env=rollout_steps_per_env
+            + 1,  # extra 1 for final value computation
             max_episode_length=self.cfg.max_episode_length,
-            init_env_obs_states=init_env_obs_states
+            init_env_obs_states=init_env_obs_states,
         )
         buffer: TimeStep
-        
+
         if not self.jax_env:
             # if not a jax based env, then buffer is a python dictionary and we
             # convert it

@@ -1,4 +1,5 @@
 from typing import Any, Callable, Tuple
+
 from chex import PRNGKey
 
 from robojax.data.loop import EnvAction, EnvObs, EnvState
@@ -27,4 +28,5 @@ class BasePolicy:
             assert env_step is None
             assert env_reset is None
             import gym
+
             self.env: gym.Env = env

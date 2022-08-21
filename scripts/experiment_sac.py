@@ -12,8 +12,8 @@ from brax import envs
 from flax import linen as nn
 from stable_baselines3.common.env_util import make_vec_env
 
-from robojax.agents.ppo import PPO
 from robojax.agents.ppo.config import PPOConfig
+from robojax.agents.sac import SAC, ActorCritic
 from robojax.cfg.parse import parse_cfg
 from robojax.data.loop import GymLoop, JaxLoop
 from robojax.logger import Logger
@@ -63,12 +63,12 @@ def main(cfg):
             act_dims = env.action_size
             explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
             sample_obs = env.reset(jax.random.PRNGKey(0)).obs
-        algo = PPO(env_step=env_step, env_reset=env_reset, jax_env=cfg.jax_env)
+        algo = SAC(env_step=env_step, env_reset=env_reset, jax_env=cfg.jax_env)
         eval_loop = JaxLoop(env_reset=env_reset, env_step=env_step)
     else:
         env = gym.make(env_id)
         env = make_vec_env(env_id, num_envs, seed=cfg.seed)
-        algo = PPO(env=env, jax_env=cfg.jax_env)
+        algo = SAC(env=env, jax_env=cfg.jax_env)
         act_dims = get_action_dim(env.action_space)
         sample_obs = env.reset()
         eval_loop = GymLoop(env)
