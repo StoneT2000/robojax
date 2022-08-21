@@ -11,7 +11,7 @@ import numpy as np
 from flax import struct
 
 from robojax.agents.ppo.config import PPOConfig, TimeStep
-from robojax.agents.ppo.loss import ActorAux, actor_loss_fn, critic_loss_fn
+from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_loss_fn
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
 from robojax.logger.logger import Logger
@@ -120,6 +120,7 @@ class PPO:
         train_callback: Callable = None,
         verbose: int = 1,
     ):
+        # TODO create full jittable version
         train_start_time = time.time()
         if self.jax_env:
 
@@ -164,7 +165,7 @@ class PPO:
             if logger is not None:
                 total_env_steps = (t + 1) * env_steps_per_epoch
                 actor_loss_aux: ActorAux = aux["update_aux"]["actor_loss_aux"]
-                critic_loss_aux = aux["update_aux"]["critic_loss_aux"]
+                critic_loss_aux: CriticAux = aux["update_aux"]["critic_loss_aux"]
                 total_time = time.time() - train_start_time
                 if episode_ends.any():
                     logger.store(
@@ -180,9 +181,9 @@ class PPO:
                     fps=env_steps_per_epoch / aux["rollout_time"],
                     env_steps=total_env_steps,
                     entropy=np.asarray(actor_loss_aux.entropy),
-                    pi_loss=np.asarray(actor_loss_aux.pi_loss),
-                    kl=np.asarray(actor_loss_aux.approx_kl),
-                    critic_loss=np.asarray(critic_loss_aux["critic_loss"]),
+                    actor_loss=np.asarray(actor_loss_aux.actor_loss),
+                    approx_kl=np.asarray(actor_loss_aux.approx_kl),
+                    critic_loss=np.asarray(critic_loss_aux.critic_loss),
                     actor_updates=aux["update_aux"]["actor_updates"].item(),
                     critic_updates=aux["update_aux"]["critic_updates"].item()
                 )
@@ -216,7 +217,7 @@ class PPO:
                         logger.pretty_print_table(filtered_stats)
                     else:
                         logger.pretty_print_table(stats)
-                    logger.reset()
+                logger.reset()
     
     def train_step(
         self,
@@ -305,6 +306,7 @@ class PPO:
         batch_size: int,
         buffer: TimeStep,
     ) -> Tuple[Model, Model, Dict]:
+        """ Update the actor and critic parameters """
         sampler = BufferSampler(
             ["action", "env_obs", "log_p", "ep_ret", "adv"],
             buffer,
@@ -332,7 +334,6 @@ class PPO:
                     ),
                     has_aux=True,
                 )
-                # TODO move aux data to CPU
                 grads, info_a = grads_a_fn(actor.params)
                 new_actor = actor.apply_gradients(grads=grads)
 
@@ -340,7 +341,7 @@ class PPO:
             def skip_update_actor_fn(actor):
                 return actor, ActorAux()
             new_actor, info_a = jax.lax.cond(update_actor, update_actor_fn, skip_update_actor_fn, actor)
-            update_actor = jax.lax.cond(info_a.approx_kl > self.cfg.target_kl * 1.5, lambda : False, lambda : True)
+            update_actor = jax.lax.cond(info_a.approx_kl > self.cfg.target_kl, lambda : False, lambda : True)
             actor_updates += 1 * update_actor
             
             if update_critic:
