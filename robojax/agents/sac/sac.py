@@ -15,7 +15,7 @@ from robojax.agents.sac.config import SACConfig, TimeStep
 from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
 from robojax.data import buffer
 from robojax.data.buffer import GenericBuffer
-from robojax.data.loop import EnvAction, EnvObs, JaxLoop
+from robojax.data.loop import EnvAction, EnvObs, GymLoop, JaxLoop
 from robojax.logger.logger import Logger
 from robojax.models import Model
 from robojax.models.model import Params
@@ -87,12 +87,14 @@ class SAC(BasePolicy):
             self.cfg.target_entropy = -self.action_dim / 2
 
         if self.jax_env:
-            self._env_step = jax.jit(self._env_step, static_argnames=["self", "seed"])
+            self._env_step = jax.jit(self._env_step, static_argnames=["seed"])
             self.eval_loop = JaxLoop(
                 self.env_reset,
                 self.env_step,
                 reset_env=True,
             )
+        else:
+            self.eval_loop = GymLoop(self.env)
 
     @partial(jax.jit, static_argnames=["self", "seed"])
     def _sample_action(self, rng_key, actor: DiagGaussianActor, env_obs, seed=False):
@@ -106,9 +108,15 @@ class SAC(BasePolicy):
     def _env_step(self, rng_key: PRNGKey, env_obs, env_state, actor: DiagGaussianActor, seed=False):
         rng_key, act_rng_key, env_rng_key = jax.random.split(rng_key, 3)
         a = self._sample_action(act_rng_key, actor, env_obs, seed)
-        next_env_obs, next_env_state, reward, done, info = self.env_step(
-            env_rng_key, env_state, a
-        )
+        if self.jax_env:
+            next_env_obs, next_env_state, reward, done, info = self.env_step(
+                env_rng_key, env_state, a
+            )
+        else:
+            # print(a.shape)
+            # import ipdb;ipdb.set_trace()
+            next_env_obs, reward, done, info = self.env.step(np.asarray(a))
+            next_env_state = None
         return a, next_env_obs, next_env_state, reward, done, info
 
     
@@ -121,28 +129,34 @@ class SAC(BasePolicy):
         episodes = 0
         ep_len, ep_ret, done = 0, 0, False
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
-        env_obs, env_state = self.env_reset(reset_rng_key)
+        if self.jax_env:
+            env_obs, env_state = self.env_reset(reset_rng_key)
+        else:
+            env_obs = self.env.reset()
+            env_state = None
         from tqdm import tqdm
-        # pbar=tqdm(total=self.cfg.num_train_steps)
+        pbar=tqdm(total=self.cfg.num_train_steps)
         while self.step < self.cfg.num_train_steps:
             # print(self.step, self.cfg.eval_freq)
             if self.step > 0 and self.step > self.cfg.num_seed_steps:
                 if self.step % self.cfg.eval_freq == 0:
                     # evaluate
-                    num_eval_envs = 4
+                    num_eval_envs = 1
                     rng_key, *eval_rng_keys = jax.random.split(rng_key, num_eval_envs + 1)      
                     eval_buffer, _ = self.eval_loop.rollout(rng_keys=jnp.stack(eval_rng_keys),
                         params=ac.actor,
                         apply_fn=self.policy,
+                        # apply_fn = lambda rng, obs : (ac.actor(obs, deterministic=True), {}),
                         steps_per_env=1000,
                     )
                     ep_lens = np.asarray(eval_buffer['ep_len'])
                     ep_rets = np.asarray(eval_buffer['ep_ret'])
+                    # import ipdb;ipdb.set_trace()
                     # ep_rews = np.asarray(eval_buffer.reward)
                     episode_ends = np.asarray(eval_buffer['done'])
                     ep_rets = ep_rets[episode_ends].flatten()
                     ep_lens = ep_lens[episode_ends].flatten()
-                    print("EVAL", self.step, dict(avg_ret=ep_rets.mean(), avg_len=ep_lens.mean()))
+                    # print("EVAL", self.step, dict(avg_ret=ep_rets.mean(), avg_len=ep_lens.mean()))
                     logger.store(
                         tag="test",
                         ep_ret=ep_rets,
@@ -152,7 +166,10 @@ class SAC(BasePolicy):
             if done:
                 
                 rng_key, reset_rng_key = jax.random.split(rng_key, 2)
-                env_obs, env_state = self.env_reset(reset_rng_key)
+                if self.jax_env:
+                    env_obs, env_state = self.env_reset(reset_rng_key)
+                else:
+                    env_obs = self.env.reset()
                 # print("===",ep_ret)
                 # pbar.set_postfix(dict(ep_ret=ep_ret, ep_len=ep_len))
                 ep_len, ep_ret = 0, 0
@@ -161,7 +178,6 @@ class SAC(BasePolicy):
             
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
             a, next_env_obs, next_env_state, reward, done, info = self._env_step(env_rng_key, env_obs, env_state, ac.actor, seed=self.step < self.cfg.num_seed_steps)
-            # pbar.update(n=1)
 
             ep_len += 1
             ep_ret += reward
@@ -217,27 +233,33 @@ class SAC(BasePolicy):
                 critic_update_aux: CriticUpdateAux = aux["critic_update_aux"]
                 actor_update_aux: ActorUpdateAux = aux["actor_update_aux"]
                 temp_update_aux: TempUpdateAux = aux["temp_update_aux"]
-
-                logger.store(
-                    tag="train",
-                    critic_loss=critic_update_aux.critic_loss,
-                    temp=temp_update_aux.temp,
-                )
-                if update_actor:
+                if self.step % self.cfg.log_freq == 0:
                     logger.store(
                         tag="train",
-                        actor_loss=actor_update_aux.actor_loss,
-                        entropy=actor_update_aux.entropy,
+                        critic_loss=critic_update_aux.critic_loss,
+                        q1=critic_update_aux.q1,
+                        q2=critic_update_aux.q2,
+                        temp=temp_update_aux.temp,
                     )
-                    if self.cfg.learnable_temp:
-                        logger.store(tag="train", temp_loss=temp_update_aux.temp_loss)
-                stats = logger.log(self.step)
-                logger.reset()
-
+                    if update_actor:
+                        logger.store(
+                            tag="train",
+                            actor_loss=actor_update_aux.actor_loss,
+                            entropy=actor_update_aux.entropy,
+                            target_entropy=self.cfg.target_entropy
+                        )
+                        if self.cfg.learnable_temp:
+                            logger.store(tag="train", temp_loss=temp_update_aux.temp_loss)
+                    stats = logger.log(self.step)
+                    logger.reset()
+            pbar.update(n=1)
             
 
     @partial(jax.jit, static_argnames=["self"])
     def update_target(self, critic: Model, target_critic: Model) -> Model:
+        """
+        update targret_critic with polyak averaging
+        """
         new_target_critic_params = jax.tree_util.tree_map(
             lambda cp, tcp: cp * self.cfg.tau + tcp * (1 - self.cfg.tau),
             critic.params,
@@ -267,8 +289,8 @@ class SAC(BasePolicy):
 
         def critic_loss_fn(critic_params: Params):
             q1, q2 = critic.apply_fn(critic_params, batch.env_obs, batch.action)
-            critic_loss = (jnp.square(q1 - target_q) + jnp.square(q2 - target_q)).mean()
-            return critic_loss, CriticUpdateAux(critic_loss=critic_loss, q1=q1, q2=q2)
+            critic_loss = ((q1 - target_q) ** 2 + (q2 - target_q) ** 2).mean()
+            return critic_loss, CriticUpdateAux(critic_loss=critic_loss, q1=q1.mean(), q2=q2.mean())
 
         grad_fn = jax.grad(critic_loss_fn, has_aux=True)
         grads, aux = grad_fn(critic.params)
@@ -288,9 +310,9 @@ class SAC(BasePolicy):
             dist: distrax.Distribution = actor.apply_fn(actor_params, batch.env_obs)
             actions = dist.sample(seed=rng_key)
             log_probs = dist.log_prob(actions)
-            a_q1, a_q2 = critic(batch.env_obs, batch.action)
-            a_q = jnp.minimum(a_q1, a_q2)
-            actor_loss = (temp() * log_probs - a_q).mean()
+            q1, q2 = critic(batch.env_obs, actions)
+            q = jnp.minimum(q1, q2)
+            actor_loss = (temp() * log_probs - q).mean()
             return actor_loss, ActorUpdateAux(
                 actor_loss=actor_loss, entropy=-log_probs.mean()
             )

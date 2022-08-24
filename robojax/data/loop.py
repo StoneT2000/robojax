@@ -109,7 +109,7 @@ class GymLoop(BaseEnvLoop):
         # stack data
         for k in data:
             data[k] = jnp.stack(data[k])
-        return data
+        return data, {}
 
 
 class JaxLoop(BaseEnvLoop):

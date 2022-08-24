@@ -26,11 +26,13 @@ class SACConfig:
     backup_entropy: Optional[bool] = True
     target_entropy: Optional[float] = None  # defaults to - act_dims / 2
     learnable_temp: Optional[bool] = True
-
+    initial_temperature: Optional[float] = 1.0
+    
     actor_update_freq: Optional[int] = 1
     target_update_freq: Optional[int] = 1
 
-    eval_freq: Optional[int] = -1
+    eval_freq: Optional[int] = 5000
+    log_freq: Optional[int] = 1000
 
     max_episode_length: Optional[int] = -1
 

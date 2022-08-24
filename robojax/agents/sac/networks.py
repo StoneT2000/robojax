@@ -73,7 +73,7 @@ class DiagGaussianActor(nn.Module):
                 self.log_std_scale,
             )
         self.mlp = MLP(self.features, self.activation, self.output_activation)
-        self.action_head = nn.Dense(self.act_dims)
+        self.action_head = nn.Dense(self.act_dims, kernel_init=default_init(1))
 
     def __call__(self, x, deterministic=False):
         if deterministic:
@@ -91,10 +91,6 @@ class DiagGaussianActor(nn.Module):
         if self.tanh_squash_distribution:
             dist = distrax.Transformed(distribution=dist, bijector=distrax.Block(distrax.Tanh(), ndims=1))
         return dist
-    
-    def other(self, x):
-        x=self.mlp(x)
-        return self.action_head(x)
 
 
 class Temperature(nn.Module):
@@ -152,6 +148,6 @@ class ActorCritic:
     @partial(jax.jit, static_argnames=["self", "deterministic"])
     def act(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs, deterministic=False):
         if deterministic:
-            return actor(obs)
+            return actor(obs, deterministic=True)
         dist, _ = actor(obs)
         return dist.sample(seed=rng_key)

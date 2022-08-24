@@ -1,5 +1,5 @@
-env_id: hopper
-jax_env: True
+env_id: Hopper-v3
+jax_env: False
 auto_reset: True
 
 jax_platform_name: gpu
@@ -7,19 +7,18 @@ jax_platform_name: gpu
 seed: 0
 
 sac:
-  num_seed_steps: 10_000
+  num_seed_steps: 4096
   num_train_steps: 6_553_600
-  replay_buffer_capacity: 1_000_000
+  replay_buffer_capacity: 1_048_576
 
   # num_envs: 128
   batch_size: 256
   # update_iters: 32
 
-  eval_freq: 5000
-  log_freq: 1000
+  eval_freq: 4096
 
-  learnable_temp: True
-  initial_temperature: 1.0
+  learnable_temp: False
+  initial_temperature: 0.1
   
 model:
   actor_lr: 3e-4

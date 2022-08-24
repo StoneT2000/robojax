@@ -71,18 +71,20 @@ def main(cfg):
             act_dims = env.action_size
             sample_obs = env.reset(jax.random.PRNGKey(0)).obs
             sample_acts = np.zeros(env.action_size)
-            obs_space = spaces.Box(-jnp.ones(env.observation_size, float), jnp.ones(env.observation_size, float))
-            act_space = spaces.Box(-jnp.ones(env.action_size, float), jnp.ones(env.action_size, float))
+            obs_space = spaces.Box(-np.ones(env.observation_size, float), np.ones(env.observation_size, float))
+            act_space = spaces.Box(-np.ones(env.action_size, float), np.ones(env.action_size, float))
         algo = SAC(env_step=env_step, env_reset=env_reset, jax_env=cfg.jax_env,
                    observation_space=obs_space, action_space=act_space, seed_sampler=seed_sampler, cfg=sac_cfg)
         eval_loop = JaxLoop(env_reset=env_reset, env_step=env_step)
     else:
         env = gym.make(env_id)
         env = make_vec_env(env_id, num_envs, seed=cfg.seed)
-        algo = SAC(env=env, jax_env=cfg.jax_env)
+        def seed_sampler(rng_key):
+            return env.action_space.sample()[None, :]
+        algo = SAC(env=env, jax_env=cfg.jax_env, observation_space=env.observation_space,seed_sampler=seed_sampler, action_space=env.action_space, cfg=sac_cfg)
         act_dims = get_action_dim(env.action_space)
         sample_obs = env.reset()
-        sample_acts = env.action_space.sample()
+        sample_acts = env.action_space.sample()[None, :]
         eval_loop = GymLoop(env)
 
     assert env != None
@@ -98,6 +100,7 @@ def main(cfg):
         critic=critic,
         sample_obs=sample_obs,
         sample_acts=sample_acts,
+        initial_temperature=sac_cfg.initial_temperature,
         actor_optim=optax.adam(learning_rate=cfg.model.actor_lr),
         critic_optim=optax.adam(learning_rate=cfg.model.critic_lr),
     )
