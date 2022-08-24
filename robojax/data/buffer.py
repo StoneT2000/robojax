@@ -193,7 +193,7 @@ class GenericBuffer(BaseBuffer):
         )
         rng_key, env_ids_rng_key = jax.random.split(rng_key)
         env_ids = jax.random.randint(
-            env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.num_envs
+            env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.n_envs
         )
 
         return self._get_batch_by_ids(

@@ -39,7 +39,7 @@ class Model:
         cls,
         model: nn.Module,
         key: PRNGKey,
-        sample_input: Any,
+        sample_input: Any = [],
         tx: Optional[optax.GradientTransformation] = None,
     ) -> "Model":
         if isinstance(sample_input, list):

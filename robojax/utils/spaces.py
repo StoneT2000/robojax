@@ -19,6 +19,8 @@ def get_obs_shape(
     :param observation_space:
     :return:
     """
+    if isinstance(observation_space, int):
+        return observation_space
     if isinstance(observation_space, spaces.Box):
         return observation_space.shape
     elif isinstance(observation_space, spaces.Discrete):
@@ -44,7 +46,9 @@ def get_action_dim(action_space: spaces.Space) -> int:
     :param action_space:
     :return:
     """
-    if isinstance(action_space, spaces.Box):
+    if isinstance(action_space, int):
+        return action_space
+    elif isinstance(action_space, spaces.Box):
         return int(np.prod(action_space.shape))
     elif isinstance(action_space, spaces.Discrete):
         # Action is an int

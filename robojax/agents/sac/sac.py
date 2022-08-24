@@ -12,7 +12,7 @@ from flax import struct
 
 from robojax.agents.base import BasePolicy
 from robojax.agents.sac.config import SACConfig, TimeStep
-from robojax.agents.sac.networks import ActorCritic
+from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
 from robojax.data import buffer
 from robojax.data.buffer import GenericBuffer
 from robojax.data.loop import EnvAction, EnvObs
@@ -54,7 +54,10 @@ class SAC(BasePolicy):
         cfg: SACConfig = {},
     ):
         super().__init__(jax_env, env, env_step, env_reset)
-        self.cfg = SACConfig(**cfg)
+        if isinstance(cfg, dict):
+            self.cfg = SACConfig(**cfg)
+        else:
+            self.cfg = cfg
 
         self.step = 0
         self.seed_sampler = seed_sampler
@@ -67,7 +70,7 @@ class SAC(BasePolicy):
         buffer_config = dict(
             action=((self.action_dim,), action_space.dtype),
             reward=((), np.float32),
-            done=((), np.bool8),
+            mask=((), float),
         )
         if isinstance(self.obs_shape, dict):
             buffer_config["env_obs"] = (
@@ -76,19 +79,41 @@ class SAC(BasePolicy):
             )
         else:
             buffer_config["env_obs"] = (self.obs_shape, np.float32)
-        buffer_config["next_env_obs"] = buffer["env_obs"]
+        buffer_config["next_env_obs"] = buffer_config["env_obs"]
         self.replay_buffer = GenericBuffer(
-            self.cfg.replay_buffer_capacity, n_envs=1, config=buffer_config
+            buffer_size=self.cfg.replay_buffer_capacity, n_envs=1, config=buffer_config
         )
         if self.cfg.target_entropy is None:
             self.cfg.target_entropy = -self.action_dim / 2
 
+        if self.jax_env:
+            self._env_step = jax.jit(self._env_step, static_argnames=["self", "seed"])
+
+    @partial(jax.jit, static_argnames=["self", "seed"])
+    def _sample_action(self, rng_key, env_obs, actor: DiagGaussianActor, seed=False):
+        if seed:
+            a = self.seed_sampler(rng_key)
+        else:
+            dist: distrax.Distribution = actor(env_obs)
+            a = dist.sample(seed=rng_key)
+        return a
+
+    def _env_step(self, rng_key: PRNGKey, env_obs, env_state, actor: DiagGaussianActor, seed=False):
+        rng_key, act_rng_key, env_rng_key = jax.random.split(rng_key, 3)
+        a = self._sample_action(act_rng_key, env_obs, actor, seed)
+        next_env_obs, next_env_state, reward, done, info = self.env_step(
+            env_rng_key, env_state, a
+        )
+        return a, next_env_obs, next_env_state, reward, done, info
+
     def train(self, rng_key: PRNGKey, ac: ActorCritic, logger: Logger, verbose=1):
         stime = time.time()
         episodes = 0
-        ep_len, ep_ret, done = 0, 0, True
+        ep_len, ep_ret, done = 0, 0, False
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
         env_obs, env_state = self.env_reset(reset_rng_key)
+        from tqdm import tqdm
+        pbar=tqdm(total=self.cfg.num_train_steps)
         while self.step < self.cfg.num_train_steps:
             if done:
                 if self.step > 0:
@@ -97,14 +122,37 @@ class SAC(BasePolicy):
                         pass
                 rng_key, reset_rng_key = jax.random.split(rng_key, 2)
                 env_obs, env_state = self.env_reset(reset_rng_key)
-                ep_len, ep_ret = 0
+                # print("===",ep_ret)
+                pbar.set_postfix(dict(ep_ret=ep_ret, ep_len=ep_len))
+                ep_len, ep_ret = 0, 0
                 episodes += 1
 
-            rng_key, act_rng_key, env_rng_key = jax.random.split(rng_key, 3)
-            if self.step < self.cfg.num_seed_steps:
-                a = self.seed_sampler(act_rng_key)
+            
+            rng_key, env_rng_key = jax.random.split(rng_key, 2)
+            a, next_env_obs, next_env_state, reward, done, info = self._env_step(env_rng_key, env_obs, env_state, ac.actor, seed=self.step < self.cfg.num_seed_steps)
+            pbar.update(n=1)
+
+            ep_len += 1
+            ep_ret += reward
+            self.step += 1
+
+            mask = 0.0
+            if not done or ep_len == self.cfg.max_episode_length:
+                mask = 1.0
             else:
-                a = ac.act(act_rng_key, actor=ac.actor, obs=env_obs, deterministic=True)
+                # 0 here means we don't use the q value of the next state and action.
+                # we bootstrap whenever we have a time limit termination
+                mask = 0.0
+            self.replay_buffer.store(
+                env_obs=env_obs,
+                reward=reward,
+                action=a,
+                mask=mask,
+                next_env_obs=next_env_obs,
+            )
+
+            env_obs = next_env_obs
+            env_state = next_env_state
 
             # update policy
             if self.step >= self.cfg.num_seed_steps:
@@ -112,8 +160,10 @@ class SAC(BasePolicy):
                 update_actor = self.step % self.cfg.actor_update_freq == 0
                 update_target = self.step % self.cfg.target_update_freq == 0
                 batch = self.replay_buffer.sample_random_batch(
-                    sample_key, self.batch_size
+                    sample_key, self.cfg.batch_size
                 )
+                batch = TimeStep(**batch)
+                # import ipdb;ipdb.set_trace()
                 (
                     new_actor,
                     new_critic,
@@ -152,31 +202,7 @@ class SAC(BasePolicy):
                     if self.cfg.learnable_temp:
                         logger.store(tag="train", temp_loss=temp_update_aux.temp_loss)
 
-            next_env_obs, next_env_state, reward, done, info = self.env_step(
-                env_rng_key, env_state, a
-            )
-
-            ep_len += 1
-            ep_ret += reward
-            self.step += 1
-
-            mask = 0.0
-            if not done or ep_len == self.cfg.max_episode_length:
-                mask = 1.0
-            else:
-                # 0 here means we don't use the q value of the next state and action.
-                # we bootstrap whenever we have a time limit termination
-                mask = 0.0
-            self.replay_buffer.store(
-                env_obs=env_obs,
-                reward=reward,
-                action=a,
-                mask=mask,
-                next_env_obs=next_env_obs,
-            )
-
-            env_obs = next_env_obs
-            env_state = next_env_state
+            
 
     @partial(jax.jit, static_argnames=["self"])
     def update_target(self, critic: Model, target_critic: Model) -> Model:
@@ -254,7 +280,7 @@ class SAC(BasePolicy):
         new_temp = temp.apply_gradients(grads=grads)
         return new_temp, aux
 
-    @partial(jax.jit, static_argnames=["self"])
+    @partial(jax.jit, static_argnames=["self", "update_actor", "update_target"])
     def update_parameters(
         self,
         rng_key: PRNGKey,
@@ -263,8 +289,8 @@ class SAC(BasePolicy):
         target_critic: Model,
         temp: Model,
         batch: TimeStep,
-        update_actor,
-        update_target,
+        update_actor: bool,
+        update_target: bool,
     ):
         rng_key, critic_update_rng_key = jax.random.split(rng_key, 2)
         new_critic, critic_update_aux = self.update_critic(

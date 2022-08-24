@@ -13,7 +13,7 @@ class BasePolicy:
         env_step=None,
         env_reset=None,
     ) -> None:
-
+        self.jax_env = jax_env
         if jax_env:
             assert env is None
             assert env_step is not None

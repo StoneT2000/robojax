@@ -27,6 +27,9 @@ class SACConfig:
     target_entropy: Optional[float] = None  # defaults to - act_dims / 2
     learnable_temp: Optional[bool] = True
 
+    actor_update_freq: Optional[int] = 1
+    target_update_freq: Optional[int] = 1
+
     eval_freq: Optional[int] = -1
 
     max_episode_length: Optional[int] = -1

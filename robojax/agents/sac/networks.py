@@ -31,16 +31,19 @@ class DoubleCritic(nn.Module):
 
     @nn.compact
     def __call__(self, obs: Array, acts: Array):
-        VmapCritic = nn.vmap(
-            Critic,
-            variable_axes=0,
-            split_rngs=True,
-            in_axes=None,
-            out_axes=0,
-            axis_size=self.num_critics,
-        )
-        qs = VmapCritic(features=self.features, activation=self.activation)(obs, acts)
-        return qs
+        q1 = Critic(self.features, self.activation)(obs, acts)
+        q2 = Critic(self.features, self.activation)(obs, acts)
+        # VmapCritic = nn.vmap(
+        #     Critic,
+        #     variable_axes=0,
+        #     split_rngs=True,
+        #     in_axes=None,
+        #     out_axes=0,
+        #     axis_size=self.num_critics,
+        # )
+        # print(obs, acts)
+        # qs = VmapCritic(features=self.features, activation=self.activation)(obs, acts)
+        return q1, q2
 
 
 class DiagGaussianActor(nn.Module):
@@ -54,7 +57,7 @@ class DiagGaussianActor(nn.Module):
 
     log_std_scale: float = -0.5
     state_dependent_std: bool = False
-    log_std_range: Tuple[float, float] = [-10.0, 2.0]
+    log_std_range: Tuple[float, float] = (-10.0, 2.0)
 
     def setup(self) -> None:
         if self.state_dependent_std:
@@ -67,7 +70,7 @@ class DiagGaussianActor(nn.Module):
                 self.act_dims,
                 self.log_std_scale,
             )
-        self.mlp = mlp(self.features, self.activation, self.output_activation)
+        self.mlp = MLP(self.features, self.activation, self.output_activation)
         self.action_head = nn.Dense(self.act_dims)
 
     def __call__(self, x):
@@ -82,7 +85,7 @@ class DiagGaussianActor(nn.Module):
             a = nn.tanh(a)
         dist = distrax.MultivariateNormalDiag(a, jnp.exp(log_std))
         if self.tanh_squash_distribution:
-            dist = distrax.Transformed(distribution=dist, bijector=distrax.Tanh())
+            dist = distrax.Transformed(distribution=dist, bijector=distrax.Block(distrax.Tanh(), ndims=1))
         return dist
 
 
