@@ -49,6 +49,7 @@ class SAC(BasePolicy):
         observation_space,
         action_space,
         env=None,
+        eval_env=None,
         env_step=None,
         env_reset=None,
         cfg: SACConfig = {},
@@ -94,7 +95,7 @@ class SAC(BasePolicy):
                 reset_env=True,
             )
         else:
-            self.eval_loop = GymLoop(self.env)
+            self.eval_loop = GymLoop(eval_env)
 
     @partial(jax.jit, static_argnames=["self", "seed"])
     def _sample_action(self, rng_key, actor: DiagGaussianActor, env_obs, seed=False):
@@ -114,7 +115,7 @@ class SAC(BasePolicy):
             )
         else:
             # print(a.shape)
-            # import ipdb;ipdb.set_trace()
+            
             next_env_obs, reward, done, info = self.env.step(np.asarray(a))
             next_env_state = None
         return a, next_env_obs, next_env_state, reward, done, info
@@ -145,8 +146,8 @@ class SAC(BasePolicy):
                     rng_key, *eval_rng_keys = jax.random.split(rng_key, num_eval_envs + 1)      
                     eval_buffer, _ = self.eval_loop.rollout(rng_keys=jnp.stack(eval_rng_keys),
                         params=ac.actor,
-                        apply_fn=self.policy,
-                        # apply_fn = lambda rng, obs : (ac.actor(obs, deterministic=True), {}),
+                        # apply_fn=self.policy,
+                        apply_fn = lambda rng, obs : (ac.actor(obs, deterministic=True), {}),
                         steps_per_env=1000,
                     )
                     ep_lens = np.asarray(eval_buffer['ep_len'])
@@ -163,6 +164,8 @@ class SAC(BasePolicy):
                         ep_len=ep_lens,
                         append=False,
                     )
+                    stats = logger.log(self.step)
+                    logger.reset()
             if done:
                 
                 rng_key, reset_rng_key = jax.random.split(rng_key, 2)
@@ -170,8 +173,16 @@ class SAC(BasePolicy):
                     env_obs, env_state = self.env_reset(reset_rng_key)
                 else:
                     env_obs = self.env.reset()
-                # print("===",ep_ret)
-                # pbar.set_postfix(dict(ep_ret=ep_ret, ep_len=ep_len))
+                # # print("===",ep_ret)
+                # # pbar.set_postfix(dict(ep_ret=ep_ret, ep_len=ep_len))
+                logger.store(
+                    tag="train",
+                    ep_ret=ep_ret,
+                    ep_len=ep_len,
+                    append=False
+                )
+                stats = logger.log(self.step)
+                logger.reset()
                 ep_len, ep_ret = 0, 0
                 episodes += 1
 
@@ -236,20 +247,22 @@ class SAC(BasePolicy):
                 if self.step % self.cfg.log_freq == 0:
                     logger.store(
                         tag="train",
-                        critic_loss=critic_update_aux.critic_loss,
-                        q1=critic_update_aux.q1,
-                        q2=critic_update_aux.q2,
-                        temp=temp_update_aux.temp,
+                        append=False,
+                        critic_loss=float(critic_update_aux.critic_loss),
+                        q1=float(critic_update_aux.q1),
+                        q2=float(critic_update_aux.q2),
+                        temp=float(temp_update_aux.temp),
                     )
                     if update_actor:
                         logger.store(
                             tag="train",
-                            actor_loss=actor_update_aux.actor_loss,
-                            entropy=actor_update_aux.entropy,
-                            target_entropy=self.cfg.target_entropy
+                            actor_loss=float(actor_update_aux.actor_loss),
+                            entropy=float(actor_update_aux.entropy),
+                            target_entropy=float(self.cfg.target_entropy),
+                            append=False
                         )
                         if self.cfg.learnable_temp:
-                            logger.store(tag="train", temp_loss=temp_update_aux.temp_loss)
+                            logger.store(tag="train", temp_loss=float(temp_update_aux.temp_loss), append=False)
                     stats = logger.log(self.step)
                     logger.reset()
             pbar.update(n=1)

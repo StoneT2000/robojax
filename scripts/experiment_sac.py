@@ -77,15 +77,16 @@ def main(cfg):
                    observation_space=obs_space, action_space=act_space, seed_sampler=seed_sampler, cfg=sac_cfg)
         eval_loop = JaxLoop(env_reset=env_reset, env_step=env_step)
     else:
-        env = gym.make(env_id)
         env = make_vec_env(env_id, num_envs, seed=cfg.seed)
+        eval_env = make_vec_env(env_id, num_envs, seed=cfg.seed)
         def seed_sampler(rng_key):
-            return env.action_space.sample()[None, :]
-        algo = SAC(env=env, jax_env=cfg.jax_env, observation_space=env.observation_space,seed_sampler=seed_sampler, action_space=env.action_space, cfg=sac_cfg)
+            return jax.random.uniform(
+                rng_key, shape=env.action_space.shape, minval=-1.0, maxval=1.0, dtype=float)[None, :]
+        algo = SAC(env=env, eval_env=eval_env,jax_env=cfg.jax_env, observation_space=env.observation_space,seed_sampler=seed_sampler, action_space=env.action_space, cfg=sac_cfg)
         act_dims = get_action_dim(env.action_space)
         sample_obs = env.reset()
         sample_acts = env.action_space.sample()[None, :]
-        eval_loop = GymLoop(env)
+        eval_loop = GymLoop(eval_env)
 
     assert env != None
     assert act_dims != None
@@ -93,7 +94,7 @@ def main(cfg):
     
 
     actor = DiagGaussianActor([256, 256], act_dims)
-    critic = DoubleCritic([256, 256, 256, 256])
+    critic = DoubleCritic([256, 256])
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,
@@ -154,6 +155,6 @@ def main(cfg):
 
 if __name__ == "__main__":
     cfg = parse_cfg(
-        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac/hopper.yml")
+        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac/hopper_mujoco.yml")
     )
     main(cfg)

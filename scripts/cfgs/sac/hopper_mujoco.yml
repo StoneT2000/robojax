@@ -7,18 +7,19 @@ jax_platform_name: gpu
 seed: 0
 
 sac:
-  num_seed_steps: 4096
+  num_seed_steps: 10_000
   num_train_steps: 6_553_600
-  replay_buffer_capacity: 1_048_576
+  replay_buffer_capacity: 1_000_000
 
   # num_envs: 128
   batch_size: 256
   # update_iters: 32
 
-  eval_freq: 4096
+  eval_freq: -1
+  log_freq: 1000
 
-  learnable_temp: False
-  initial_temperature: 0.1
+  learnable_temp: True
+  initial_temperature: 1.0
   
 model:
   actor_lr: 3e-4
