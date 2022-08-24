@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Callable, Sequence, Tuple
+from typing import Callable, Optional, Sequence, Tuple
 
 import distrax
 import flax.linen as nn
@@ -45,24 +45,26 @@ class DoubleCritic(nn.Module):
         # qs = VmapCritic(features=self.features, activation=self.activation)(obs, acts)
         return q1, q2
 
+def default_init(scale: Optional[float] = jnp.sqrt(2)):
+    return nn.initializers.orthogonal(scale)
 
 class DiagGaussianActor(nn.Module):
 
     features: Sequence[int]
     act_dims: int
     activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
-    output_activation: Callable[[jnp.ndarray], jnp.ndarray] = None
+    output_activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
 
     tanh_squash_distribution: bool = True
 
     log_std_scale: float = -0.5
-    state_dependent_std: bool = False
+    state_dependent_std: bool = True
     log_std_range: Tuple[float, float] = (-10.0, 2.0)
 
     def setup(self) -> None:
         if self.state_dependent_std:
             # Add final dense layer initialization scale and orthogonal init
-            self.log_std = nn.Dense(self.act_dims)
+            self.log_std = nn.Dense(self.act_dims, kernel_init=default_init(1))
         else:
             self.log_std = self.param(
                 "log_std",
@@ -73,7 +75,9 @@ class DiagGaussianActor(nn.Module):
         self.mlp = MLP(self.features, self.activation, self.output_activation)
         self.action_head = nn.Dense(self.act_dims)
 
-    def __call__(self, x):
+    def __call__(self, x, deterministic=False):
+        if deterministic:
+            return self.action_head(self.mlp(x))
         x = self.mlp(x)
         if self.state_dependent_std:
             log_std = self.log_std(x)
@@ -87,6 +91,10 @@ class DiagGaussianActor(nn.Module):
         if self.tanh_squash_distribution:
             dist = distrax.Transformed(distribution=dist, bijector=distrax.Block(distrax.Tanh(), ndims=1))
         return dist
+    
+    def other(self, x):
+        x=self.mlp(x)
+        return self.action_head(x)
 
 
 class Temperature(nn.Module):

@@ -15,7 +15,7 @@ from robojax.agents.sac.config import SACConfig, TimeStep
 from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
 from robojax.data import buffer
 from robojax.data.buffer import GenericBuffer
-from robojax.data.loop import EnvAction, EnvObs
+from robojax.data.loop import EnvAction, EnvObs, JaxLoop
 from robojax.logger.logger import Logger
 from robojax.models import Model
 from robojax.models.model import Params
@@ -88,9 +88,14 @@ class SAC(BasePolicy):
 
         if self.jax_env:
             self._env_step = jax.jit(self._env_step, static_argnames=["self", "seed"])
+            self.eval_loop = JaxLoop(
+                self.env_reset,
+                self.env_step,
+                reset_env=True,
+            )
 
     @partial(jax.jit, static_argnames=["self", "seed"])
-    def _sample_action(self, rng_key, env_obs, actor: DiagGaussianActor, seed=False):
+    def _sample_action(self, rng_key, actor: DiagGaussianActor, env_obs, seed=False):
         if seed:
             a = self.seed_sampler(rng_key)
         else:
@@ -100,11 +105,16 @@ class SAC(BasePolicy):
 
     def _env_step(self, rng_key: PRNGKey, env_obs, env_state, actor: DiagGaussianActor, seed=False):
         rng_key, act_rng_key, env_rng_key = jax.random.split(rng_key, 3)
-        a = self._sample_action(act_rng_key, env_obs, actor, seed)
+        a = self._sample_action(act_rng_key, actor, env_obs, seed)
         next_env_obs, next_env_state, reward, done, info = self.env_step(
             env_rng_key, env_state, a
         )
         return a, next_env_obs, next_env_state, reward, done, info
+
+    
+    def policy(self, r, actor, obs):
+        return actor(obs, deterministic=True), {}
+
 
     def train(self, rng_key: PRNGKey, ac: ActorCritic, logger: Logger, verbose=1):
         stime = time.time()
@@ -113,24 +123,45 @@ class SAC(BasePolicy):
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
         env_obs, env_state = self.env_reset(reset_rng_key)
         from tqdm import tqdm
-        pbar=tqdm(total=self.cfg.num_train_steps)
+        # pbar=tqdm(total=self.cfg.num_train_steps)
         while self.step < self.cfg.num_train_steps:
+            # print(self.step, self.cfg.eval_freq)
+            if self.step > 0 and self.step > self.cfg.num_seed_steps:
+                if self.step % self.cfg.eval_freq == 0:
+                    # evaluate
+                    num_eval_envs = 4
+                    rng_key, *eval_rng_keys = jax.random.split(rng_key, num_eval_envs + 1)      
+                    eval_buffer, _ = self.eval_loop.rollout(rng_keys=jnp.stack(eval_rng_keys),
+                        params=ac.actor,
+                        apply_fn=self.policy,
+                        steps_per_env=1000,
+                    )
+                    ep_lens = np.asarray(eval_buffer['ep_len'])
+                    ep_rets = np.asarray(eval_buffer['ep_ret'])
+                    # ep_rews = np.asarray(eval_buffer.reward)
+                    episode_ends = np.asarray(eval_buffer['done'])
+                    ep_rets = ep_rets[episode_ends].flatten()
+                    ep_lens = ep_lens[episode_ends].flatten()
+                    print("EVAL", self.step, dict(avg_ret=ep_rets.mean(), avg_len=ep_lens.mean()))
+                    logger.store(
+                        tag="test",
+                        ep_ret=ep_rets,
+                        ep_len=ep_lens,
+                        append=False,
+                    )
             if done:
-                if self.step > 0:
-                    if self.step % self.cfg.eval_freq == 0:
-                        # evaluate
-                        pass
+                
                 rng_key, reset_rng_key = jax.random.split(rng_key, 2)
                 env_obs, env_state = self.env_reset(reset_rng_key)
                 # print("===",ep_ret)
-                pbar.set_postfix(dict(ep_ret=ep_ret, ep_len=ep_len))
+                # pbar.set_postfix(dict(ep_ret=ep_ret, ep_len=ep_len))
                 ep_len, ep_ret = 0, 0
                 episodes += 1
 
             
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
             a, next_env_obs, next_env_state, reward, done, info = self._env_step(env_rng_key, env_obs, env_state, ac.actor, seed=self.step < self.cfg.num_seed_steps)
-            pbar.update(n=1)
+            # pbar.update(n=1)
 
             ep_len += 1
             ep_ret += reward
@@ -163,7 +194,6 @@ class SAC(BasePolicy):
                     sample_key, self.cfg.batch_size
                 )
                 batch = TimeStep(**batch)
-                # import ipdb;ipdb.set_trace()
                 (
                     new_actor,
                     new_critic,
@@ -201,6 +231,8 @@ class SAC(BasePolicy):
                     )
                     if self.cfg.learnable_temp:
                         logger.store(tag="train", temp_loss=temp_update_aux.temp_loss)
+                stats = logger.log(self.step)
+                logger.reset()
 
             
 
