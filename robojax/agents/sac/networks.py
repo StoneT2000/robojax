@@ -1,4 +1,6 @@
 from functools import partial
+import os
+from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
 import distrax
@@ -7,9 +9,8 @@ import jax
 import jax.numpy as jnp
 import optax
 from chex import Array, PRNGKey
-
+import flax
 from robojax.models import MLP, Model
-from robojax.models.ac.core import mlp
 from tensorflow_probability.substrates import jax as tfp
 
 tfd = tfp.distributions
@@ -149,3 +150,24 @@ class ActorCritic:
     @partial(jax.jit, static_argnames=["self"])
     def sample(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs):
         return actor(obs).sample(seed=rng_key), {}
+
+    def _state_dict(self):
+        return dict(
+            actor=self.actor._state_dict(),
+            critic=self.critic._state_dict(),
+            target_critic=self.target_critic._state_dict(),
+            temp=self.temp
+        )
+
+    def save(self, save_path: str):
+        Path(os.path.dirname(save_path)).mkdir(parents=True, exist_ok=True)
+        with open(save_path, "wb") as f:
+            f.write(flax.serialization.to_bytes(self._state_dict()))
+
+    def load(self, load_path: str):
+        with open(load_path, "rb") as f:
+            params_dict = flax.serialization.from_bytes(self._state_dict(), f.read())
+        self.actor = self.actor._load_state_dict(params_dict["actor"])
+        self.critic = self.critic._load_state_dict(params_dict["critic"])
+        self.target_critic = self.critic._load_state_dict(params_dict["critic"])
+        self.temp = self.temp._load_state_dict(params_dict["critic"])

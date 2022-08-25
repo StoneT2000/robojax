@@ -81,7 +81,10 @@ class Model:
         return dict(
             params=self.params,
             opt_state=self.opt_state,
+            step=self.step,
         )
+    def _load_state_dict(self, state_dict):
+        return self.replace(**state_dict)
 
     def __getattribute__(self, name: str) -> Any:
         try:
