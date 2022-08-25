@@ -44,29 +44,25 @@ class SAC(BasePolicy):
     def __init__(
         self,
         jax_env: bool,
-        seed_sampler: Callable[[PRNGKey], EnvAction],
         observation_space,
         action_space,
+        seed_sampler: Callable[[PRNGKey], EnvAction] = None,
         env=None,
         eval_env=None,
-        env_step=None,
-        env_reset=None,
         cfg: SACConfig = {},
     ):
-        super().__init__(jax_env, env, env_step, env_reset)
+        super().__init__(jax_env, env)
         if isinstance(cfg, dict):
             self.cfg = SACConfig(**cfg)
         else:
             self.cfg = cfg
 
         self.step = 0
+        if seed_sampler is None:
+            seed_sampler = lambda rng_key: self.env.action_space().sample(rng_key)
+            # TODO add a nice error message if this guessed sampler doesn't work
         self.seed_sampler = seed_sampler
 
-        self.observation_space = observation_space
-        self.action_space = action_space
-        self.obs_shape = get_obs_shape(observation_space)
-
-        self.action_dim = get_action_dim(action_space)
         buffer_config = dict(
             action=((self.action_dim,), action_space.dtype),
             reward=((), np.float32),
@@ -83,16 +79,15 @@ class SAC(BasePolicy):
         self.replay_buffer = GenericBuffer(
             buffer_size=self.cfg.replay_buffer_capacity, n_envs=1, config=buffer_config
         )
-        # from jaxrl.datasets.replay_buffer import ReplayBuffer
-        # self.replay_buffer = ReplayBuffer(observation_space, action_space, self.cfg.replay_buffer_capacity)
+
         if self.cfg.target_entropy is None:
             self.cfg.target_entropy = -self.action_dim / 2
 
         if self.jax_env:
             self._env_step = jax.jit(self._env_step, static_argnames=["seed"])
             self.eval_loop = JaxLoop(
-                self.env_reset,
-                self.env_step,
+                eval_env.reset,
+                eval_env.step,
                 reset_env=True,
             )
         else:
@@ -176,7 +171,7 @@ class SAC(BasePolicy):
             self.step += 1
 
             mask = 0.0
-            if not done or 'TimeLimit.truncated' in info:
+            if not done or ep_len == self.cfg.max_episode_length - 1:
                 mask = 1.0
             else:
                 # 0 here means we don't use the q value of the next state and action.

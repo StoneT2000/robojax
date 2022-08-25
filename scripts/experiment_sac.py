@@ -21,6 +21,7 @@ from robojax.logger import Logger
 from robojax.models import explore
 from robojax.models.mlp import MLP
 from robojax.utils.spaces import get_action_dim
+from robojax.wrappers.brax import BraxGymWrapper
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
@@ -39,43 +40,20 @@ def main(cfg):
             is_brax_env = True
         if is_gymnax_env:
             env, env_params = gymnax.make(env_id)
-            env_step, env_reset = env.step, env.reset
-            act_dims = int(env.action_space().n)
-            sample_obs = env_reset(jax.random.PRNGKey(0))[0]
-            sample_acts = env.action_space.sample(jax.random.PRNGKey(0))
-            obs_space = env.observation_space
-            act_space = env.action_space
-
-            def seed_sampler(rng_key):
-                return env.action_space(env_params).sample(rng_key)
         elif is_brax_env:
             env = envs.create(env_id, auto_reset=cfg.auto_reset)
+            env = BraxGymWrapper(env)
 
-            def env_step(rng_key, state, action):
-                state = env.step(state, action)
-                return (
-                    state.obs,
-                    state,
-                    state.reward,
-                    state.done != 0.0,
-                    dict(**state.info, metrics=state.metrics),
-                )
+        sample_obs = env.reset(jax.random.PRNGKey(0))[0]
+        sample_acts = env.action_space().sample(jax.random.PRNGKey(0))
+        act_dims = sample_acts.shape[0]
+        obs_space = env.observation_space()
+        act_space = env.action_space()
 
-            def env_reset(rng_key):
-                state = env.reset(rng_key)
-                return state.obs, state
-
-            def seed_sampler(rng_key):
-                return jax.random.uniform(
-                    rng_key, shape=(env.action_size, ), minval=-1.0, maxval=1.0, dtype=float)
-            act_dims = env.action_size
-            sample_obs = env.reset(jax.random.PRNGKey(0)).obs
-            sample_acts = np.zeros(env.action_size)
-            obs_space = spaces.Box(-np.ones(env.observation_size, float), np.ones(env.observation_size, float))
-            act_space = spaces.Box(-np.ones(env.action_size, float), np.ones(env.action_size, float))
-        algo = SAC(env_step=env_step, env_reset=env_reset, jax_env=cfg.jax_env,
+        def seed_sampler(rng_key):
+            return env.action_space().sample(rng_key)
+        algo = SAC(env=env, eval_env=env, jax_env=cfg.jax_env,
                    observation_space=obs_space, action_space=act_space, seed_sampler=seed_sampler, cfg=sac_cfg)
-        eval_loop = JaxLoop(env_reset=env_reset, env_step=env_step)
     else:
         env = make_vec_env(env_id, num_envs, seed=cfg.seed)
         eval_env = make_vec_env(env_id, num_envs, seed=cfg.seed)

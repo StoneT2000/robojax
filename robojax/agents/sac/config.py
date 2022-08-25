@@ -20,13 +20,15 @@ class SACConfig:
 
     batch_size: int
 
+    num_envs: Optional[int] = 1
+    steps_per_env: Optional[int] = 1
+
     tau: Optional[float] = 0.005
     discount: Optional[float] = 0.99
     backup_entropy: Optional[bool] = True
     target_entropy: Optional[float] = None  # defaults to - act_dims / 2
     learnable_temp: Optional[bool] = True
     initial_temperature: Optional[float] = 1.0
-    
     actor_update_freq: Optional[int] = 1
     target_update_freq: Optional[int] = 1
 
