@@ -3,6 +3,7 @@ Configurations and utility classes
 """
 
 import dataclasses
+from optparse import Option
 from typing import Optional
 
 import chex
@@ -22,6 +23,7 @@ class SACConfig:
 
     num_envs: Optional[int] = 1
     steps_per_env: Optional[int] = 1
+    grad_updates_per_step: Optional[int] = 1
 
     tau: Optional[float] = 0.005
     discount: Optional[float] = 0.99

@@ -7,12 +7,14 @@ jax_platform_name: gpu
 seed: 0
 
 sac:
-  num_seed_steps: 2_500 #10_000
+  # num_seed_steps: 2_500
+  num_seed_steps: 10_000
   num_train_steps: 1_000_000
-  replay_buffer_capacity: 250_000 #1_000_000
-
+  # replay_buffer_capacity: 250_000
+  replay_buffer_capacity: 1_000_000
   batch_size: 256
-  num_envs: 4
+  # num_envs: 4
+  num_envs: 1
   steps_per_env: 1
 
   eval_freq: 5000

@@ -43,8 +43,7 @@ def main(cfg):
         def seed_sampler(rng_key):
             return jax.random.uniform(rng_key, shape=(cfg.sac.num_envs, *env.action_space.shape), minval=-1.0, maxval=1.0, dtype=float)
 
-    algo = SAC(env=env, eval_env=eval_env, jax_env=cfg.jax_env, observation_space=env_meta.obs_space,
-               action_space=env_meta.act_space, seed_sampler=seed_sampler, cfg=sac_cfg)
+    algo = SAC(env=env, eval_env=eval_env, jax_env=cfg.jax_env, seed_sampler=seed_sampler, cfg=sac_cfg)
     act_dims = sample_acts.shape[0]
 
     actor = DiagGaussianActor([256, 256], act_dims)

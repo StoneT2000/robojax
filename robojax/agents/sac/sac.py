@@ -25,8 +25,6 @@ class SAC(BasePolicy):
     def __init__(
         self,
         jax_env: bool,
-        observation_space,
-        action_space,
         seed_sampler: Callable[[PRNGKey], EnvAction] = None,
         env=None,
         eval_env=None,
@@ -45,7 +43,7 @@ class SAC(BasePolicy):
         self.seed_sampler = seed_sampler
 
         buffer_config = dict(
-            action=((self.action_dim,), action_space.dtype),
+            action=((self.action_dim,), self.action_space.dtype),
             reward=((), np.float32),
             mask=((), float),
         )
@@ -104,12 +102,12 @@ class SAC(BasePolicy):
         return a, next_env_obs, next_env_state, reward, done, info
 
     def train(self, rng_key: PRNGKey, ac: ActorCritic, logger: Logger, verbose=1):
-        stime = time.time()
+        train_start_time = time.time()
         episodes = 0
         ep_lens, ep_rets, dones = np.zeros(self.cfg.num_envs), np.zeros(self.cfg.num_envs), np.zeros(self.cfg.num_envs)
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
         if self.jax_env:
-            env_obs, env_state = self.env_reset(reset_rng_key)
+            env_obs, env_states = self.env_reset(reset_rng_key)
         else:
             env_obs = self.env.reset()
             env_states = None
@@ -121,7 +119,7 @@ class SAC(BasePolicy):
                 self.evaluate(eval_rng_key, ac, logger)
 
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
-        
+
             actions, next_env_obs, next_env_states, rewards, dones, infos = self._env_step(env_rng_key, env_obs, env_states, ac.actor, seed=self.step < self.cfg.num_seed_steps)
             dones = np.array(dones)
             rewards = np.array(rewards)
@@ -159,33 +157,36 @@ class SAC(BasePolicy):
 
             # update policy
             if self.step >= self.cfg.num_seed_steps:
+                update_time_start = time.time()
                 rng_key, update_rng_key, sample_key = jax.random.split(rng_key, 3)
                 update_actor = self.step % self.cfg.actor_update_freq == 0
                 update_target = self.step % self.cfg.target_update_freq == 0
-                batch = self.replay_buffer.sample_random_batch(
-                    sample_key, self.cfg.batch_size
-                )
-                batch = TimeStep(**batch)
-                (
-                    new_actor,
-                    new_critic,
-                    new_target_critic,
-                    new_temp,
-                    aux,
-                ) = self.update_parameters(
-                    update_rng_key,
-                    ac.actor,
-                    ac.critic,
-                    ac.target_critic,
-                    ac.temp,
-                    batch,
-                    update_actor,
-                    update_target,
-                )
-                ac.actor = new_actor
-                ac.critic = new_critic
-                ac.target_critic = new_target_critic
-                ac.temp = new_temp
+                for _ in range(self.cfg.grad_updates_per_step):
+                    batch = self.replay_buffer.sample_random_batch(
+                        sample_key, self.cfg.batch_size
+                    )
+                    batch = TimeStep(**batch)
+                    (
+                        new_actor,
+                        new_critic,
+                        new_target_critic,
+                        new_temp,
+                        aux,
+                    ) = self.update_parameters(
+                        update_rng_key,
+                        ac.actor,
+                        ac.critic,
+                        ac.target_critic,
+                        ac.temp,
+                        batch,
+                        update_actor,
+                        update_target,
+                    )
+                    ac.actor = new_actor
+                    ac.critic = new_critic
+                    ac.target_critic = new_target_critic
+                    ac.temp = new_temp
+                update_time = time.time() - update_time_start
                 critic_update_aux: loss.CriticUpdateAux = aux["critic_update_aux"]
                 actor_update_aux: loss.ActorUpdateAux = aux["actor_update_aux"]
                 temp_update_aux: loss.TempUpdateAux = aux["temp_update_aux"]
@@ -208,9 +209,26 @@ class SAC(BasePolicy):
                         )
                         if self.cfg.learnable_temp:
                             logger.store(tag="train", temp_loss=float(temp_update_aux.temp_loss), append=False)
+                    logger.store(
+                       tag="time",
+                        append=False,
+                        update_time=update_time
+                    )
                     stats = logger.log(self.total_env_steps)
                     logger.reset()
             pbar.update(n=1)
+
+            total_time = time.time() - train_start_time
+            if self.cfg.log_freq > 0 and self.step % self.cfg.log_freq == 0:
+                logger.store(
+                    tag="time",
+                    append=False,
+                    # rollout=rollout_time,
+                    total=total_time,
+                    step=self.step,
+                )
+                logger.log(self.total_env_steps)
+                logger.reset()
 
     @property
     def total_env_steps(self):
