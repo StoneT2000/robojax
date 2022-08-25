@@ -25,8 +25,10 @@ class MLP(nn.Module):
     @nn.compact
     def __call__(self, x):
         for feat in self.features[:-1]:
-            x = self.activation(nn.Dense(feat)(x))
-        x = nn.Dense(self.features[-1])(x)
+            x = self.activation(
+                nn.Dense(feat, kernel_init=default_init())(x)
+            )
+        x = nn.Dense(self.features[-1], kernel_init=default_init())(x)
         if self.output_activation is not None:
             x = self.output_activation(x)
         return x

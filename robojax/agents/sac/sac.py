@@ -21,7 +21,6 @@ from robojax.models import Model
 from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
 
-
 @struct.dataclass
 class CriticUpdateAux:
     critic_loss: Array
@@ -84,6 +83,8 @@ class SAC(BasePolicy):
         self.replay_buffer = GenericBuffer(
             buffer_size=self.cfg.replay_buffer_capacity, n_envs=1, config=buffer_config
         )
+        # from jaxrl.datasets.replay_buffer import ReplayBuffer
+        # self.replay_buffer = ReplayBuffer(observation_space, action_space, self.cfg.replay_buffer_capacity)
         if self.cfg.target_entropy is None:
             self.cfg.target_entropy = -self.action_dim / 2
 
@@ -114,9 +115,8 @@ class SAC(BasePolicy):
                 env_rng_key, env_state, a
             )
         else:
-            # print(a.shape)
-            
-            next_env_obs, reward, done, info = self.env.step(np.asarray(a))
+            a = np.asarray(a)
+            next_env_obs, reward, done, info = self.env.step(a)
             next_env_state = None
         return a, next_env_obs, next_env_state, reward, done, info
 
@@ -139,8 +139,8 @@ class SAC(BasePolicy):
         pbar=tqdm(total=self.cfg.num_train_steps)
         while self.step < self.cfg.num_train_steps:
             # print(self.step, self.cfg.eval_freq)
-            if self.step > 0 and self.step > self.cfg.num_seed_steps:
-                if self.step % self.cfg.eval_freq == 0:
+            if self.step > 0 and self.step >= self.cfg.num_seed_steps:
+                if self.cfg.eval_freq > 0 and self.step % self.cfg.eval_freq == 0:
                     # evaluate
                     num_eval_envs = 1
                     rng_key, *eval_rng_keys = jax.random.split(rng_key, num_eval_envs + 1)      
@@ -167,14 +167,6 @@ class SAC(BasePolicy):
                     stats = logger.log(self.step)
                     logger.reset()
             if done:
-                
-                rng_key, reset_rng_key = jax.random.split(rng_key, 2)
-                if self.jax_env:
-                    env_obs, env_state = self.env_reset(reset_rng_key)
-                else:
-                    env_obs = self.env.reset()
-                # # print("===",ep_ret)
-                # # pbar.set_postfix(dict(ep_ret=ep_ret, ep_len=ep_len))
                 logger.store(
                     tag="train",
                     ep_ret=ep_ret,
@@ -195,7 +187,7 @@ class SAC(BasePolicy):
             self.step += 1
 
             mask = 0.0
-            if not done or ep_len == self.cfg.max_episode_length:
+            if not done or 'TimeLimit.truncated' in info:
                 mask = 1.0
             else:
                 # 0 here means we don't use the q value of the next state and action.
@@ -208,6 +200,7 @@ class SAC(BasePolicy):
                 mask=mask,
                 next_env_obs=next_env_obs,
             )
+            # self.replay_buffer.insert(env_obs, a, reward, mask, float(done), next_env_obs)
 
             env_obs = next_env_obs
             env_state = next_env_state
@@ -221,6 +214,9 @@ class SAC(BasePolicy):
                     sample_key, self.cfg.batch_size
                 )
                 batch = TimeStep(**batch)
+                # batch = self.replay_buffer.sample(self.cfg.batch_size)
+               
+                # batch = TimeStep(next_env_obs=batch.next_observations,env_obs=batch.observations, reward=batch.rewards,mask=batch.masks,action=batch.actions)
                 (
                     new_actor,
                     new_critic,
@@ -244,7 +240,7 @@ class SAC(BasePolicy):
                 critic_update_aux: CriticUpdateAux = aux["critic_update_aux"]
                 actor_update_aux: ActorUpdateAux = aux["actor_update_aux"]
                 temp_update_aux: TempUpdateAux = aux["temp_update_aux"]
-                if self.step % self.cfg.log_freq == 0:
+                if self.cfg.log_freq > 0 and self.step % self.cfg.log_freq == 0:
                     logger.store(
                         tag="train",
                         append=False,
@@ -273,12 +269,11 @@ class SAC(BasePolicy):
         """
         update targret_critic with polyak averaging
         """
-        new_target_critic_params = jax.tree_util.tree_map(
-            lambda cp, tcp: cp * self.cfg.tau + tcp * (1 - self.cfg.tau),
-            critic.params,
-            target_critic.params,
-        )
-        return target_critic.replace(params=new_target_critic_params)
+        new_target_params = jax.tree_multimap(
+        lambda p, tp: p * self.cfg.tau + tp * (1 - self.cfg.tau), critic.params,
+        target_critic.params)
+
+        return target_critic.replace(params=new_target_params)
 
     @partial(jax.jit, static_argnames=["self"])
     def update_critic(
@@ -291,8 +286,9 @@ class SAC(BasePolicy):
         batch: TimeStep,
     ) -> Tuple[Model, CriticUpdateAux]:
         dist: distrax.Distribution = actor(batch.next_env_obs)
-        next_actions = dist.sample(seed=rng_key)
-        next_log_probs = dist.log_prob(next_actions)
+        # Note, we don't use .log_prob since there is some numerical imprecision errors that cause issues
+        next_actions, next_log_probs = dist.sample_and_log_prob(seed=rng_key)
+        # next_log_probs = dist.log_prob(next_actions)
         next_q1, next_q2 = target_critic(batch.next_env_obs, next_actions)
         next_q = jnp.minimum(next_q1, next_q2)
         target_q = batch.reward + self.cfg.discount * batch.mask * next_q
@@ -321,8 +317,8 @@ class SAC(BasePolicy):
     ) -> Tuple[Model, ActorUpdateAux]:
         def actor_loss_fn(actor_params: Params):
             dist: distrax.Distribution = actor.apply_fn(actor_params, batch.env_obs)
-            actions = dist.sample(seed=rng_key)
-            log_probs = dist.log_prob(actions)
+            actions, log_probs = dist.sample_and_log_prob(seed=rng_key)
+            # log_probs = dist.log_prob(actions)
             q1, q2 = critic(batch.env_obs, actions)
             q = jnp.minimum(q1, q2)
             actor_loss = (temp() * log_probs - q).mean()
@@ -360,12 +356,15 @@ class SAC(BasePolicy):
         update_target: bool,
     ):
         rng_key, critic_update_rng_key = jax.random.split(rng_key, 2)
+        # new_critic, critic_update_aux = loss.update_critic(critic_update_rng_key, actor, critic, target_critic, temp, batch, self.cfg.discount, self.cfg.backup_entropy) 
         new_critic, critic_update_aux = self.update_critic(
             critic_update_rng_key, actor, critic, target_critic, temp, batch
         )
         new_actor, actor_update_aux = actor, ActorUpdateAux()
-        new_temp, temp_update_aux = temp, TempUpdateAux(temp=temp())
+        # new_temp, temp_update_aux = temp, TempUpdateAux(temp=temp())
         new_target = target_critic
+        if update_target:
+            new_target = self.update_target(critic, target_critic)
         if update_actor:
             rng_key, actor_update_rng_key = jax.random.split(rng_key, 2)
             new_actor, actor_update_aux = self.update_actor(
@@ -375,8 +374,7 @@ class SAC(BasePolicy):
                 new_temp, temp_update_aux = self.update_temp(
                     temp, actor_update_aux.entropy
                 )
-        if update_target:
-            new_target = self.update_target(critic, target_critic)
+        
 
         return (
             new_actor,

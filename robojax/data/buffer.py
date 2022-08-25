@@ -129,7 +129,7 @@ class GenericBuffer(BaseBuffer):
             self.full = True
             self.ptr = 0
 
-    @partial(jax.jit, static_argnames=["self"])
+    # @partial(jax.jit, static_argnames=["self"])
     def _get_batch_by_ids(self, buffers, batch_ids, env_ids):
         """
         statefully retrieve batch of data
@@ -140,9 +140,9 @@ class GenericBuffer(BaseBuffer):
             if self.is_dict[k]:
                 batch_data[k] = dict()
                 for data_k in data.keys():
-                    batch_data[k][data_k] = jnp.array(data[data_k][batch_ids, env_ids])
+                    batch_data[k][data_k] = data[data_k][batch_ids, env_ids]
             else:
-                batch_data[k] = jnp.array(data[batch_ids, env_ids])
+                batch_data[k] = data[batch_ids, env_ids]
         return batch_data
 
     def _prepared_for_sampling(self, batch_size, drop_last_batch=True):
@@ -181,21 +181,30 @@ class GenericBuffer(BaseBuffer):
             buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
         )
 
-    @partial(jax.jit, static_argnames=["self", "batch_size"])
     def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
         """
         Sample a batch of data with replacement
         """
-        # TODO provide faster routine for replay buffers where n_envs = 1?
-        rng_key, batch_ids_rng_key = jax.random.split(rng_key)
-        batch_ids = jax.random.randint(
-            batch_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.buffer_size
-        )
-        rng_key, env_ids_rng_key = jax.random.split(rng_key)
-        env_ids = jax.random.randint(
-            env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.n_envs
-        )
-
+        indx = np.random.randint(self.size(), size=batch_size)
+        # np.random.randint
         return self._get_batch_by_ids(
-            buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
+            buffers=self.buffers, batch_ids=indx, env_ids=np.zeros_like(indx)
         )
+    # @partial(jax.jit, static_argnames=["self", "batch_size"])
+    # def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
+    #     """
+    #     Sample a batch of data with replacement
+    #     """
+    #     # TODO provide faster routine for replay buffers where n_envs = 1?
+    #     rng_key, batch_ids_rng_key = jax.random.split(rng_key)
+    #     batch_ids = jax.random.randint(
+    #         batch_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.buffer_size
+    #     )
+    #     rng_key, env_ids_rng_key = jax.random.split(rng_key)
+    #     env_ids = jax.random.randint(
+    #         env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.n_envs
+    #     )
+            # bugged, buffers is cached and so no new data is actually retrieved
+    #     return self._get_batch_by_ids(
+    #         buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
+    #     )
