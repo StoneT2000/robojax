@@ -1,4 +1,6 @@
+import os
 import os.path as osp
+import warnings
 
 import gym
 import gymnax
@@ -6,8 +8,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from flax import linen as nn
 from brax import envs
+from flax import linen as nn
 from stable_baselines3.common.env_util import make_vec_env
 
 from robojax.agents.ppo import PPO
@@ -19,9 +21,9 @@ from robojax.models import explore
 from robojax.models.ac.core import ActorCritic
 from robojax.models.mlp import MLP
 from robojax.utils.spaces import get_action_dim
-import warnings
-import os
-warnings.simplefilter(action='ignore', category=FutureWarning)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
+
 
 def main(cfg):
     env_id = cfg.env_id
@@ -103,29 +105,25 @@ def main(cfg):
         nonlocal best_ep_ret
         # every cfg.eval.eval_freq training epochs, evaluate our current model
         if epoch % cfg.eval.eval_freq == 0:
-            rng_key, * \
-                eval_env_rng_keys = jax.random.split(
-                    rng_key, cfg.eval.num_eval_envs+1)
-            eval_buffer, _ = eval_loop.rollout(
-                eval_env_rng_keys,
-                ac.actor,
-                eval_apply,
-                cfg.eval.steps_per_env
+            rng_key, *eval_env_rng_keys = jax.random.split(
+                rng_key, cfg.eval.num_eval_envs + 1
             )
-            eval_episode_ends = np.asarray(eval_buffer['done'])
-            ep_rets = np.asarray(eval_buffer['ep_ret'])[
-                eval_episode_ends].flatten()
+            eval_buffer, _ = eval_loop.rollout(
+                eval_env_rng_keys, ac.actor, eval_apply, cfg.eval.steps_per_env
+            )
+            eval_episode_ends = np.asarray(eval_buffer["done"])
+            ep_rets = np.asarray(eval_buffer["ep_ret"])[eval_episode_ends].flatten()
             logger.store(
                 tag="test",
                 append=False,
                 ep_ret=ep_rets,
-                ep_len=np.asarray(eval_buffer['ep_len'])[
-                    eval_episode_ends].flatten(),
+                ep_len=np.asarray(eval_buffer["ep_len"])[eval_episode_ends].flatten(),
             )
             ep_ret_avg = ep_rets.mean()
             if ep_ret_avg > best_ep_ret:
                 best_ep_ret = ep_ret_avg
                 ac.save(model_path)
+
     model_path = "weights.jx"  # osp.join(logger.exp_path, "weights.jx")
     # ac.load(model_path)
 
@@ -138,12 +136,13 @@ def main(cfg):
         ac=ac,
         batch_size=cfg.train.batch_size,
         logger=logger,
-        train_callback=train_callback
+        train_callback=train_callback,
     )
     ac.save(model_path)
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(
-        osp.dirname(__file__), "cfgs/hopper_short.yml"))
+    cfg = parse_cfg(
+        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/hopper_short.yml")
+    )
     main(cfg)

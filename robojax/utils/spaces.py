@@ -9,6 +9,7 @@ from typing import Dict, Tuple, Union
 import jax.numpy as jnp
 import numpy as np
 from gym import spaces
+from gymnax.environments import spaces as jax_spaces
 
 
 def get_obs_shape(
@@ -19,18 +20,21 @@ def get_obs_shape(
     :param observation_space:
     :return:
     """
-    if isinstance(observation_space, spaces.Box):
+    if isinstance(observation_space, int):
+        return observation_space
+    if isinstance(observation_space, spaces.Box) or isinstance(observation_space, jax_spaces.Box):
         return observation_space.shape
-    elif isinstance(observation_space, spaces.Discrete):
+    elif isinstance(observation_space, spaces.Discrete) or isinstance(observation_space, jax_spaces.Discrete):
         # Observation is an int
         return (1,)
     elif isinstance(observation_space, spaces.MultiDiscrete):
+        # TODO add gymnax space later
         # Number of discrete features
         return (int(len(observation_space.nvec)),)
     elif isinstance(observation_space, spaces.MultiBinary):
         # Number of binary features
         return (int(observation_space.n),)
-    elif isinstance(observation_space, spaces.Dict):
+    elif isinstance(observation_space, spaces.Dict) or isinstance(observation_space, jax_spaces.Dict):
         return {
             key: get_obs_shape(subspace)
             for (key, subspace) in observation_space.spaces.items()
@@ -44,9 +48,11 @@ def get_action_dim(action_space: spaces.Space) -> int:
     :param action_space:
     :return:
     """
-    if isinstance(action_space, spaces.Box):
+    if isinstance(action_space, int):
+        return action_space
+    elif isinstance(action_space, spaces.Box) or isinstance(action_space, jax_spaces.Box):
         return int(np.prod(action_space.shape))
-    elif isinstance(action_space, spaces.Discrete):
+    elif isinstance(action_space, spaces.Discrete) or isinstance(action_space, jax_spaces.Discrete):
         # Action is an int
         return 1
     elif isinstance(action_space, spaces.MultiDiscrete):

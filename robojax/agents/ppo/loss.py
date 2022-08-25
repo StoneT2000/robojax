@@ -39,8 +39,7 @@ def actor_loss_fn(
         # ac.pi.train()
         log_r = logp - logp_old
         ratio = jnp.exp(log_r)
-        clip_adv = jax.lax.clamp(
-            1.0 - clip_ratio, ratio, 1.0 + clip_ratio) * adv
+        clip_adv = jax.lax.clamp(1.0 - clip_ratio, ratio, 1.0 + clip_ratio) * adv
         actor_loss = -jnp.mean(jnp.minimum(ratio * adv, clip_adv), axis=0)
         entropy = dist.entropy().mean()
         entropy_loss = -entropy * entropy_coef

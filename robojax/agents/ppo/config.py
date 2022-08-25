@@ -14,7 +14,12 @@ class PPOConfig:
     """
     Configuration datalcass for PPO
     """
-    max_episode_length: Optional[int] = -1 # IF this value is not set, we expect during training the steps_per_epoch is >= max episode length of the environment
+
+    max_episode_length: Optional[
+        int
+    ] = (
+        -1
+    )  # IF this value is not set, we expect during training the steps_per_epoch is >= max episode length of the environment
     normalize_advantage: Optional[bool] = True
     gamma: Optional[float] = 0.99
     gae_lambda: Optional[float] = 0.97
@@ -25,7 +30,9 @@ class PPOConfig:
     dapg_lambda: Optional[float] = 0.1
     dapg_damping: Optional[float] = 0.99
     target_kl: Optional[float] = 0.01
-    reset_env: Optional[bool] = True # if false, when collecting interactions we will not reset env directly and carry over env states
+    reset_env: Optional[
+        bool
+    ] = True  # if false, when collecting interactions we will not reset env directly and carry over env states
 
 
 @struct.dataclass

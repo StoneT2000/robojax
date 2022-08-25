@@ -39,10 +39,13 @@ class Model:
         cls,
         model: nn.Module,
         key: PRNGKey,
-        sample_input: Any,
+        sample_input: Any = [],
         tx: Optional[optax.GradientTransformation] = None,
     ) -> "Model":
-        model_vars = model.init(key, sample_input)
+        if isinstance(sample_input, list):
+            model_vars = model.init(key, *sample_input)
+        else:
+            model_vars = model.init(key, sample_input)
         opt_state = None
         if tx is not None:
             opt_state = tx.init(model_vars)
@@ -78,7 +81,10 @@ class Model:
         return dict(
             params=self.params,
             opt_state=self.opt_state,
+            step=self.step,
         )
+    def _load_state_dict(self, state_dict):
+        return self.replace(**state_dict)
 
     def __getattribute__(self, name: str) -> Any:
         try:
