@@ -44,9 +44,11 @@ def make_env(
         obs_space = env.observation_space()
         act_space = env.action_space()
     else:
+        import gym
         from stable_baselines3.common.env_util import make_vec_env
+        # env = gym.make(env_id)
         env = make_vec_env(env_id, num_envs, seed=seed)
-        eval_env = make_vec_env(env_id, num_envs, seed=seed + 1000)
+        # eval_env = make_vec_env(env_id, num_envs, seed=seed + 1000)
         obs_space = env.observation_space
         act_space = env.action_space
         sample_obs = obs_space.sample()

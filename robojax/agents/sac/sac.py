@@ -1,7 +1,7 @@
 import time
 from dis import disco
 from functools import partial
-from typing import Callable, Tuple
+from typing import Any, Callable, Tuple
 
 import distrax
 import jax
@@ -19,26 +19,7 @@ from robojax.data.loop import EnvAction, EnvObs, GymLoop, JaxLoop
 from robojax.logger.logger import Logger
 from robojax.models import Model
 from robojax.models.model import Params
-from robojax.utils.spaces import get_action_dim, get_obs_shape
-
-@struct.dataclass
-class CriticUpdateAux:
-    critic_loss: Array
-    q1: Array
-    q2: Array
-
-
-@struct.dataclass
-class ActorUpdateAux:
-    actor_loss: Array = None
-    entropy: Array = None
-
-
-@struct.dataclass
-class TempUpdateAux:
-    temp_loss: Array = None
-    temp: Array = None
-
+from robojax.agents.sac import loss
 
 class SAC(BasePolicy):
     def __init__(
@@ -118,75 +99,59 @@ class SAC(BasePolicy):
     def train(self, rng_key: PRNGKey, ac: ActorCritic, logger: Logger, verbose=1):
         stime = time.time()
         episodes = 0
-        ep_len, ep_ret, done = 0, 0, False
+        ep_lens, ep_rets, dones = np.zeros(self.cfg.num_envs), np.zeros(self.cfg.num_envs), np.zeros(self.cfg.num_envs)
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
         if self.jax_env:
             env_obs, env_state = self.env_reset(reset_rng_key)
         else:
             env_obs = self.env.reset()
-            env_state = None
+            env_states = None
         from tqdm import tqdm
         pbar=tqdm(total=self.cfg.num_train_steps)
         while self.step < self.cfg.num_train_steps:
-            if self.step > 0 and self.step >= self.cfg.num_seed_steps:
-                if self.cfg.eval_freq > 0 and self.step % self.cfg.eval_freq == 0:
-                    # evaluate
-                    rng_key, *eval_rng_keys = jax.random.split(rng_key, self.cfg.num_eval_envs + 1)      
-                    eval_buffer, _ = self.eval_loop.rollout(rng_keys=jnp.stack(eval_rng_keys),
-                        params=ac.actor,
-                        apply_fn=ac.act,
-                        steps_per_env=self.cfg.eval_steps,
-                    )
-                    ep_lens = np.asarray(eval_buffer['ep_len'])
-                    ep_rets = np.asarray(eval_buffer['ep_ret'])
-                    episode_ends = np.asarray(eval_buffer['done'])
-                    ep_rets = ep_rets[episode_ends].flatten()
-                    ep_lens = ep_lens[episode_ends].flatten()
-                    logger.store(
-                        tag="test",
-                        ep_ret=ep_rets,
-                        ep_len=ep_lens,
-                        append=False,
-                    )
-                    stats = logger.log(self.step)
-                    logger.reset()
-            if done:
+            if self.step % self.cfg.eval_freq == 0 and self.step > 0 and self.step >= self.cfg.num_seed_steps and self.cfg.eval_freq > 0:
+                rng_key, eval_rng_key = jax.random.split(rng_key, 2)
+                self.evaluate(eval_rng_key, ac, logger)
+            if dones.any():
                 logger.store(
                     tag="train",
-                    ep_ret=float(ep_ret),
-                    ep_len=float(ep_len),
+                    ep_ret=ep_rets[dones],
+                    ep_len=ep_lens[dones],
                     append=False
                 )
                 stats = logger.log(self.step)
                 logger.reset()
-                ep_len, ep_ret = 0, 0
-                episodes += 1
-
+                episodes += dones.sum()
+                ep_lens[dones] = 0.0
+                ep_rets[dones] = 0.0
             
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
-            a, next_env_obs, next_env_state, reward, done, info = self._env_step(env_rng_key, env_obs, env_state, ac.actor, seed=self.step < self.cfg.num_seed_steps)
+        
+            actions, next_env_obs, next_env_states, rewards, dones, infos = self._env_step(env_rng_key, env_obs, env_states, ac.actor, seed=self.step < self.cfg.num_seed_steps)
+            dones = np.array(dones)
+            rewards = np.array(rewards)
 
-            ep_len += 1
-            ep_ret += reward
+            ep_lens += 1
+            ep_rets += rewards
             self.step += 1
 
-            mask = 0.0
-            if not done or ep_len == self.cfg.max_episode_length - 1:
-                mask = 1.0
-            else:
-                # 0 here means we don't use the q value of the next state and action.
-                # we bootstrap whenever we have a time limit termination
-                mask = 0.0
+            mask = (~dones) | (ep_lens == self.cfg.max_episode_length)
+            # if not done or 'TimeLimit.truncated' in info:
+            #     mask = 1.0
+            # else:
+            #     # 0 here means we don't use the q value of the next state and action.
+            #     # we bootstrap whenever we have a time limit termination
+            #     mask = 0.0
             self.replay_buffer.store(
                 env_obs=env_obs,
-                reward=reward,
-                action=a,
+                reward=rewards,
+                action=actions,
                 mask=mask,
                 next_env_obs=next_env_obs,
             )
 
             env_obs = next_env_obs
-            env_state = next_env_state
+            env_states = next_env_states
 
             # update policy
             if self.step >= self.cfg.num_seed_steps:
@@ -217,9 +182,9 @@ class SAC(BasePolicy):
                 ac.critic = new_critic
                 ac.target_critic = new_target_critic
                 ac.temp = new_temp
-                critic_update_aux: CriticUpdateAux = aux["critic_update_aux"]
-                actor_update_aux: ActorUpdateAux = aux["actor_update_aux"]
-                temp_update_aux: TempUpdateAux = aux["temp_update_aux"]
+                critic_update_aux: loss.CriticUpdateAux = aux["critic_update_aux"]
+                actor_update_aux: loss.ActorUpdateAux = aux["actor_update_aux"]
+                temp_update_aux: loss.TempUpdateAux = aux["temp_update_aux"]
                 if self.cfg.log_freq > 0 and self.step % self.cfg.log_freq == 0:
                     logger.store(
                         tag="train",
@@ -243,86 +208,6 @@ class SAC(BasePolicy):
                     logger.reset()
             pbar.update(n=1)
             
-
-    @partial(jax.jit, static_argnames=["self"])
-    def update_target(self, critic: Model, target_critic: Model) -> Model:
-        """
-        update targret_critic with polyak averaging
-        """
-        new_target_params = jax.tree_multimap(
-        lambda p, tp: p * self.cfg.tau + tp * (1 - self.cfg.tau), critic.params,
-        target_critic.params)
-
-        return target_critic.replace(params=new_target_params)
-
-    @partial(jax.jit, static_argnames=["self"])
-    def update_critic(
-        self,
-        rng_key: PRNGKey,
-        actor: Model,
-        critic: Model,
-        target_critic: Model,
-        temp: Model,
-        batch: TimeStep,
-    ) -> Tuple[Model, CriticUpdateAux]:
-        dist: distrax.Distribution = actor(batch.next_env_obs)
-        # Note, we don't use .log_prob since there is some numerical imprecision errors that cause issues
-        next_actions, next_log_probs = dist.sample_and_log_prob(seed=rng_key)
-        # next_log_probs = dist.log_prob(next_actions)
-        next_q1, next_q2 = target_critic(batch.next_env_obs, next_actions)
-        next_q = jnp.minimum(next_q1, next_q2)
-        target_q = batch.reward + self.cfg.discount * batch.mask * next_q
-
-        if self.cfg.backup_entropy:
-            target_q -= self.cfg.discount * batch.mask * temp() * next_log_probs
-
-        def critic_loss_fn(critic_params: Params):
-            q1, q2 = critic.apply_fn(critic_params, batch.env_obs, batch.action)
-            critic_loss = ((q1 - target_q) ** 2 + (q2 - target_q) ** 2).mean()
-            return critic_loss, CriticUpdateAux(critic_loss=critic_loss, q1=q1.mean(), q2=q2.mean())
-
-        grad_fn = jax.grad(critic_loss_fn, has_aux=True)
-        grads, aux = grad_fn(critic.params)
-        new_critic = critic.apply_gradients(grads=grads)
-        return new_critic, aux
-
-    @partial(jax.jit, static_argnames=["self"])
-    def update_actor(
-        self,
-        rng_key: PRNGKey,
-        actor: Model,
-        critic: Model,
-        temp: Model,
-        batch: TimeStep,
-    ) -> Tuple[Model, ActorUpdateAux]:
-        def actor_loss_fn(actor_params: Params):
-            dist: distrax.Distribution = actor.apply_fn(actor_params, batch.env_obs)
-            actions, log_probs = dist.sample_and_log_prob(seed=rng_key)
-            # log_probs = dist.log_prob(actions)
-            q1, q2 = critic(batch.env_obs, actions)
-            q = jnp.minimum(q1, q2)
-            actor_loss = (temp() * log_probs - q).mean()
-            return actor_loss, ActorUpdateAux(
-                actor_loss=actor_loss, entropy=-log_probs.mean()
-            )
-
-        grad_fn = jax.grad(actor_loss_fn, has_aux=True)
-        grads, aux = grad_fn(actor.params)
-        new_actor = actor.apply_gradients(grads=grads)
-        return new_actor, aux
-
-    @partial(jax.jit, static_argnames=["self"])
-    def update_temp(self, temp: Model, entropy: float) -> Tuple[Model, TempUpdateAux]:
-        def temp_loss_fn(temp_params: Params):
-            temp_val = temp.apply_fn(temp_params)
-            temp_loss = temp_val * (entropy - self.cfg.target_entropy).mean()
-            return temp_loss, TempUpdateAux(temp_loss=temp_loss, temp=temp_val)
-
-        grad_fn = jax.grad(temp_loss_fn, has_aux=True)
-        grads, aux = grad_fn(temp.params)
-        new_temp = temp.apply_gradients(grads=grads)
-        return new_temp, aux
-
     @partial(jax.jit, static_argnames=["self", "update_actor", "update_target"])
     def update_parameters(
         self,
@@ -336,23 +221,17 @@ class SAC(BasePolicy):
         update_target: bool,
     ):
         rng_key, critic_update_rng_key = jax.random.split(rng_key, 2)
-        new_critic, critic_update_aux = self.update_critic(
-            critic_update_rng_key, actor, critic, target_critic, temp, batch
-        )
-        new_actor, actor_update_aux = actor, ActorUpdateAux()
-        new_temp, temp_update_aux = temp, TempUpdateAux(temp=temp())
+        new_critic, critic_update_aux = loss.update_critic(critic_update_rng_key, actor, critic, target_critic, temp, batch, self.cfg.discount, self.cfg.backup_entropy)
+        new_actor, actor_update_aux = actor, loss.ActorUpdateAux()
+        new_temp, temp_update_aux = temp, loss.TempUpdateAux(temp=temp())
         new_target = target_critic
         if update_target:
-            new_target = self.update_target(critic, target_critic)
+            new_target = loss.update_target(critic, target_critic, self.cfg.tau)
         if update_actor:
             rng_key, actor_update_rng_key = jax.random.split(rng_key, 2)
-            new_actor, actor_update_aux = self.update_actor(
-                actor_update_rng_key, actor, critic, temp, batch
-            )
+            new_actor, actor_update_aux = loss.update_actor(actor_update_rng_key, actor, critic, temp, batch)
             if self.cfg.learnable_temp:
-                new_temp, temp_update_aux = self.update_temp(
-                    temp, actor_update_aux.entropy
-                )
+                new_temp, temp_update_aux = loss.update_temp(temp, actor_update_aux.entropy, self.cfg.target_entropy)
         return (
             new_actor,
             new_critic,
@@ -364,3 +243,23 @@ class SAC(BasePolicy):
                 temp_update_aux=temp_update_aux,
             ),
         )
+    def evaluate(self, rng_key: PRNGKey, ac: ActorCritic, logger: Logger):
+        rng_key, *eval_rng_keys = jax.random.split(rng_key, self.cfg.num_eval_envs + 1)      
+        eval_buffer, _ = self.eval_loop.rollout(rng_keys=jnp.stack(eval_rng_keys),
+            params=ac.actor,
+            apply_fn=ac.act,
+            steps_per_env=self.cfg.eval_steps,
+        )
+        eval_ep_lens = np.asarray(eval_buffer['ep_len'])
+        eval_ep_rets = np.asarray(eval_buffer['ep_ret'])
+        eval_episode_ends = np.asarray(eval_buffer['done'])
+        eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
+        eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
+        logger.store(
+            tag="test",
+            ep_ret=eval_ep_rets,
+            ep_len=eval_ep_lens,
+            append=False,
+        )
+        logger.log(self.step)
+        logger.reset()

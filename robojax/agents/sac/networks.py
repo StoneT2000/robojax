@@ -10,7 +10,10 @@ from chex import Array, PRNGKey
 
 from robojax.models import MLP, Model
 from robojax.models.ac.core import mlp
+from tensorflow_probability.substrates import jax as tfp
 
+tfd = tfp.distributions
+tfb = tfp.bijectors
 
 class Critic(nn.Module):
     # TODO make a decorator that injects these network parameters based on some config
@@ -61,30 +64,29 @@ class DiagGaussianActor(nn.Module):
             # Add final dense layer initialization scale and orthogonal init
             self.log_std = nn.Dense(self.act_dims, kernel_init=default_init(1))
         else:
-            self.log_std = self.param(
-                "log_std",
-                lambda rng, act_dims, log_std_scale: jnp.ones(act_dims) * log_std_scale,
-                self.act_dims,
-                self.log_std_scale,
-            )
+            self.log_std = self.param('log_std', nn.initializers.zeros,
+                                  (self.act_dims, ))
         self.mlp = MLP(self.features, self.activation, self.output_activation)
         self.action_head = nn.Dense(self.act_dims, kernel_init=default_init(1))
 
     def __call__(self, x, deterministic=False):
-        if deterministic:
-            return self.action_head(self.mlp(x))
         x = self.mlp(x)
-        if self.state_dependent_std:
-            log_std = self.log_std(x)
-            log_std = jnp.clip(log_std, self.log_std_range[0], self.log_std_range[1])
-        else:
-            log_std = self.log_std
         a = self.action_head(x)
         if not self.tanh_squash_distribution:
             a = nn.tanh(a)
-        dist = distrax.MultivariateNormalDiag(a, jnp.exp(log_std))
+        if deterministic: return a
+        if self.state_dependent_std:
+            log_std = self.log_std(x)
+        else:
+            log_std = self.log_std
+        log_std = jnp.clip(log_std, self.log_std_range[0], self.log_std_range[1])
+        dist = tfd.MultivariateNormalDiag(a, jnp.exp(log_std))
+        # distrax has some numerical imprecision bug atm where calling sample then log_prob can raise NaNs. tfd is more stable at the moment
+        # dist = distrax.MultivariateNormalDiag(a, jnp.exp(log_std))
         if self.tanh_squash_distribution:
-            dist = distrax.Transformed(distribution=dist, bijector=distrax.Block(distrax.Tanh(), ndims=1))
+            # dist = distrax.Transformed(distribution=dist, bijector=distrax.Block(distrax.Tanh(), ndims=1))
+            dist = tfd.TransformedDistribution(distribution=dist,
+                                               bijector=tfb.Tanh())
         return dist
 
 

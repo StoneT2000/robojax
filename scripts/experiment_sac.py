@@ -28,6 +28,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def main(cfg):
+    np.random.seed(cfg.seed)
     env_id = cfg.env_id
     sac_cfg = SACConfig(**cfg.sac)
     env, env_meta = make_env(
@@ -37,7 +38,7 @@ def main(cfg):
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
     if cfg.jax_env:
         def seed_sampler(rng_key):
-            return env.action_space().sample(rng_key)
+            return env.action_space().sample(rng_key)[None, :]
     else:
         def seed_sampler(rng_key):
             return jax.random.uniform(rng_key, shape=env.action_space.shape, minval=-1.0, maxval=1.0, dtype=float)[None, :]
@@ -81,6 +82,6 @@ if __name__ == "__main__":
     #     'base_config', metavar='int', type=int, choices=range(10),
     #      nargs='+', help='an integer in the range 0..9')
     cfg = parse_cfg(
-        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac/halfcheetah.yml")
+        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac/halfcheetah_mujoco.yml")
     )
     main(cfg)
