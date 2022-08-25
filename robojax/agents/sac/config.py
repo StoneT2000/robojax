@@ -8,7 +8,6 @@ from typing import Optional
 import chex
 from flax import struct
 
-
 @dataclasses.dataclass
 class SACConfig:
     """
@@ -32,6 +31,10 @@ class SACConfig:
     target_update_freq: Optional[int] = 1
 
     eval_freq: Optional[int] = 5000
+    eval_steps: Optional[int] = 1000
+    num_eval_envs: Optional[int] = 4
+
+
     log_freq: Optional[int] = 1000
 
     max_episode_length: Optional[int] = -1

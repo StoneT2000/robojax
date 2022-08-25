@@ -140,9 +140,10 @@ class ActorCritic:
             Temperature(initial_temperature), temp_rng_key, tx=temperature_optim
         )
 
-    @partial(jax.jit, static_argnames=["self", "deterministic"])
-    def act(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs, deterministic=False):
-        if deterministic:
-            return actor(obs, deterministic=True)
-        dist, _ = actor(obs)
-        return dist.sample(seed=rng_key)
+    @partial(jax.jit, static_argnames=["self"])
+    def act(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs):
+        return actor(obs, deterministic=True), {}
+    
+    @partial(jax.jit, static_argnames=["self"])
+    def sample(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs):
+        return actor(obs).sample(seed=rng_key), {}

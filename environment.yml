@@ -53,6 +53,7 @@ dependencies:
     - tensorboard
     - wandb
     - omegaconf
+    - ml-collections
 
   #   # More Deep Learning
     - huggingface_hub

@@ -109,38 +109,6 @@ def main(cfg):
         cfg=cfg,
         **cfg.logger,
     )
-
-    # def eval_apply(rng_key, params, obs):
-    #     actor = params
-    #     return actor(obs)[1], {}
-
-    # best_ep_ret = 0
-
-    # def train_callback(epoch, ac, rng_key, **kwargs):
-    #     nonlocal best_ep_ret
-    #     # every cfg.eval.eval_freq training epochs, evaluate our current model
-    #     if epoch % cfg.eval.eval_freq == 0:
-    #         rng_key, *eval_env_rng_keys = jax.random.split(
-    #             rng_key, cfg.eval.num_eval_envs + 1
-    #         )
-    #         eval_buffer, _ = eval_loop.rollout(
-    #             eval_env_rng_keys, ac.actor, eval_apply, cfg.eval.steps_per_env
-    #         )
-    #         eval_episode_ends = np.asarray(eval_buffer["done"])
-    #         ep_rets = np.asarray(eval_buffer["ep_ret"])[
-    #             eval_episode_ends].flatten()
-    #         logger.store(
-    #             tag="test",
-    #             append=False,
-    #             ep_ret=ep_rets,
-    #             ep_len=np.asarray(eval_buffer["ep_len"])[
-    #                 eval_episode_ends].flatten(),
-    #         )
-    #         ep_ret_avg = ep_rets.mean()
-    #         if ep_ret_avg > best_ep_ret:
-    #             best_ep_ret = ep_ret_avg
-    #             ac.save(model_path)
-
     model_path = "weights.jx"  # osp.join(logger.exp_path, "weights.jx")
     # ac.load(model_path)
 
@@ -155,6 +123,6 @@ def main(cfg):
 
 if __name__ == "__main__":
     cfg = parse_cfg(
-        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac/hopper_mujoco.yml")
+        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac/hopper.yml")
     )
     main(cfg)

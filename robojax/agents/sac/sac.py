@@ -120,11 +120,6 @@ class SAC(BasePolicy):
             next_env_state = None
         return a, next_env_obs, next_env_state, reward, done, info
 
-    
-    def policy(self, r, actor, obs):
-        return actor(obs, deterministic=True), {}
-
-
     def train(self, rng_key: PRNGKey, ac: ActorCritic, logger: Logger, verbose=1):
         stime = time.time()
         episodes = 0
@@ -138,26 +133,20 @@ class SAC(BasePolicy):
         from tqdm import tqdm
         pbar=tqdm(total=self.cfg.num_train_steps)
         while self.step < self.cfg.num_train_steps:
-            # print(self.step, self.cfg.eval_freq)
             if self.step > 0 and self.step >= self.cfg.num_seed_steps:
                 if self.cfg.eval_freq > 0 and self.step % self.cfg.eval_freq == 0:
                     # evaluate
-                    num_eval_envs = 1
-                    rng_key, *eval_rng_keys = jax.random.split(rng_key, num_eval_envs + 1)      
+                    rng_key, *eval_rng_keys = jax.random.split(rng_key, self.cfg.num_eval_envs + 1)      
                     eval_buffer, _ = self.eval_loop.rollout(rng_keys=jnp.stack(eval_rng_keys),
                         params=ac.actor,
-                        # apply_fn=self.policy,
-                        apply_fn = lambda rng, obs : (ac.actor(obs, deterministic=True), {}),
-                        steps_per_env=1000,
+                        apply_fn=ac.act,
+                        steps_per_env=self.cfg.eval_steps,
                     )
                     ep_lens = np.asarray(eval_buffer['ep_len'])
                     ep_rets = np.asarray(eval_buffer['ep_ret'])
-                    # import ipdb;ipdb.set_trace()
-                    # ep_rews = np.asarray(eval_buffer.reward)
                     episode_ends = np.asarray(eval_buffer['done'])
                     ep_rets = ep_rets[episode_ends].flatten()
                     ep_lens = ep_lens[episode_ends].flatten()
-                    # print("EVAL", self.step, dict(avg_ret=ep_rets.mean(), avg_len=ep_lens.mean()))
                     logger.store(
                         tag="test",
                         ep_ret=ep_rets,
@@ -169,8 +158,8 @@ class SAC(BasePolicy):
             if done:
                 logger.store(
                     tag="train",
-                    ep_ret=ep_ret,
-                    ep_len=ep_len,
+                    ep_ret=float(ep_ret),
+                    ep_len=float(ep_len),
                     append=False
                 )
                 stats = logger.log(self.step)
@@ -200,7 +189,6 @@ class SAC(BasePolicy):
                 mask=mask,
                 next_env_obs=next_env_obs,
             )
-            # self.replay_buffer.insert(env_obs, a, reward, mask, float(done), next_env_obs)
 
             env_obs = next_env_obs
             env_state = next_env_state
@@ -214,9 +202,6 @@ class SAC(BasePolicy):
                     sample_key, self.cfg.batch_size
                 )
                 batch = TimeStep(**batch)
-                # batch = self.replay_buffer.sample(self.cfg.batch_size)
-               
-                # batch = TimeStep(next_env_obs=batch.next_observations,env_obs=batch.observations, reward=batch.rewards,mask=batch.masks,action=batch.actions)
                 (
                     new_actor,
                     new_critic,
@@ -356,12 +341,11 @@ class SAC(BasePolicy):
         update_target: bool,
     ):
         rng_key, critic_update_rng_key = jax.random.split(rng_key, 2)
-        # new_critic, critic_update_aux = loss.update_critic(critic_update_rng_key, actor, critic, target_critic, temp, batch, self.cfg.discount, self.cfg.backup_entropy) 
         new_critic, critic_update_aux = self.update_critic(
             critic_update_rng_key, actor, critic, target_critic, temp, batch
         )
         new_actor, actor_update_aux = actor, ActorUpdateAux()
-        # new_temp, temp_update_aux = temp, TempUpdateAux(temp=temp())
+        new_temp, temp_update_aux = temp, TempUpdateAux(temp=temp())
         new_target = target_critic
         if update_target:
             new_target = self.update_target(critic, target_critic)
@@ -374,8 +358,6 @@ class SAC(BasePolicy):
                 new_temp, temp_update_aux = self.update_temp(
                     temp, actor_update_aux.entropy
                 )
-        
-
         return (
             new_actor,
             new_critic,

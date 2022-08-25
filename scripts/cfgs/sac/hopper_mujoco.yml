@@ -8,14 +8,14 @@ seed: 0
 
 sac:
   num_seed_steps: 10_000
-  num_train_steps: 6_553_600
-  replay_buffer_capacity: 1_000_000
+  num_train_steps: 500_000
+  replay_buffer_capacity: 100_000
 
   # num_envs: 128
   batch_size: 256
   # update_iters: 32
 
-  eval_freq: -1
+  eval_freq: 5000
   log_freq: 1000
 
   learnable_temp: True
@@ -31,12 +31,6 @@ train:
   update_iters: 32
   epochs: 600
   steps_per_epoch: 256
-
-eval:
-  num_eval_envs: 16
-  steps_per_env: 1000 # one episode each
-  eval_freq: 20
-
 
 logger:
   tensorboard: True
