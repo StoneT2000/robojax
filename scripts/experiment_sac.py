@@ -20,6 +20,7 @@ from robojax.data.loop import GymLoop, JaxLoop
 from robojax.logger import Logger
 from robojax.models import explore
 from robojax.models.mlp import MLP
+from robojax.utils.make_env import make_env
 from robojax.utils.spaces import get_action_dim
 from robojax.wrappers.brax import BraxGymWrapper
 
@@ -28,48 +29,22 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 def main(cfg):
     env_id = cfg.env_id
-    num_envs = 1
     sac_cfg = SACConfig(**cfg.sac)
-    is_brax_env = False
-    is_gymnax_env = False
-    eval_loop = None
+    env, env_meta = make_env(
+        env_id, jax_env=cfg.jax_env, num_envs=cfg.sac.num_envs, seed=cfg.seed)
+    eval_env, _ = make_env(
+        env_id, jax_env=cfg.jax_env, num_envs=cfg.sac.num_eval_envs, seed=cfg.seed + 1000)
+    sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
     if cfg.jax_env:
-        if env_id in gymnax.registered_envs:
-            is_gymnax_env = True
-        elif env_id in envs._envs:
-            is_brax_env = True
-        if is_gymnax_env:
-            env, env_params = gymnax.make(env_id)
-        elif is_brax_env:
-            env = envs.create(env_id, auto_reset=cfg.auto_reset)
-            env = BraxGymWrapper(env)
-
-        sample_obs = env.reset(jax.random.PRNGKey(0))[0]
-        sample_acts = env.action_space().sample(jax.random.PRNGKey(0))
-        act_dims = sample_acts.shape[0]
-        obs_space = env.observation_space()
-        act_space = env.action_space()
-
         def seed_sampler(rng_key):
             return env.action_space().sample(rng_key)
-        algo = SAC(env=env, eval_env=env, jax_env=cfg.jax_env,
-                   observation_space=obs_space, action_space=act_space, seed_sampler=seed_sampler, cfg=sac_cfg)
     else:
-        env = make_vec_env(env_id, num_envs, seed=cfg.seed)
-        eval_env = make_vec_env(env_id, num_envs, seed=cfg.seed)
         def seed_sampler(rng_key):
-            return jax.random.uniform(
-                rng_key, shape=env.action_space.shape, minval=-1.0, maxval=1.0, dtype=float)[None, :]
-        algo = SAC(env=env, eval_env=eval_env,jax_env=cfg.jax_env, observation_space=env.observation_space,seed_sampler=seed_sampler, action_space=env.action_space, cfg=sac_cfg)
-        act_dims = get_action_dim(env.action_space)
-        sample_obs = env.reset()
-        sample_acts = env.action_space.sample()[None, :]
-        eval_loop = GymLoop(eval_env)
+            return jax.random.uniform(rng_key, shape=env.action_space.shape, minval=-1.0, maxval=1.0, dtype=float)[None, :]
 
-    assert env != None
-    assert act_dims != None
-    
-    
+    algo = SAC(env=env, eval_env=eval_env, jax_env=cfg.jax_env, observation_space=env_meta.obs_space,
+               action_space=env_meta.act_space, seed_sampler=seed_sampler, cfg=sac_cfg)
+    act_dims = sample_acts.shape[0]
 
     actor = DiagGaussianActor([256, 256], act_dims)
     critic = DoubleCritic([256, 256])
@@ -94,13 +69,18 @@ def main(cfg):
         rng_key=jax.random.PRNGKey(cfg.seed),
         ac=ac,
         logger=logger,
-        # train_callback=train_callback,
     )
     # ac.save(model_path)
 
 
 if __name__ == "__main__":
+    import argparse
+    import sys
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument(
+    #     'base_config', metavar='int', type=int, choices=range(10),
+    #      nargs='+', help='an integer in the range 0..9')
     cfg = parse_cfg(
-        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac/hopper.yml")
+        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac/halfcheetah.yml")
     )
     main(cfg)

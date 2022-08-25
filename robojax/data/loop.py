@@ -70,8 +70,7 @@ class GymLoop(BaseEnvLoop):
             np.zeros(num_envs, dtype=int),
         )
         data = defaultdict(list)
-        import tqdm
-        for t in tqdm.tqdm(range(steps_per_env)):
+        for t in range(steps_per_env):
             rng_key, rng_fn_key = jax.random.split(rng_key)
             actions, aux = apply_fn(rng_fn_key, params, observations)
             next_observations, rewards, dones, infos = self.env.step(actions)
