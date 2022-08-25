@@ -185,10 +185,11 @@ class GenericBuffer(BaseBuffer):
         """
         Sample a batch of data with replacement
         """
-        indx = np.random.randint(self.size(), size=batch_size)
+        batch_ids = np.random.randint(self.size(), size=batch_size)
+        env_ids = np.random.randint(self.n_envs, size=batch_size)
         # np.random.randint
         return self._get_batch_by_ids(
-            buffers=self.buffers, batch_ids=indx, env_ids=np.zeros_like(indx)
+            buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
         )
     # @partial(jax.jit, static_argnames=["self", "batch_size"])
     # def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
