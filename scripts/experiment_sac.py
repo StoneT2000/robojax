@@ -38,10 +38,10 @@ def main(cfg):
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
     if cfg.jax_env:
         def seed_sampler(rng_key):
-            return env.action_space().sample(rng_key)[None, :]
+            return env.action_space().sample(rng_key)
     else:
         def seed_sampler(rng_key):
-            return jax.random.uniform(rng_key, shape=env.action_space.shape, minval=-1.0, maxval=1.0, dtype=float)[None, :]
+            return jax.random.uniform(rng_key, shape=(cfg.sac.num_envs, *env.action_space.shape), minval=-1.0, maxval=1.0, dtype=float)
 
     algo = SAC(env=env, eval_env=eval_env, jax_env=cfg.jax_env, observation_space=env_meta.obs_space,
                action_space=env_meta.act_space, seed_sampler=seed_sampler, cfg=sac_cfg)

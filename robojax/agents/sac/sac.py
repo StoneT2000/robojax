@@ -58,7 +58,7 @@ class SAC(BasePolicy):
             buffer_config["env_obs"] = (self.obs_shape, np.float32)
         buffer_config["next_env_obs"] = buffer_config["env_obs"]
         self.replay_buffer = GenericBuffer(
-            buffer_size=self.cfg.replay_buffer_capacity, n_envs=1, config=buffer_config
+            buffer_size=self.cfg.replay_buffer_capacity, n_envs=self.cfg.num_envs, config=buffer_config
         )
 
         if self.cfg.target_entropy is None:
@@ -119,7 +119,6 @@ class SAC(BasePolicy):
             if self.step % self.cfg.eval_freq == 0 and self.step > 0 and self.step >= self.cfg.num_seed_steps and self.cfg.eval_freq > 0:
                 rng_key, eval_rng_key = jax.random.split(rng_key, 2)
                 self.evaluate(eval_rng_key, ac, logger)
-            
 
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
         
