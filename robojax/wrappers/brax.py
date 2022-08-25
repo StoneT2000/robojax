@@ -25,7 +25,7 @@ class BraxGymWrapper(gym.Env):
 
     def __init__(self,
                env: brax_env.Env,
-               backend: Optional[str] = None):
+               backend: Optional[str] = None, auto_reset=True):
         self._env = env
         self.metadata = {
             'render.modes': ['human', 'rgb_array'],
@@ -47,7 +47,7 @@ class BraxGymWrapper(gym.Env):
 
         def step(state, action):
             state = self._env.step(state, action)
-            return state, state.obs, state.reward, state.done, state.metrics
+            return state, state.obs, state.reward, state.done, {**state.metrics, **state.info}
 
         self._step = jax.jit(step, backend=self.backend)
     def action_space(

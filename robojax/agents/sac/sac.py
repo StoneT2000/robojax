@@ -92,8 +92,15 @@ class SAC(BasePolicy):
             )
         else:
             a = np.asarray(a)
+            # if len(a.shape) == 2:
+                # a = a[0]
             next_env_obs, reward, done, info = self.env.step(a)
             next_env_state = None
+            # next_env_obs = next_env_obs[None, :]
+            # reward = np.array([reward])
+            # done = np.array([done])
+            # info = [info]
+
         return a, next_env_obs, next_env_state, reward, done, info
 
     def train(self, rng_key: PRNGKey, ac: ActorCritic, logger: Logger, verbose=1):
@@ -112,6 +119,19 @@ class SAC(BasePolicy):
             if self.step % self.cfg.eval_freq == 0 and self.step > 0 and self.step >= self.cfg.num_seed_steps and self.cfg.eval_freq > 0:
                 rng_key, eval_rng_key = jax.random.split(rng_key, 2)
                 self.evaluate(eval_rng_key, ac, logger)
+            
+
+            rng_key, env_rng_key = jax.random.split(rng_key, 2)
+        
+            actions, next_env_obs, next_env_states, rewards, dones, infos = self._env_step(env_rng_key, env_obs, env_states, ac.actor, seed=self.step < self.cfg.num_seed_steps)
+            dones = np.array(dones)
+            rewards = np.array(rewards)
+            true_next_env_obs = next_env_obs.copy()
+            ep_lens += 1
+            ep_rets += rewards
+            self.step += 1
+            
+            masks = ((~dones) | (ep_lens == self.cfg.max_episode_length)).astype(float)
             if dones.any():
                 logger.store(
                     tag="train",
@@ -119,35 +139,20 @@ class SAC(BasePolicy):
                     ep_len=ep_lens[dones],
                     append=False
                 )
-                stats = logger.log(self.step)
+                logger.log(self.total_env_steps)
                 logger.reset()
                 episodes += dones.sum()
                 ep_lens[dones] = 0.0
                 ep_rets[dones] = 0.0
-            
-            rng_key, env_rng_key = jax.random.split(rng_key, 2)
-        
-            actions, next_env_obs, next_env_states, rewards, dones, infos = self._env_step(env_rng_key, env_obs, env_states, ac.actor, seed=self.step < self.cfg.num_seed_steps)
-            dones = np.array(dones)
-            rewards = np.array(rewards)
+                for i, d in enumerate(dones):
+                    if d: true_next_env_obs[i] = infos[i]['terminal_observation']
 
-            ep_lens += 1
-            ep_rets += rewards
-            self.step += 1
-
-            mask = (~dones) | (ep_lens == self.cfg.max_episode_length)
-            # if not done or 'TimeLimit.truncated' in info:
-            #     mask = 1.0
-            # else:
-            #     # 0 here means we don't use the q value of the next state and action.
-            #     # we bootstrap whenever we have a time limit termination
-            #     mask = 0.0
             self.replay_buffer.store(
                 env_obs=env_obs,
                 reward=rewards,
                 action=actions,
-                mask=mask,
-                next_env_obs=next_env_obs,
+                mask=masks,
+                next_env_obs=true_next_env_obs,
             )
 
             env_obs = next_env_obs
@@ -204,9 +209,13 @@ class SAC(BasePolicy):
                         )
                         if self.cfg.learnable_temp:
                             logger.store(tag="train", temp_loss=float(temp_update_aux.temp_loss), append=False)
-                    stats = logger.log(self.step)
+                    stats = logger.log(self.total_env_steps)
                     logger.reset()
             pbar.update(n=1)
+
+    @property
+    def total_env_steps(self):
+        return self.step * self.cfg.num_envs * self.cfg.steps_per_env
             
     @partial(jax.jit, static_argnames=["self", "update_actor", "update_target"])
     def update_parameters(
@@ -261,5 +270,5 @@ class SAC(BasePolicy):
             ep_len=eval_ep_lens,
             append=False,
         )
-        logger.log(self.step)
+        logger.log(self.total_env_steps)
         logger.reset()
