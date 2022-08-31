@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import os.path as osp
@@ -50,21 +51,28 @@ class Logger:
     def __init__(
         self,
         wandb=False,
-        tensorboard=False,
+        tensorboard=True,
         workspace: str = "default_workspace",
         exp_name: str = "default_exp",
-        clear_out: bool = True,
+        clear_out: bool = False,
         project_name: str = None,
         wandb_cfg=None,
         cfg: Union[Dict, OmegaConf] = {},
     ) -> None:
         """
+        A logger for logging data points as well as summary statistics. 
+        
+        Stores logs in <workspace>/<exp_name>/logs
+
+        Checkpoints (model weights, training states) usually stored in <workspace>/<exp_name>/models
 
         Parameters
         ----------
 
         clear_out : bool
             If true, clears out all previous logging information for this experiment. Otherwise appends data only
+        
+
         """
         self.wandb = wandb
         if wandb_cfg is None:
@@ -74,6 +82,8 @@ class Logger:
         self.start_step = 0
 
         self.exp_path = osp.join(workspace, exp_name)
+        self.model_path = osp.join(workspace, "models")
+        self.video_path = osp.join(workspace, "videos")
         self.log_path = osp.join(self.exp_path, "logs")
         self.raw_log_file = osp.join(self.log_path, "raw.csv")
         if clear_out:
@@ -196,7 +206,7 @@ class Logger:
 
     def log(self, step, local_only=False):
         """
-        log accumulated data to tensorboard if enabled and to the terminal and locally. Also syncs collected data across processes
+        log accumulated data to tensorboard if enabled and to the terminal and locally.
 
         Statistics are then retrievable as a dict via get_statistics
 

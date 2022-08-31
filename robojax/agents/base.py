@@ -1,16 +1,20 @@
+import time
 from typing import Any, Callable, Tuple
 
 from chex import PRNGKey
-
+import jax
 from robojax.data.loop import EnvAction, EnvObs, EnvState, GymLoop, JaxLoop
+from robojax.logger.logger import Logger
+from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
-
-
+import jax.numpy as jnp
+import numpy as np
 class BasePolicy:
     def __init__(
         self,
         jax_env: bool,
         env=None,
+        logger_cfg: Any =  dict()
     ) -> None:
         """
         Base class for a policy
@@ -41,3 +45,35 @@ class BasePolicy:
             self.action_space = self.env.action_space
         self.obs_shape = get_obs_shape(self.observation_space)
         self.action_dim = get_action_dim(self.action_space)
+
+        if "exp_name" not in logger_cfg:
+            exp_name = f"sac/{round(time.time_ns() / 1000)}"
+            if hasattr(env, "name"):
+                exp_name = f"{env.name}/{exp_name}"
+            logger_cfg["exp_name"] = exp_name
+
+        self.logger = Logger(
+            **logger_cfg
+        )
+
+    def evaluate(self, rng_key: PRNGKey, num_envs: int, steps_per_env: int, eval_loop, params: Params, apply_fn: Callable[[PRNGKey, EnvObs], EnvAction]):
+        rng_key, *eval_rng_keys = jax.random.split(rng_key, num_envs + 1)      
+        eval_buffer, _ = eval_loop.rollout(rng_keys=jnp.stack(eval_rng_keys),
+            params=params,
+            apply_fn=apply_fn,
+            steps_per_env=steps_per_env,
+        )
+        eval_ep_lens = np.asarray(eval_buffer['ep_len'])
+        eval_ep_rets = np.asarray(eval_buffer['ep_ret'])
+        eval_episode_ends = np.asarray(eval_buffer['done'])
+        eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
+        eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
+        self.logger.store(
+            tag="test",
+            ep_ret=eval_ep_rets,
+            ep_len=eval_ep_lens,
+            append=False,
+        )
+        self.logger.log(self.total_env_steps)
+        self.logger.reset()
+

@@ -41,7 +41,7 @@ class SACConfig:
 
     log_freq: Optional[int] = 1000
 
-    max_episode_length: Optional[int] = -1
+    max_episode_length: Optional[int] = None
 
 
 @struct.dataclass
