@@ -11,11 +11,12 @@ sac:
   steps_per_env: 1
   grad_updates_per_step: 1
 
-  eval_freq: 5000
+  eval_freq: 20_000
   eval_steps: 1000
   num_eval_envs: 4
 
   log_freq: 1000
+  save_freq: 100_000
 
   learnable_temp: True
   initial_temperature: 1.0

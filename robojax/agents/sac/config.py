@@ -40,6 +40,7 @@ class SACConfig:
 
 
     log_freq: Optional[int] = 1000
+    save_freq: Optional[int] = 100_000
 
     max_episode_length: Optional[int] = None
 

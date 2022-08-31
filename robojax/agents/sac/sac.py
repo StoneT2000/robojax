@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 import time
 from dis import disco
 from functools import partial
@@ -7,6 +9,7 @@ import distrax
 import jax
 import jax.numpy as jnp
 import numpy as np
+import flax
 from chex import Array, PRNGKey
 
 from robojax.agents.base import BasePolicy
@@ -24,13 +27,20 @@ class SAC(BasePolicy):
     def __init__(
         self,
         jax_env: bool,
+        ac: ActorCritic,
         seed_sampler: Callable[[PRNGKey], EnvAction] = None,
         env=None,
         eval_env=None,
-        logger_cfg=None,
+        logger_cfg=dict(),
         cfg: SACConfig = {},
     ):
-
+        if "best_stats_cfg" not in logger_cfg:
+            logger_cfg["best_stats_cfg"] = {
+                "test/ep_ret_avg": 1,
+                "train/ep_ret_avg": 1
+            }
+        if "save_fn" not in logger_cfg:
+            logger_cfg["save_fn"] = self.save
         super().__init__(jax_env, env, logger_cfg)
         if isinstance(cfg, dict):
             self.cfg = SACConfig(**cfg)
@@ -40,6 +50,7 @@ class SAC(BasePolicy):
         assert self.cfg.max_episode_length is not None
 
         self.step = 0
+        self.ac: ActorCritic = ac
         if seed_sampler is None:
             seed_sampler = lambda rng_key: self.env.action_space().sample(rng_key)
             # TODO add a nice error message if this guessed sampler doesn't work
@@ -101,8 +112,9 @@ class SAC(BasePolicy):
             next_env_state = None
         return a, next_env_obs, next_env_state, reward, done, info
 
-    def train(self, rng_key: PRNGKey, ac: ActorCritic, verbose=1):
+    def train(self, rng_key: PRNGKey, verbose=1):
         train_start_time = time.time()
+        ac = self.ac
         episodes = 0
         ep_lens, ep_rets, dones = np.zeros(self.cfg.num_envs), np.zeros(self.cfg.num_envs), np.zeros(self.cfg.num_envs)
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
@@ -112,7 +124,8 @@ class SAC(BasePolicy):
             env_obs = self.env.reset()
             env_states = None
 
-        if verbose: pbar = tqdm(total=self.cfg.num_train_steps)
+        if verbose: 
+            pbar = tqdm(total=self.cfg.num_train_steps, initial=self.step)
         while self.step < self.cfg.num_train_steps:
             if self.step % self.cfg.eval_freq == 0 and self.step > 0 and self.step >= self.cfg.num_seed_steps and self.cfg.eval_freq > 0:
                 rng_key, eval_rng_key = jax.random.split(rng_key, 2)
@@ -230,6 +243,9 @@ class SAC(BasePolicy):
                 self.logger.log(self.total_env_steps)
                 self.logger.reset()
 
+            if self.step % self.cfg.save_freq == 0 and self.step >= self.cfg.num_seed_steps:
+                self.save(os.path.join(self.logger.model_path, f"ckpt_{self.total_env_steps}.jx"))
+
     @property
     def total_env_steps(self):
         return self.step * self.cfg.num_envs * self.cfg.steps_per_env
@@ -269,3 +285,23 @@ class SAC(BasePolicy):
                 temp_update_aux=temp_update_aux,
             ),
         )
+
+    def _state_dict(self):
+        state_dict = dict(
+            ac=self.ac._state_dict(),
+            step=self.step,
+            logger=self.logger._state_dict()
+        )
+        return state_dict
+
+    def save(self, save_path: str):
+        state_dict = self._state_dict()
+        with open(save_path, "wb") as f:
+            f.write(flax.serialization.to_bytes(state_dict))
+
+    def load_from_path(self, load_path: str):
+        with open(load_path, "rb") as f:
+            data = flax.serialization.from_bytes(self._state_dict(), f.read())
+        self.ac = self.ac.load(data["ac"])
+        self.step = data["step"]
+        self.logger.load(data["logger"])

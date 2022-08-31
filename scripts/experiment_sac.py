@@ -39,14 +39,8 @@ def main(cfg):
             return jax.random.uniform(rng_key, shape=(cfg.sac.num_envs, *env.action_space.shape), minval=-1.0, maxval=1.0, dtype=float)
 
     if "exp_name" not in cfg.logger:
-        cfg.logger["exp_name"] = f"{cfg.env_id}/sac/{round(time.time() / 1000)}"
-
-    algo = SAC(env=env, eval_env=eval_env, jax_env=cfg.jax_env, seed_sampler=seed_sampler, logger_cfg=dict(
-        cfg=cfg,
-        **cfg.logger
-    ), cfg=sac_cfg)
+        cfg.logger["exp_name"] = f"{cfg.env_id}/sac/{round(time.time_ns() / 1000)}"
     act_dims = sample_acts.shape[0]
-
     actor = DiagGaussianActor([256, 256], act_dims)
     critic = DoubleCritic([256, 256])
     ac = ActorCritic(
@@ -59,14 +53,17 @@ def main(cfg):
         actor_optim=optax.adam(learning_rate=cfg.model.actor_lr),
         critic_optim=optax.adam(learning_rate=cfg.model.critic_lr),
     )
-    model_path = "weights.jx"  # osp.join(logger.exp_path, "weights.jx")
-    # ac.load(model_path)
+    algo = SAC(env=env, eval_env=eval_env, jax_env=cfg.jax_env, ac=ac, seed_sampler=seed_sampler, logger_cfg=dict(
+        cfg=cfg,
+        **cfg.logger
+    ), cfg=sac_cfg)
+
+    algo.load_from_path("robojax_exps/HalfCheetah-v3/sac/1661981/models/ckpt_100000.jx")
+
 
     algo.train(
         rng_key=jax.random.PRNGKey(cfg.seed),
-        ac=ac,
     )
-    # ac.save(model_path)
 
 
 if __name__ == "__main__":

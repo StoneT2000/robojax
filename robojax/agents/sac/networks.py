@@ -13,6 +13,8 @@ import flax
 from robojax.models import MLP, Model
 from tensorflow_probability.substrates import jax as tfp
 
+from robojax.models.model import Params
+
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
@@ -156,7 +158,7 @@ class ActorCritic:
             actor=self.actor._state_dict(),
             critic=self.critic._state_dict(),
             target_critic=self.target_critic._state_dict(),
-            temp=self.temp
+            temp=self.temp._state_dict()
         )
 
     def save(self, save_path: str):
@@ -164,10 +166,15 @@ class ActorCritic:
         with open(save_path, "wb") as f:
             f.write(flax.serialization.to_bytes(self._state_dict()))
 
-    def load(self, load_path: str):
-        with open(load_path, "rb") as f:
-            params_dict = flax.serialization.from_bytes(self._state_dict(), f.read())
+    def load(self, params_dict: Params):
         self.actor = self.actor._load_state_dict(params_dict["actor"])
         self.critic = self.critic._load_state_dict(params_dict["critic"])
-        self.target_critic = self.critic._load_state_dict(params_dict["critic"])
-        self.temp = self.temp._load_state_dict(params_dict["critic"])
+        self.target_critic = self.target_critic._load_state_dict(params_dict["target_critic"])
+        self.temp = self.temp._load_state_dict(params_dict["temp"])
+        return self
+
+    def load_from_path(self, load_path: str):
+        with open(load_path, "rb") as f:
+            params_dict = flax.serialization.from_bytes(self._state_dict(), f.read())
+        self.load(params_dict)
+        return self
