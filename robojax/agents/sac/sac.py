@@ -20,7 +20,7 @@ from robojax.logger.logger import Logger
 from robojax.models import Model
 from robojax.models.model import Params
 from robojax.agents.sac import loss
-
+from tqdm import tqdm
 class SAC(BasePolicy):
     def __init__(
         self,
@@ -111,8 +111,8 @@ class SAC(BasePolicy):
         else:
             env_obs = self.env.reset()
             env_states = None
-        from tqdm import tqdm
-        pbar=tqdm(total=self.cfg.num_train_steps)
+
+        if verbose: pbar = tqdm(total=self.cfg.num_train_steps)
         while self.step < self.cfg.num_train_steps:
             if self.step % self.cfg.eval_freq == 0 and self.step > 0 and self.step >= self.cfg.num_seed_steps and self.cfg.eval_freq > 0:
                 rng_key, eval_rng_key = jax.random.split(rng_key, 2)
@@ -214,9 +214,9 @@ class SAC(BasePolicy):
                         append=False,
                         update_time=update_time
                     )
-                    stats = logger.log(self.total_env_steps)
+                    logger.log(self.total_env_steps)
                     logger.reset()
-            pbar.update(n=1)
+            if verbose: pbar.update(n=1)
 
             total_time = time.time() - train_start_time
             if self.cfg.log_freq > 0 and self.step % self.cfg.log_freq == 0:
