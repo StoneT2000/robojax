@@ -1,7 +1,7 @@
 jax_env: False
 
 seed: 0
-
+algo: sac
 sac:
   num_seed_steps: 10_000
   num_train_steps: 1_000_000

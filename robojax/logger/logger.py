@@ -56,7 +56,7 @@ class Logger:
         tensorboard=True,
         workspace: str = "default_workspace",
         exp_name: str = "default_exp",
-        clear_out: bool = False,
+        clear_out: bool = True,
         project_name: str = None,
         wandb_cfg=None,
         cfg: Union[Dict, OmegaConf] = {},
