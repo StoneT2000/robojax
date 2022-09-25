@@ -4,9 +4,7 @@ A high-performance reinforcement learning library in jax specialized for robotic
 
 <!-- <img src="https://user-images.githubusercontent.com/35373228/160072285-fb65294b-f6a6-4028-b60a-ac774191ac85.jpg" width=200/> -->
 
-How is it specialized? It includes popular algorithms often used in robotic learning research like PPO and SAC, as well as supporting architectures and workflows often used for visual / 3D RL like transformers, point nets, etc.
-
-And some more recent advances may also be included
+How is it specialized? It includes popular algorithms often used in robotic learning research like PPO and SAC, as well as supporting architectures and workflows often used for visual / 3D RL like transformers, point nets, etc. It further will include more robotics specific approaches such as [Transporter Networks (Zeng et. al., 2020)](https://transporternets.github.io/).
 
 ## Setup
 
