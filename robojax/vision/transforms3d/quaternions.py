@@ -117,19 +117,21 @@ def quat2mat(q: Array):
     '''
     w, x, y, z = q
     Nq = w*w + x*x + y*y + z*z
-    if Nq < _FLOAT_EPS:
-        return jnp.eye(3)
-    s = 2.0/Nq
-    X = x*s
-    Y = y*s
-    Z = z*s
-    wX = w*X; wY = w*Y; wZ = w*Z
-    xX = x*X; xY = x*Y; xZ = x*Z
-    yY = y*Y; yZ = y*Z; zZ = z*Z
-    return jnp.array(
-           [[ 1.0-(yY+zZ), xY-wZ, xZ+wY ],
-            [ xY+wZ, 1.0-(xX+zZ), yZ-wX ],
-            [ xZ-wY, yZ+wX, 1.0-(xX+yY) ]])
+
+    def comp():
+        s = 2.0/Nq
+        X = x*s
+        Y = y*s
+        Z = z*s
+        wX = w*X; wY = w*Y; wZ = w*Z
+        xX = x*X; xY = x*Y; xZ = x*Z
+        yY = y*Y; yZ = y*Z; zZ = z*Z
+        mat = jnp.array(
+            [[ 1.0-(yY+zZ), xY-wZ, xZ+wY ],
+                [ xY+wZ, 1.0-(xX+zZ), yZ-wX ],
+                [ xZ-wY, yZ+wX, 1.0-(xX+yY) ]])
+        return mat
+    return jnp.where(Nq < _FLOAT_EPS, jnp.eye(3), comp())
 
 @jax.jit
 def mat2quat(M: Array):
@@ -177,7 +179,7 @@ def mat2quat(M: Array):
     # Qyx refers to the contribution of the y input vector component to
     # the x output vector component.  Qyx is therefore the same as
     # M[0,1].  The notation is from the Wikipedia article.
-    Qxx, Qyx, Qzx, Qxy, Qyy, Qzy, Qxz, Qyz, Qzz = M.flat
+    Qxx, Qyx, Qzx, Qxy, Qyy, Qzy, Qxz, Qyz, Qzz = M.flatten()
     # Fill only lower half of symmetric matrix
     K = jnp.array([
         [Qxx - Qyy - Qzz, 0,               0,               0              ],
@@ -191,9 +193,7 @@ def mat2quat(M: Array):
     q = vecs[[3, 0, 1, 2], jnp.argmax(vals)]
     # Prefer quaternion with positive w
     # (q * -1 corresponds to same rotation as q)
-    if q[0] < 0:
-        q *= -1
-    return q
+    return jnp.where(q[0] < 0, q * - 1, q)
 
 @jax.jit
 def qmult(q1: Array, q2: Array):
@@ -272,106 +272,109 @@ def qeye(dtype=jnp.float64):
     ''' Return identity quaternion '''
     return jnp.array([1.0,0,0,0], dtype = dtype)
 
-@jax.jit
-def qexp(q: Array):
-    ''' Return exponential of quaternion
-    Parameters
-    ----------
-    q : 4 element sequence
-       w, i, j, k of quaternion
-    Returns
-    -------
-    q_exp : array shape (4,)
-        The quaternion exponential
-    Notes
-    -----
-    See:
-    * https://en.wikipedia.org/wiki/Quaternion#Exponential,_logarithm,_and_power
-    * https://math.stackexchange.com/questions/1030737/exponential-function-of-quaternion-derivation
-    '''
-    q = jnp.array(q)  # to ensure there is a dtype
-    w, v = q[0], q[1:]
-    norm = jnp.sqrt(np.dot(v, v))
-    result = jnp.zeros((4,), q.dtype)
+# @jax.jit
+# # TODO
+# def qexp(q: Array):
+#     ''' Return exponential of quaternion
+#     Parameters
+#     ----------
+#     q : 4 element sequence
+#        w, i, j, k of quaternion
+#     Returns
+#     -------
+#     q_exp : array shape (4,)
+#         The quaternion exponential
+#     Notes
+#     -----
+#     See:
+#     * https://en.wikipedia.org/wiki/Quaternion#Exponential,_logarithm,_and_power
+#     * https://math.stackexchange.com/questions/1030737/exponential-function-of-quaternion-derivation
+#     '''
+#     q = jnp.array(q)  # to ensure there is a dtype
+#     w, v = q[0], q[1:]
+#     norm = jnp.sqrt(np.dot(v, v))
+#     result = jnp.zeros((4,), q.dtype)
 
-    if norm == 0.:
-        return qeye(q.dtype)
+#     if norm == 0.:
+#         return qeye(q.dtype)
 
-    result[0] =  jnp.cos(norm)
-    result[1:] = jnp.sin(norm)/norm * v
-    return result * jnp.exp(w)
+#     result[0] =  jnp.cos(norm)
+#     result[1:] = jnp.sin(norm)/norm * v
+#     return result * jnp.exp(w)
 
-@jax.jit
-def qlog(q: Array):
-    ''' Return natural logarithm of quaternion
-    Parameters
-    ----------
-    q : 4 element sequence
-       w, i, j, k of quaternion
-    Returns
-    -------
-    q_log : array shape (4,)
-        Natual logarithm of quaternion
-    Notes
-    -----
-    See: https://en.wikipedia.org/wiki/Quaternion#Exponential,_logarithm,_and_power
-    '''
-    q = jnp.array(q)  # To ensure there is a dtype
-    qnorm_ = qnorm(q)
-    if qnorm_ == 0.:
-        return qeye(q.dtype)
+# @jax.jit
+# # TODO
+# def qlog(q: Array):
+#     ''' Return natural logarithm of quaternion
+#     Parameters
+#     ----------
+#     q : 4 element sequence
+#        w, i, j, k of quaternion
+#     Returns
+#     -------
+#     q_log : array shape (4,)
+#         Natual logarithm of quaternion
+#     Notes
+#     -----
+#     See: https://en.wikipedia.org/wiki/Quaternion#Exponential,_logarithm,_and_power
+#     '''
+#     q = jnp.array(q)  # To ensure there is a dtype
+#     qnorm_ = qnorm(q)
+#     if qnorm_ == 0.:
+#         return qeye(q.dtype)
 
-    w, v = q[0], q[1:]
-    vnorm = jnp.sqrt(jnp.dot(v, v))
-    result = jnp.zeros((4,), q.dtype)
+#     w, v = q[0], q[1:]
+#     vnorm = jnp.sqrt(jnp.dot(v, v))
+#     result = jnp.zeros((4,), q.dtype)
 
-    if vnorm == 0.:
-        return qeye(q.dtype)
+#     if vnorm == 0.:
+#         return qeye(q.dtype)
 
-    result[0] =  jnp.log(qnorm_)
-    result[1:] = v/vnorm * jnp.arccos(w/qnorm_)
-    return result
+#     result[0] =  jnp.log(qnorm_)
+#     result[1:] = v/vnorm * jnp.arccos(w/qnorm_)
+#     return result
 
-@jax.jit
-def qpow(q: Array, n: float):
-    r''' Return the `n` th power of quaternion `q`
-    Parameters
-    ----------
-    q : 4 element sequence
-       w, i, j, k of quaternion
-    n : int or float
-       A real number
-    Returns
-    -------
-    q_pow : array shape (4,)
-        The quaternion `q` to `n` th power.
-    Notes
-    -----
-    See:
-    https://en.wikipedia.org/wiki/Quaternion#Exponential,_logarithm,_and_power
-    '''
-    q = jnp.array(q)  # To ensure there is a dtype.
-    qnorm_ = qnorm(q)
+# @jax.jit
+# # TODO
+# def qpow(q: Array, n: float):
+#     r''' Return the `n` th power of quaternion `q`
+#     Parameters
+#     ----------
+#     q : 4 element sequence
+#        w, i, j, k of quaternion
+#     n : int or float
+#        A real number
+#     Returns
+#     -------
+#     q_pow : array shape (4,)
+#         The quaternion `q` to `n` th power.
+#     Notes
+#     -----
+#     See:
+#     https://en.wikipedia.org/wiki/Quaternion#Exponential,_logarithm,_and_power
+#     '''
+#     q = jnp.array(q)  # To ensure there is a dtype.
+#     qnorm_ = qnorm(q)
 
-    if qnorm_ == 0.:
-        return qeye(q.dtype)
+#     if qnorm_ == 0.:
+#         return qeye(q.dtype)
 
-    w, v = q[0], q[1:]
+#     w, v = q[0], q[1:]
 
-    nnorm = jnp.sqrt(jnp.dot(v, v))
-    result = jnp.zeros((4,), q.dtype)
+#     nnorm = jnp.sqrt(jnp.dot(v, v))
+#     result = jnp.zeros((4,), q.dtype)
 
-    if nnorm == 0.:
-        return qeye(q.dtype)
+#     if nnorm == 0.:
+#         return qeye(q.dtype)
 
-    theta = jnp.arccos(w/qnorm_)
-    n_hat = v/nnorm
+#     theta = jnp.arccos(w/qnorm_)
+#     n_hat = v/nnorm
 
-    result[0] = jnp.cos(n*theta)
-    result[1:] = n_hat * jnp.sin(n*theta)
-    return result *  jnp.power(qnorm_, n)
+#     result[0] = jnp.cos(n*theta)
+#     result[1:] = n_hat * jnp.sin(n*theta)
+#     return result *  jnp.power(qnorm_, n)
 
-@partial(jax.jit, static_argnames=["is_normalizes"])
+@partial(jax.jit, static_argnames=["is_normalized"])
 def rotate_vector(v: Array, q: Array, is_normalized=True):
     ''' Apply transformation in quaternion `q` to vector `v`
     Parameters
@@ -424,9 +427,7 @@ def nearly_equivalent(q1: Array, q2: Array, rtol=1e-5, atol=1e-8):
     '''
     q1 = jnp.array(q1)
     q2 = jnp.array(q2)
-    if jnp.allclose(q1, q2, rtol, atol):
-        return True
-    return jnp.allclose(q1 * -1, q2, rtol, atol)
+    return jnp.where(jnp.allclose(q1, q2, rtol, atol), True, jnp.allclose(q1 * -1, q2, rtol, atol))
 
 @partial(jax.jit, static_argnames=["is_normalized"])
 def axangle2quat(vector: Array, theta: float, is_normalized=False):
@@ -461,8 +462,8 @@ def axangle2quat(vector: Array, theta: float, is_normalized=False):
         vector = vector / jnp.sqrt(jnp.dot(vector, vector))
     t2 = theta / 2.0
     st2 = jnp.sin(t2)
-    return jnp.concatenate(([jnp.cos(t2)],
-                           vector * st2))
+    return jnp.concatenate([jnp.array([jnp.cos(t2)]),
+                           vector * st2])
 
 @partial(jax.jit, static_argnames=["identity_thresh"])
 def quat2axangle(quat: Array, identity_thresh=None):
@@ -503,26 +504,28 @@ def quat2axangle(quat: Array, identity_thresh=None):
     In this case we return a 0 angle and an arbitrary vector, here [1, 0, 0].
     The algorithm allows for quaternions that have not been normalized.
     '''
-    quat = jnp.asarray(quat)
     Nq = jnp.sum(quat ** 2)
-    if not jnp.isfinite(Nq):
-        return jnp.array([1.0, 0, 0]), float('nan')
-    if identity_thresh is None:
-        # TODO this wont run in jax!
-        try:
-            identity_thresh = jnp.finfo(Nq.type).eps * 3
-        except (AttributeError, ValueError): # Not a numpy type or not float
-            identity_thresh = _FLOAT_EPS * 3
-    if Nq < _FLOAT_EPS ** 2:  # Results unreliable after normalization
-        return jnp.array([1.0, 0, 0]), 0.0
-    if Nq != 1:  # Normalize if not normalized
-        s = jnp.sqrt(Nq)
-        quat = quat / s
-    xyz = quat[1:]
-    len2 = jnp.sum(xyz ** 2)
-    if len2 < identity_thresh ** 2:
-        # if vec is nearly 0,0,0, this is an identity rotation
-        return jnp.array([1.0, 0, 0]), 0.0
-    # Make sure w is not slightly above 1 or below -1
-    theta = 2 * jnp.acos(max(min(quat[0], 1), -1))
-    return  xyz / jnp.sqrt(len2), theta
+    # if not np.isfinite(Nq):
+    #     return np.array([1.0, 0, 0]), float('nan')
+
+    # if identity_thresh is None:
+    #     try:
+    #         identity_thresh = np.finfo(Nq.type).eps * 3
+    #     except (AttributeError, ValueError): # Not a numpy type or not float
+    identity_thresh = _FLOAT_EPS * 3
+
+    bad_res = jnp.array([1.0, 0, 0]), 0.0
+    ret = bad_res
+    def normalize(quat):
+        quat = jnp.where(Nq != 1, quat / jnp.sqrt(Nq), quat) # Normalize if not normalized
+        xyz = quat[1:]
+        len2 = jnp.sum(xyz ** 2)
+        def clip(quat):
+            # Make sure w is not slightly above 1 or below -1
+            theta = 2 * jnp.arccos(jnp.clip(quat[0], -1, 1))
+            return xyz / jnp.sqrt(len2), theta
+        # if vec is nearly 0,0,0, return an identity rotation
+        return jax.lax.cond(len2 < identity_thresh ** 2, lambda q: bad_res, clip, quat)
+        # return quat
+    # Return identity if results unreliable after normalization
+    return jax.lax.cond(Nq < _FLOAT_EPS ** 2, lambda q: bad_res, normalize, quat)
