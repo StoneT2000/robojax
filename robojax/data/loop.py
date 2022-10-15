@@ -118,7 +118,8 @@ class JaxLoop(BaseEnvLoop):
 
 
     Args :
-        env_reset : An environment reset function thta takes a PRNGKey and returns the initial environment observation and state
+        env_reset : An environment reset function thta takes a PRNGKey and 
+            returns the initial environment observation and state
 
         env_step : An environment step function that takes a PRNGKey, state, and action and
             returns the next environment observation, state, reward, done, and info
@@ -133,7 +134,8 @@ class JaxLoop(BaseEnvLoop):
 
             The output of this function is used to create the rollout/replay buffer.
 
-            If this function is set to None, the default generated buffer will contain env_obs, action, reward, ep_ret, ep_len, done
+            If this function is set to None, the default generated buffer will contain 
+            env_obs, action, reward, ep_ret, ep_len, done
     """
 
     def __init__(
@@ -264,10 +266,12 @@ class JaxLoop(BaseEnvLoop):
         init_env_obs_states: Tuple[EnvObs, EnvState] = None,
     ) -> Tuple[Any, RolloutAux]:
         """
-        Rollout across N parallelized environments with an actor function apply_fn and return the rollout buffer as well as final environment observations and states
+        Rollout across N parallelized environments with an actor function apply_fn and 
+        return the rollout buffer as well as final environment observations and states
 
         Args :
-            rng_keys : initial PRNGKeys to use for any randomness. len(rng_keys) is the number of parallel environments that will be run
+            rng_keys : initial PRNGKeys to use for any randomness. len(rng_keys) is 
+            the number of parallel environments that will be run
 
             params : any function parameters passed to apply_fn
 
@@ -278,7 +282,8 @@ class JaxLoop(BaseEnvLoop):
 
             max_episode_length : max number of steps before we truncate the current episode. If -1, we will not truncate any environments
 
-            init_env_obs_states : Initial environment observation and state to step forward from. If None, this calls the given self.env_reset function
+            init_env_obs_states : Initial environment observation and state to step forward from. 
+                If None, this calls the given self.env_reset function
                 to obtain the initial environment observation and state
 
 
