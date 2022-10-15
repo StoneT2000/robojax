@@ -12,7 +12,8 @@ from flax import struct
 
 from robojax.agents.base import BasePolicy
 from robojax.agents.ppo.config import PPOConfig, TimeStep
-from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_loss_fn
+from robojax.agents.ppo.loss import (ActorAux, CriticAux, actor_loss_fn,
+                                     critic_loss_fn)
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
 from robojax.logger.logger import Logger

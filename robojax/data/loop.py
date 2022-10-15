@@ -152,9 +152,7 @@ class JaxLoop(BaseEnvLoop):
         self.reset_env = reset_env
         super().__init__()
 
-    @partial(
-        jax.jit, static_argnames=["self", "steps", "apply_fn", "max_episode_length"]
-    )
+    @partial(jax.jit, static_argnames=["self", "steps", "apply_fn", "max_episode_length"])
     def _rollout_single_env(
         self,
         rng_key: PRNGKey,
@@ -193,12 +191,8 @@ class JaxLoop(BaseEnvLoop):
             rng_key, env_obs, env_state, ep_ret, ep_len = data
             rng_key, rng_reset, rng_step, rng_fn = jax.random.split(rng_key, 4)
             action, aux = apply_fn(rng_fn, params, env_obs)
-            next_env_obs, next_env_state, reward, done, info = self.env_step(
-                rng_step, env_state, action
-            )
-            done = jax.lax.cond(
-                (ep_len == max_episode_length - 1)[0], lambda x: True, lambda x: x, done
-            )
+            next_env_obs, next_env_state, reward, done, info = self.env_step(rng_step, env_state, action)
+            done = jax.lax.cond((ep_len == max_episode_length - 1)[0], lambda x: True, lambda x: x, done)
 
             # auto reset
             def episode_end_update(ep_ret, ep_len, env_state, env_obs):
@@ -249,9 +243,7 @@ class JaxLoop(BaseEnvLoop):
             ), rb
 
         step_init = (rng_key, env_obs, env_state, jnp.zeros((1,)), jnp.zeros((1,)))
-        (_, final_env_obs, final_env_state, _, _), rollout_data = jax.lax.scan(
-            step_fn, step_init, (), steps
-        )
+        (_, final_env_obs, final_env_state, _, _), rollout_data = jax.lax.scan(step_fn, step_init, (), steps)
 
         aux = RolloutAux(final_env_obs=final_env_obs, final_env_state=final_env_state)
         # add batch dimension so it plays nice with vmap in the rollout function

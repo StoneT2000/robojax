@@ -191,6 +191,7 @@ class GenericBuffer(BaseBuffer):
         return self._get_batch_by_ids(
             buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
         )
+
     # @partial(jax.jit, static_argnames=["self", "batch_size"])
     # def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
     #     """
@@ -205,7 +206,7 @@ class GenericBuffer(BaseBuffer):
     #     env_ids = jax.random.randint(
     #         env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.n_envs
     #     )
-            # bugged, buffers is cached and so no new data is actually retrieved
+    # bugged, buffers is cached and so no new data is actually retrieved
     #     return self._get_batch_by_ids(
     #         buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
     #     )

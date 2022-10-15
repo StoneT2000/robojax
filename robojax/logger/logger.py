@@ -5,12 +5,12 @@ import os.path as osp
 import shutil
 import sys
 import time
+import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Callable, Dict, Union
-import warnings
-import flax
 
+import flax
 import numpy as np
 import pandas as pd
 from omegaconf import OmegaConf
@@ -60,12 +60,12 @@ class Logger:
         project_name: str = None,
         wandb_cfg=None,
         cfg: Union[Dict, OmegaConf] = {},
-        best_stats_cfg = {},
-        save_fn: Callable = None
+        best_stats_cfg={},
+        save_fn: Callable = None,
     ) -> None:
         """
-        A logger for logging data points as well as summary statistics. 
-        
+        A logger for logging data points as well as summary statistics.
+
         Stores logs in <workspace>/<exp_name>/logs
 
         Checkpoints (model weights, training states) usually stored in <workspace>/<exp_name>/models
@@ -75,14 +75,14 @@ class Logger:
 
         clear_out : bool
             If true, clears out all previous logging information for this experiment. Otherwise appends data only
-        
+
         best_stats_cfg : dict
             maps stat name to 1 -> higher is better, -1 -> lower is better
             If set, will record the best result for the stat
 
         save_fn : Callable
             function that saves some relevant models/state. Called whenever a stat is improved based on best_stats_cfg
-        
+
         """
         self.wandb = wandb
         if wandb_cfg is None:
@@ -227,7 +227,10 @@ class Logger:
 
         """
         if step < self.last_log_step:
-            warnings.warn(f"logged at step {step} but previously logged at step {self.last_log_step}", RuntimeWarning)
+            warnings.warn(
+                f"logged at step {step} but previously logged at step {self.last_log_step}",
+                RuntimeWarning,
+            )
         self.last_log_step = step
         for tag in self.data.keys():
             data_dict = self.data[tag]
@@ -253,15 +256,19 @@ class Logger:
                         sort_order = self.best_stats_cfg[name]
                         update_val = False
                         if name not in self.best_stats:
-                            update_val = True     
+                            update_val = True
                         else:
                             prev_val = self.best_stats[name]["val"]
-                            if (sort_order == 1 and prev_val < scalar) or (sort_order == -1 and prev_val > scalar):
+                            if (sort_order == 1 and prev_val < scalar) or (
+                                sort_order == -1 and prev_val > scalar
+                            ):
                                 update_val = True
                         if update_val:
                             self.best_stats[name] = dict(val=scalar, step=step)
                             fmt_name = name.replace("/", "_")
-                            self.save_fn(osp.join(self.model_path, f"best_{fmt_name}_ckpt.jx"))
+                            self.save_fn(
+                                osp.join(self.model_path, f"best_{fmt_name}_ckpt.jx")
+                            )
                             print(f"{name} new best at {step}: {scalar}")
                     if self.tensorboard and not local_only:
                         self.tb_writer.add_scalar(name, scalar, self.start_step + step)
@@ -280,6 +287,7 @@ class Logger:
 
     def _state_dict(self):
         return dict(best_stats=self.best_stats, last_log_step=self.last_log_step)
+
     def load(self, data):
         self.best_stats = data["best_stats"]
         self.last_log_step = data["last_log_step"]

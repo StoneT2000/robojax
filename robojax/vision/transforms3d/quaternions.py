@@ -1,4 +1,4 @@
-'''Functions to operate on, or return, quaternions.
+"""Functions to operate on, or return, quaternions.
 Quaternions here consist of 4 values ``w, x, y, z``, where ``w`` is the
 real (scalar) part, and ``x, y, z`` are the complex (vector) part.
 Note - rotation matrices here apply to column vectors, that is,
@@ -13,13 +13,17 @@ Terms used in function names:
 * *aff* : affine array shape (4, 4) (3D homogenous coordinates)
 * *quat* : quaternion shape (4,)
 * *axangle* : rotations encoded by axis vector and angle scalar
-'''
+"""
+
+# pylint: disable=invalid-name
+
 
 import math
-import numpy as np
-import jax
 from functools import partial
+
+import jax
 import jax.numpy as jnp
+import numpy as np
 from chex import Array
 
 _MAX_FLOAT = np.maximum_sctype(np.float64)
@@ -87,9 +91,10 @@ _FLOAT_EPS = jnp.finfo(jnp.float64).eps
 #         w = np.sqrt(w2)
 #     return np.r_[w, xyz]
 
+
 @jax.jit
 def quat2mat(q: Array):
-    ''' Calculate rotation matrix corresponding to quaternion
+    """Calculate rotation matrix corresponding to quaternion
     Parameters
     ----------
     q : 4 element array-like
@@ -114,28 +119,39 @@ def quat2mat(q: Array):
     >>> M = quat2mat([0, 1, 0, 0]) # 180 degree rotn around axis 0
     >>> np.allclose(M, np.diag([1, -1, -1]))
     True
-    '''
+    """
     w, x, y, z = q
-    Nq = w*w + x*x + y*y + z*z
+    Nq = w * w + x * x + y * y + z * z
 
     def comp():
-        s = 2.0/Nq
-        X = x*s
-        Y = y*s
-        Z = z*s
-        wX = w*X; wY = w*Y; wZ = w*Z
-        xX = x*X; xY = x*Y; xZ = x*Z
-        yY = y*Y; yZ = y*Z; zZ = z*Z
+        s = 2.0 / Nq
+        X = x * s
+        Y = y * s
+        Z = z * s
+        wX = w * X
+        wY = w * Y
+        wZ = w * Z
+        xX = x * X
+        xY = x * Y
+        xZ = x * Z
+        yY = y * Y
+        yZ = y * Z
+        zZ = z * Z
         mat = jnp.array(
-            [[ 1.0-(yY+zZ), xY-wZ, xZ+wY ],
-                [ xY+wZ, 1.0-(xX+zZ), yZ-wX ],
-                [ xZ-wY, yZ+wX, 1.0-(xX+yY) ]])
+            [
+                [1.0 - (yY + zZ), xY - wZ, xZ + wY],
+                [xY + wZ, 1.0 - (xX + zZ), yZ - wX],
+                [xZ - wY, yZ + wX, 1.0 - (xX + yY)],
+            ]
+        )
         return mat
+
     return jnp.where(Nq < _FLOAT_EPS, jnp.eye(3), comp())
+
 
 @jax.jit
 def mat2quat(M: Array):
-    ''' Calculate quaternion corresponding to given rotation matrix
+    """Calculate quaternion corresponding to given rotation matrix
     Method claimed to be robust to numerical errors in `M`.
     Constructs quaternion by calculating maximum eigenvector for matrix
     ``K`` (constructed from input `M`).  Although this is not tested, a maximum
@@ -175,29 +191,35 @@ def mat2quat(M: Array):
     quaternion from a rotation matrix", AIAA Journal of Guidance,
     Control and Dynamics 23(6):1085-1087 (Engineering Note), ISSN
     0731-5090
-    '''
+    """
     # Qyx refers to the contribution of the y input vector component to
     # the x output vector component.  Qyx is therefore the same as
     # M[0,1].  The notation is from the Wikipedia article.
     Qxx, Qyx, Qzx, Qxy, Qyy, Qzy, Qxz, Qyz, Qzz = M.flatten()
     # Fill only lower half of symmetric matrix
-    K = jnp.array([
-        [Qxx - Qyy - Qzz, 0,               0,               0              ],
-        [Qyx + Qxy,       Qyy - Qxx - Qzz, 0,               0              ],
-        [Qzx + Qxz,       Qzy + Qyz,       Qzz - Qxx - Qyy, 0              ],
-        [Qyz - Qzy,       Qzx - Qxz,       Qxy - Qyx,       Qxx + Qyy + Qzz]]
-        ) / 3.0
+    K = (
+        jnp.array(
+            [
+                [Qxx - Qyy - Qzz, 0, 0, 0],
+                [Qyx + Qxy, Qyy - Qxx - Qzz, 0, 0],
+                [Qzx + Qxz, Qzy + Qyz, Qzz - Qxx - Qyy, 0],
+                [Qyz - Qzy, Qzx - Qxz, Qxy - Qyx, Qxx + Qyy + Qzz],
+            ]
+        )
+        / 3.0
+    )
     # Use Hermitian eigenvectors, values for speed
     vals, vecs = jnp.linalg.eigh(K)
     # Select largest eigenvector, reorder to w,x,y,z quaternion
     q = vecs[[3, 0, 1, 2], jnp.argmax(vals)]
     # Prefer quaternion with positive w
     # (q * -1 corresponds to same rotation as q)
-    return jnp.where(q[0] < 0, q * - 1, q)
+    return jnp.where(q[0] < 0, q * -1, q)
+
 
 @jax.jit
 def qmult(q1: Array, q2: Array):
-    ''' Multiply two quaternions
+    """Multiply two quaternions
     Parameters
     ----------
     q1 : 4 element sequence
@@ -208,18 +230,18 @@ def qmult(q1: Array, q2: Array):
     Notes
     -----
     See : http://en.wikipedia.org/wiki/Quaternions#Hamilton_product
-    '''
+    """
     w1, x1, y1, z1 = q1
     w2, x2, y2, z2 = q2
-    w = w1*w2 - x1*x2 - y1*y2 - z1*z2
-    x = w1*x2 + x1*w2 + y1*z2 - z1*y2
-    y = w1*y2 + y1*w2 + z1*x2 - x1*z2
-    z = w1*z2 + z1*w2 + x1*y2 - y1*x2
+    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    y = w1 * y2 + y1 * w2 + z1 * x2 - x1 * z2
+    z = w1 * z2 + z1 * w2 + x1 * y2 - y1 * x2
     return jnp.array([w, x, y, z])
 
 
 def qconjugate(q: Array):
-    ''' Conjugate of quaternion
+    """Conjugate of quaternion
     Parameters
     ----------
     q : 4 element sequence
@@ -228,12 +250,13 @@ def qconjugate(q: Array):
     -------
     conjq : array shape (4,)
        w, i, j, k of conjugate of `q`
-    '''
+    """
     return jnp.array(q) * jnp.array([1.0, -1, -1, -1])
+
 
 @jax.jit
 def qnorm(q: Array):
-    ''' Return norm of quaternion
+    """Return norm of quaternion
     Parameters
     ----------
     q : 4 element sequence
@@ -245,17 +268,19 @@ def qnorm(q: Array):
     Notes
     -----
     http://mathworld.wolfram.com/QuaternionNorm.html
-    '''
+    """
     return jnp.sqrt(jnp.dot(q, q))
+
 
 @jax.jit
 def qisunit(q: Array):
-    ''' Return True is this is very nearly a unit quaternion '''
+    """Return True is this is very nearly a unit quaternion"""
     return jnp.allclose(qnorm(q), 1)
+
 
 @jax.jit
 def qinverse(q: Array):
-    ''' Return multiplicative inverse of quaternion `q`
+    """Return multiplicative inverse of quaternion `q`
     Parameters
     ----------
     q : 4 element sequence
@@ -264,13 +289,15 @@ def qinverse(q: Array):
     -------
     invq : array shape (4,)
        w, i, j, k of quaternion inverse
-    '''
+    """
     return qconjugate(q) / qnorm(q)
+
 
 @partial(jax.jit, static_argnames=["dtype"])
 def qeye(dtype=jnp.float64):
-    ''' Return identity quaternion '''
-    return jnp.array([1.0,0,0,0], dtype = dtype)
+    """Return identity quaternion"""
+    return jnp.array([1.0, 0, 0, 0], dtype=dtype)
+
 
 # @jax.jit
 # # TODO
@@ -374,9 +401,10 @@ def qeye(dtype=jnp.float64):
 #     result[1:] = n_hat * jnp.sin(n*theta)
 #     return result *  jnp.power(qnorm_, n)
 
+
 @partial(jax.jit, static_argnames=["is_normalized"])
 def rotate_vector(v: Array, q: Array, is_normalized=True):
-    ''' Apply transformation in quaternion `q` to vector `v`
+    """Apply transformation in quaternion `q` to vector `v`
     Parameters
     ----------
     v : 3 element sequence
@@ -393,16 +421,17 @@ def rotate_vector(v: Array, q: Array, is_normalized=True):
     Notes
     -----
     See: http://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation#Describing_rotations_with_quaternions
-    '''
+    """
     if not is_normalized:
         q = q / qnorm(q)
     varr = jnp.zeros((4,))
     varr[1:] = v
     return qmult(q, qmult(varr, qconjugate(q)))[1:]
 
+
 @partial(jax.jit)
 def nearly_equivalent(q1: Array, q2: Array, rtol=1e-5, atol=1e-8):
-    ''' Returns True if `q1` and `q2` give near equivalent transforms
+    """Returns True if `q1` and `q2` give near equivalent transforms
     `q1` may be nearly numerically equal to `q2`, or nearly equal to `q2` * -1
     (because a quaternion multiplied by -1 gives the same transform).
     Parameters
@@ -424,14 +453,17 @@ def nearly_equivalent(q1: Array, q2: Array, rtol=1e-5, atol=1e-8):
     True
     >>> nearly_equivalent(q1, [-1, 0, 0, 0])
     True
-    '''
+    """
     q1 = jnp.array(q1)
     q2 = jnp.array(q2)
-    return jnp.where(jnp.allclose(q1, q2, rtol, atol), True, jnp.allclose(q1 * -1, q2, rtol, atol))
+    return jnp.where(
+        jnp.allclose(q1, q2, rtol, atol), True, jnp.allclose(q1 * -1, q2, rtol, atol)
+    )
+
 
 @partial(jax.jit, static_argnames=["is_normalized"])
 def axangle2quat(vector: Array, theta: float, is_normalized=False):
-    ''' Quaternion for rotation of angle `theta` around `vector`
+    """Quaternion for rotation of angle `theta` around `vector`
     Parameters
     ----------
     vector : 3 element sequence
@@ -453,7 +485,7 @@ def axangle2quat(vector: Array, theta: float, is_normalized=False):
     Notes
     -----
     Formula from http://mathworld.wolfram.com/EulerParameters.html
-    '''
+    """
     vector = jnp.array(vector)
     if not is_normalized:
         # Cannot divide in-place because input vector may be integer type,
@@ -462,12 +494,12 @@ def axangle2quat(vector: Array, theta: float, is_normalized=False):
         vector = vector / jnp.sqrt(jnp.dot(vector, vector))
     t2 = theta / 2.0
     st2 = jnp.sin(t2)
-    return jnp.concatenate([jnp.array([jnp.cos(t2)]),
-                           vector * st2])
+    return jnp.concatenate([jnp.array([jnp.cos(t2)]), vector * st2])
+
 
 @partial(jax.jit, static_argnames=["identity_thresh"])
 def quat2axangle(quat: Array, identity_thresh=None):
-    ''' Convert quaternion to rotation of angle around axis
+    """Convert quaternion to rotation of angle around axis
     Parameters
     ----------
     quat : 4 element sequence
@@ -503,8 +535,8 @@ def quat2axangle(quat: Array, identity_thresh=None):
     A quaternion for which x, y, z are all equal to 0, is an identity rotation.
     In this case we return a 0 angle and an arbitrary vector, here [1, 0, 0].
     The algorithm allows for quaternions that have not been normalized.
-    '''
-    Nq = jnp.sum(quat ** 2)
+    """
+    Nq = jnp.sum(quat**2)
     # if not np.isfinite(Nq):
     #     return np.array([1.0, 0, 0]), float('nan')
 
@@ -516,16 +548,22 @@ def quat2axangle(quat: Array, identity_thresh=None):
 
     bad_res = jnp.array([1.0, 0, 0]), 0.0
     ret = bad_res
+
     def normalize(quat):
-        quat = jnp.where(Nq != 1, quat / jnp.sqrt(Nq), quat) # Normalize if not normalized
+        quat = jnp.where(
+            Nq != 1, quat / jnp.sqrt(Nq), quat
+        )  # Normalize if not normalized
         xyz = quat[1:]
-        len2 = jnp.sum(xyz ** 2)
+        len2 = jnp.sum(xyz**2)
+
         def clip(quat):
             # Make sure w is not slightly above 1 or below -1
             theta = 2 * jnp.arccos(jnp.clip(quat[0], -1, 1))
             return xyz / jnp.sqrt(len2), theta
+
         # if vec is nearly 0,0,0, return an identity rotation
-        return jax.lax.cond(len2 < identity_thresh ** 2, lambda q: bad_res, clip, quat)
+        return jax.lax.cond(len2 < identity_thresh**2, lambda q: bad_res, clip, quat)
         # return quat
+
     # Return identity if results unreliable after normalization
-    return jax.lax.cond(Nq < _FLOAT_EPS ** 2, lambda q: bad_res, normalize, quat)
+    return jax.lax.cond(Nq < _FLOAT_EPS**2, lambda q: bad_res, normalize, quat)

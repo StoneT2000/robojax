@@ -1,22 +1,23 @@
-from functools import partial
 import os
+from functools import partial
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Tuple
 
 import distrax
+import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import optax
 from chex import Array, PRNGKey
-import flax
-from robojax.models import MLP, Model
 from tensorflow_probability.substrates import jax as tfp
 
+from robojax.models import MLP, Model
 from robojax.models.model import Params
 
 tfd = tfp.distributions
 tfb = tfp.bijectors
+
 
 class Critic(nn.Module):
     # TODO make a decorator that injects these network parameters based on some config
@@ -29,6 +30,7 @@ class Critic(nn.Module):
         critic = MLP((*self.features, 1), self.activation)(x)
         return jnp.squeeze(critic, -1)
 
+
 class DoubleCritic(nn.Module):
     features: Sequence[int]
     activation: Callable[[Array], Array] = nn.relu
@@ -36,18 +38,21 @@ class DoubleCritic(nn.Module):
 
     @nn.compact
     def __call__(self, obs: Array, acts: Array):
-        VmapCritic = nn.vmap(Critic,
-                             variable_axes={'params': 0},
-                             split_rngs={'params': True},
-                             in_axes=None,
-                             out_axes=0,
-                             axis_size=self.num_critics)
-        qs = VmapCritic(self.features,
-                        self.activation)(obs, acts)
+        VmapCritic = nn.vmap(
+            Critic,
+            variable_axes={"params": 0},
+            split_rngs={"params": True},
+            in_axes=None,
+            out_axes=0,
+            axis_size=self.num_critics,
+        )
+        qs = VmapCritic(self.features, self.activation)(obs, acts)
         return qs
+
 
 def default_init(scale: Optional[float] = jnp.sqrt(2)):
     return nn.initializers.orthogonal(scale)
+
 
 class DiagGaussianActor(nn.Module):
 
@@ -67,8 +72,9 @@ class DiagGaussianActor(nn.Module):
             # Add final dense layer initialization scale and orthogonal init
             self.log_std = nn.Dense(self.act_dims, kernel_init=default_init(1))
         else:
-            self.log_std = self.param('log_std', nn.initializers.zeros,
-                                  (self.act_dims, ))
+            self.log_std = self.param(
+                "log_std", nn.initializers.zeros, (self.act_dims,)
+            )
         self.mlp = MLP(self.features, self.activation, self.output_activation)
         self.action_head = nn.Dense(self.act_dims, kernel_init=default_init(1))
 
@@ -77,7 +83,8 @@ class DiagGaussianActor(nn.Module):
         a = self.action_head(x)
         if not self.tanh_squash_distribution:
             a = nn.tanh(a)
-        if deterministic: return a
+        if deterministic:
+            return a
         if self.state_dependent_std:
             log_std = self.log_std(x)
         else:
@@ -88,8 +95,7 @@ class DiagGaussianActor(nn.Module):
         # dist = distrax.MultivariateNormalDiag(a, jnp.exp(log_std))
         if self.tanh_squash_distribution:
             # dist = distrax.Transformed(distribution=dist, bijector=distrax.Block(distrax.Tanh(), ndims=1))
-            dist = tfd.TransformedDistribution(distribution=dist,
-                                               bijector=tfb.Tanh())
+            dist = tfd.TransformedDistribution(distribution=dist, bijector=tfb.Tanh())
         return dist
 
 
@@ -148,7 +154,7 @@ class ActorCritic:
     @partial(jax.jit, static_argnames=["self"])
     def act(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs):
         return actor(obs, deterministic=True), {}
-    
+
     @partial(jax.jit, static_argnames=["self"])
     def sample(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs):
         return actor(obs).sample(seed=rng_key), {}
@@ -158,7 +164,7 @@ class ActorCritic:
             actor=self.actor._state_dict(),
             critic=self.critic._state_dict(),
             target_critic=self.target_critic._state_dict(),
-            temp=self.temp._state_dict()
+            temp=self.temp._state_dict(),
         )
 
     def save(self, save_path: str):
@@ -169,7 +175,9 @@ class ActorCritic:
     def load(self, params_dict: Params):
         self.actor = self.actor._load_state_dict(params_dict["actor"])
         self.critic = self.critic._load_state_dict(params_dict["critic"])
-        self.target_critic = self.target_critic._load_state_dict(params_dict["target_critic"])
+        self.target_critic = self.target_critic._load_state_dict(
+            params_dict["target_critic"]
+        )
         self.temp = self.temp._load_state_dict(params_dict["temp"])
         return self
 

@@ -1,21 +1,19 @@
 import time
 from typing import Any, Callable, Tuple
 
-from chex import PRNGKey
 import jax
+import jax.numpy as jnp
+import numpy as np
+from chex import PRNGKey
+
 from robojax.data.loop import EnvAction, EnvObs, EnvState, GymLoop, JaxLoop
 from robojax.logger.logger import Logger
 from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
-import jax.numpy as jnp
-import numpy as np
+
+
 class BasePolicy:
-    def __init__(
-        self,
-        jax_env: bool,
-        env=None,
-        logger_cfg: Any =  dict()
-    ) -> None:
+    def __init__(self, jax_env: bool, env=None, logger_cfg: Any = dict()) -> None:
         """
         Base class for a policy
 
@@ -24,13 +22,14 @@ class BasePolicy:
         assert env is not None
         self.jax_env = jax_env
         if jax_env:
-            
+
             self.env_step: Callable[
                 [PRNGKey, EnvState, EnvAction],
                 Tuple[EnvObs, EnvState, float, bool, Any],
             ] = env.step
             self.env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState]] = env.reset
             import gymnax.environments.environment
+
             self.env: gymnax.environments.environment.Environment = env
 
             self.loop = JaxLoop(env_reset=self.env.reset, env_step=self.env.step)
@@ -38,6 +37,7 @@ class BasePolicy:
             self.action_space = self.env.action_space()
         else:
             import gym
+
             self.env: gym.Env = env
 
             self.loop = GymLoop(self.env)
@@ -52,20 +52,27 @@ class BasePolicy:
                 exp_name = f"{env.name}/{exp_name}"
             logger_cfg["exp_name"] = exp_name
 
-        self.logger = Logger(
-            **logger_cfg
-        )
+        self.logger = Logger(**logger_cfg)
 
-    def evaluate(self, rng_key: PRNGKey, num_envs: int, steps_per_env: int, eval_loop, params: Params, apply_fn: Callable[[PRNGKey, EnvObs], EnvAction]):
-        rng_key, *eval_rng_keys = jax.random.split(rng_key, num_envs + 1)      
-        eval_buffer, _ = eval_loop.rollout(rng_keys=jnp.stack(eval_rng_keys),
+    def evaluate(
+        self,
+        rng_key: PRNGKey,
+        num_envs: int,
+        steps_per_env: int,
+        eval_loop,
+        params: Params,
+        apply_fn: Callable[[PRNGKey, EnvObs], EnvAction],
+    ):
+        rng_key, *eval_rng_keys = jax.random.split(rng_key, num_envs + 1)
+        eval_buffer, _ = eval_loop.rollout(
+            rng_keys=jnp.stack(eval_rng_keys),
             params=params,
             apply_fn=apply_fn,
             steps_per_env=steps_per_env,
         )
-        eval_ep_lens = np.asarray(eval_buffer['ep_len'])
-        eval_ep_rets = np.asarray(eval_buffer['ep_ret'])
-        eval_episode_ends = np.asarray(eval_buffer['done'])
+        eval_ep_lens = np.asarray(eval_buffer["ep_len"])
+        eval_ep_rets = np.asarray(eval_buffer["ep_ret"])
+        eval_episode_ends = np.asarray(eval_buffer["done"])
         eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
         eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
         self.logger.store(
@@ -76,4 +83,3 @@ class BasePolicy:
         )
         self.logger.log(self.total_env_steps)
         self.logger.reset()
-

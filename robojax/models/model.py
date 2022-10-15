@@ -83,6 +83,7 @@ class Model:
             opt_state=self.opt_state,
             step=self.step,
         )
+
     def _load_state_dict(self, state_dict):
         return self.replace(**state_dict)
 
