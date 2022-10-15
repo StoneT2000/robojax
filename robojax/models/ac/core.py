@@ -47,9 +47,7 @@ class Actor(nn.Module):
         dist = self.explorer(a)
         return dist
 
-    def _log_prob_from_distribution(
-        self, dist: distrax.Distribution, act: Array
-    ) -> Array:
+    def _log_prob_from_distribution(self, dist: distrax.Distribution, act: Array) -> Array:
         return dist.log_prob(act)
 
     def __call__(self, x) -> distrax.Distribution:
@@ -86,9 +84,7 @@ class ActorCritic:
             sample_input=sample_obs,
             tx=actor_optim,
         )
-        self.critic = Model.create(
-            model=critic, key=critic_rng_key, sample_input=sample_obs, tx=critic_optim
-        )
+        self.critic = Model.create(model=critic, key=critic_rng_key, sample_input=sample_obs, tx=critic_optim)
 
     @partial(jax.jit, static_argnames=["self"])
     def step(self, rng_key: PRNGKey, actor: Model, critic: Model, obs):

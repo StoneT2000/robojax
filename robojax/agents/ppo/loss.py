@@ -27,9 +27,7 @@ class CriticAux:
     critic_loss: chex.Array = 0.0
 
 
-def actor_loss_fn(
-    clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep
-):
+def actor_loss_fn(clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep):
     def loss_fn(actor_params: Params):
         obs, act, adv, logp_old = batch.env_obs, batch.action, batch.adv, batch.log_p
         # ac.pi.val()

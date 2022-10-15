@@ -72,9 +72,7 @@ class DiagGaussianActor(nn.Module):
             # Add final dense layer initialization scale and orthogonal init
             self.log_std = nn.Dense(self.act_dims, kernel_init=default_init(1))
         else:
-            self.log_std = self.param(
-                "log_std", nn.initializers.zeros, (self.act_dims,)
-            )
+            self.log_std = self.param("log_std", nn.initializers.zeros, (self.act_dims,))
         self.mlp = MLP(self.features, self.activation, self.output_activation)
         self.action_head = nn.Dense(self.act_dims, kernel_init=default_init(1))
 
@@ -128,28 +126,18 @@ class ActorCritic:
         initial_temperature: float = 1.0,
         temperature_optim: optax.GradientTransformation = optax.adam(3e-4),
     ) -> None:
-        rng_key, actor_rng_key, critic_rng_key, temp_rng_key = jax.random.split(
-            rng_key, 4
-        )
+        rng_key, actor_rng_key, critic_rng_key, temp_rng_key = jax.random.split(rng_key, 4)
 
         if actor is None:
-            actor = DiagGaussianActor(
-                features=[256, 256], act_dims=sample_acts.shape[-1]
-            )
+            actor = DiagGaussianActor(features=[256, 256], act_dims=sample_acts.shape[-1])
         self.actor = Model.create(actor, actor_rng_key, sample_obs, actor_optim)
         if critic is None:
             critic = DoubleCritic(features=[256, 256], num_critics=2)
-        self.critic = Model.create(
-            critic, critic_rng_key, [sample_obs, sample_acts], critic_optim
-        )
+        self.critic = Model.create(critic, critic_rng_key, [sample_obs, sample_acts], critic_optim)
 
-        self.target_critic = Model.create(
-            critic, critic_rng_key, [sample_obs, sample_acts]
-        )
+        self.target_critic = Model.create(critic, critic_rng_key, [sample_obs, sample_acts])
 
-        self.temp = Model.create(
-            Temperature(initial_temperature), temp_rng_key, tx=temperature_optim
-        )
+        self.temp = Model.create(Temperature(initial_temperature), temp_rng_key, tx=temperature_optim)
 
     @partial(jax.jit, static_argnames=["self"])
     def act(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs):
@@ -175,9 +163,7 @@ class ActorCritic:
     def load(self, params_dict: Params):
         self.actor = self.actor._load_state_dict(params_dict["actor"])
         self.critic = self.critic._load_state_dict(params_dict["critic"])
-        self.target_critic = self.target_critic._load_state_dict(
-            params_dict["target_critic"]
-        )
+        self.target_critic = self.target_critic._load_state_dict(params_dict["target_critic"])
         self.temp = self.temp._load_state_dict(params_dict["temp"])
         return self
 

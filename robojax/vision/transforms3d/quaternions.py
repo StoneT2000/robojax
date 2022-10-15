@@ -456,9 +456,7 @@ def nearly_equivalent(q1: Array, q2: Array, rtol=1e-5, atol=1e-8):
     """
     q1 = jnp.array(q1)
     q2 = jnp.array(q2)
-    return jnp.where(
-        jnp.allclose(q1, q2, rtol, atol), True, jnp.allclose(q1 * -1, q2, rtol, atol)
-    )
+    return jnp.where(jnp.allclose(q1, q2, rtol, atol), True, jnp.allclose(q1 * -1, q2, rtol, atol))
 
 
 @partial(jax.jit, static_argnames=["is_normalized"])
@@ -550,9 +548,7 @@ def quat2axangle(quat: Array, identity_thresh=None):
     ret = bad_res
 
     def normalize(quat):
-        quat = jnp.where(
-            Nq != 1, quat / jnp.sqrt(Nq), quat
-        )  # Normalize if not normalized
+        quat = jnp.where(Nq != 1, quat / jnp.sqrt(Nq), quat)  # Normalize if not normalized
         xyz = quat[1:]
         len2 = jnp.sum(xyz**2)
 

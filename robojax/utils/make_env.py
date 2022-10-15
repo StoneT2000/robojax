@@ -14,9 +14,7 @@ class EnvMeta:
     act_space: spaces.Space
 
 
-def make_env(
-    env_id: str, jax_env: bool, num_envs: Optional[int] = 1, seed: Optional[int] = 0
-):
+def make_env(env_id: str, jax_env: bool, num_envs: Optional[int] = 1, seed: Optional[int] = 0):
     """
     Utility function to create a jax/non-jax based environment given an env_id
     """

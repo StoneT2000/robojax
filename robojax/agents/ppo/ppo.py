@@ -12,8 +12,7 @@ from flax import struct
 
 from robojax.agents.base import BasePolicy
 from robojax.agents.ppo.config import PPOConfig, TimeStep
-from robojax.agents.ppo.loss import (ActorAux, CriticAux, actor_loss_fn,
-                                     critic_loss_fn)
+from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_loss_fn
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
 from robojax.logger.logger import Logger
@@ -66,9 +65,7 @@ class PPO(BasePolicy):
         self.last_env_obs_states = None
         if self.jax_env:
 
-            def rollout_callback(
-                action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux
-            ):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux):
                 return TimeStep(
                     action=action,
                     env_obs=env_obs,
@@ -95,9 +92,7 @@ class PPO(BasePolicy):
             )
         else:
             # we expect env to be a vectorized env now
-            def rollout_callback(
-                action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux
-            ):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux):
                 batch_size = len(env_obs)
                 return dict(
                     action=action,
@@ -217,9 +212,7 @@ class PPO(BasePolicy):
                             "test/ep_ret_avg",
                             "test/ep_len_avg",
                         ]
-                        filtered_stats = {
-                            k: stats[k] for k in filtered_stat_keys if k in stats
-                        }
+                        filtered_stats = {k: stats[k] for k in filtered_stat_keys if k in stats}
                         logger.pretty_print_table(filtered_stats)
                     else:
                         logger.pretty_print_table(stats)
@@ -243,9 +236,7 @@ class PPO(BasePolicy):
         if not self.cfg.reset_env:
             if self.last_env_obs_states is None:
                 rng_key, *env_reset_rng_keys = jax.random.split(rng_key, num_envs + 1)
-                self.last_env_obs_states = jax.jit(jax.vmap(self.loop.env_reset))(
-                    jnp.stack(env_reset_rng_keys)
-                )
+                self.last_env_obs_states = jax.jit(jax.vmap(self.loop.env_reset))(jnp.stack(env_reset_rng_keys))
         buffer, info = self.collect_buffer(
             rng_key=buffer_rng_key,
             rollout_steps_per_env=rollout_steps_per_env,
@@ -347,12 +338,8 @@ class PPO(BasePolicy):
             def skip_update_actor_fn(actor):
                 return actor, ActorAux()
 
-            new_actor, info_a = jax.lax.cond(
-                update_actor, update_actor_fn, skip_update_actor_fn, actor
-            )
-            update_actor = jax.lax.cond(
-                info_a.approx_kl > self.cfg.target_kl, lambda: False, lambda: True
-            )
+            new_actor, info_a = jax.lax.cond(update_actor, update_actor_fn, skip_update_actor_fn, actor)
+            update_actor = jax.lax.cond(info_a.approx_kl > self.cfg.target_kl, lambda: False, lambda: True)
             actor_updates += 1 * update_actor
 
             if update_critic:
@@ -373,17 +360,13 @@ class PPO(BasePolicy):
             ), dict(actor_loss_aux=info_a, critic_loss_aux=info_c)
 
         update_init = (rng_key, actor, critic, update_actor, 0, 0)
-        carry, update_aux = jax.lax.scan(
-            update_step_fn, update_init, (), length=update_iters
-        )
+        carry, update_aux = jax.lax.scan(update_step_fn, update_init, (), length=update_iters)
         _, actor, critic, _, actor_updates, critic_updates = carry
 
         return (
             actor,
             critic,
-            dict(
-                **update_aux, actor_updates=actor_updates, critic_updates=critic_updates
-            ),
+            dict(**update_aux, actor_updates=actor_updates, critic_updates=critic_updates),
         )
 
     def collect_buffer(
@@ -405,8 +388,7 @@ class PPO(BasePolicy):
             env_rng_keys,
             params=(actor, critic),
             apply_fn=apply_fn,
-            steps_per_env=rollout_steps_per_env
-            + 1,  # extra 1 for final value computation
+            steps_per_env=rollout_steps_per_env + 1,  # extra 1 for final value computation
             max_episode_length=self.cfg.max_episode_length,
             init_env_obs_states=init_env_obs_states,
         )
