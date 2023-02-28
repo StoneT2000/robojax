@@ -73,7 +73,7 @@ def main(cfg):
     #     act_dims = get_action_dim(env.action_space)
     #     sample_obs = env.reset()
     #     eval_loop = GymLoop(env)
-    env, env_meta = make_env(env_id, jax_env=cfg.jax_env, num_envs=cfg.sac.num_envs, seed=cfg.seed)
+    env, env_meta = make_env(env_id, jax_env=cfg.jax_env, num_envs=cfg.ppo.num_envs, seed=cfg.seed)
     eval_env, _ = make_env(
         env_id,
         jax_env=cfg.jax_env,
@@ -82,7 +82,8 @@ def main(cfg):
     )
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
 
-    algo.cfg = PPOConfig(**cfg.ppo)
+
+    explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
 
     # create our actor critic models
     act_dims = sample_acts.shape[0]
@@ -98,54 +99,55 @@ def main(cfg):
         actor_optim=optax.adam(learning_rate=cfg.model.actor_lr),
         critic_optim=optax.adam(learning_rate=cfg.model.critic_lr),
     )
-    logger = Logger(
-        cfg=cfg,
-        **cfg.logger,
-    )
+
     # create our algorithm
+    ppo_cfg = PPOConfig(**cfg.ppo)
+    algo = PPO(
+        env=env,
+        eval_env=eval_env,
+        jax_env=cfg.jax_env,
+        ac=ac,
+        logger_cfg=dict(cfg=cfg, **cfg.logger),
+        cfg=ppo_cfg,
+    )
+    # def eval_apply(rng_key, params, obs):
+    #     actor = params
+    #     return actor(obs)[1], {}
 
-    def eval_apply(rng_key, params, obs):
-        actor = params
-        return actor(obs)[1], {}
+    # best_ep_ret = 0
 
-    best_ep_ret = 0
-
-    def train_callback(epoch, ac, rng_key, **kwargs):
-        nonlocal best_ep_ret
-        # every cfg.eval.eval_freq training epochs, evaluate our current model
-        if epoch % cfg.eval.eval_freq == 0:
-            rng_key, *eval_env_rng_keys = jax.random.split(rng_key, cfg.eval.num_eval_envs + 1)
-            eval_buffer, _ = eval_loop.rollout(eval_env_rng_keys, ac.actor, eval_apply, cfg.eval.steps_per_env)
-            eval_episode_ends = np.asarray(eval_buffer["done"])
-            ep_rets = np.asarray(eval_buffer["ep_ret"])[eval_episode_ends].flatten()
-            logger.store(
-                tag="test",
-                append=False,
-                ep_ret=ep_rets,
-                ep_len=np.asarray(eval_buffer["ep_len"])[eval_episode_ends].flatten(),
-            )
-            ep_ret_avg = ep_rets.mean()
-            if ep_ret_avg > best_ep_ret:
-                best_ep_ret = ep_ret_avg
-                ac.save(model_path)
+    # def train_callback(epoch, ac, rng_key, **kwargs):
+    #     nonlocal best_ep_ret
+    #     # every cfg.eval.eval_freq training epochs, evaluate our current model
+    #     if epoch % cfg.eval.eval_freq == 0:
+    #         rng_key, *eval_env_rng_keys = jax.random.split(rng_key, cfg.eval.num_eval_envs + 1)
+    #         eval_buffer, _ = eval_loop.rollout(eval_env_rng_keys, ac.actor, eval_apply, cfg.eval.steps_per_env)
+    #         eval_episode_ends = np.asarray(eval_buffer["done"])
+    #         ep_rets = np.asarray(eval_buffer["ep_ret"])[eval_episode_ends].flatten()
+    #         logger.store(
+    #             tag="test",
+    #             append=False,
+    #             ep_ret=ep_rets,
+    #             ep_len=np.asarray(eval_buffer["ep_len"])[eval_episode_ends].flatten(),
+    #         )
+    #         ep_ret_avg = ep_rets.mean()
+    #         if ep_ret_avg > best_ep_ret:
+    #             best_ep_ret = ep_ret_avg
+    #             ac.save(model_path)
 
     model_path = "weights.jx"  # osp.join(logger.exp_path, "weights.jx")
-    # ac.load(model_path)
+    # # ac.load(model_path)
 
     algo.train(
         rng_key=jax.random.PRNGKey(cfg.seed),
-        steps_per_epoch=cfg.train.steps_per_epoch,
-        update_iters=cfg.train.update_iters,
-        num_envs=num_envs,
         epochs=cfg.train.epochs,
         ac=ac,
-        batch_size=cfg.train.batch_size,
-        logger=logger,
-        train_callback=train_callback,
+        verbose=1
+        # train_callback=train_callback,
     )
     ac.save(model_path)
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo/hopper_short.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo.yml"))
     main(cfg)

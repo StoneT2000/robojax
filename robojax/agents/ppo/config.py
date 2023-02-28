@@ -12,7 +12,26 @@ from flax import struct
 @dataclasses.dataclass
 class PPOConfig:
     """
-    Configuration datalcass for PPO
+    Configuration dataclass for PPO
+    """
+    update_iters: int
+    """
+    This defines the max number of gradient updates that are performed after every rollout.
+    """
+
+    steps_per_epoch: int
+    """
+    The number of interaction steps to perform in each parallel environment during a single rollout
+    """
+
+    num_envs: int
+    """
+    The number of parallel environments
+    """
+
+    batch_size: int
+    """
+    The size of the batch of rollout data sampled during gradient updates
     """
 
     max_episode_length: Optional[

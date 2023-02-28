@@ -66,6 +66,8 @@ class PPO(BasePolicy):
             self.cfg = cfg
 
         self.last_env_obs_states = None
+
+        # for jax or gym envs, define a custom rollout callback which collects the data we need for our replay buffer
         if self.jax_env:
             self.loop: JaxLoop
 
@@ -98,16 +100,16 @@ class PPO(BasePolicy):
             )
         else:
             # we expect env to be a vectorized env now
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux: StepAux):
                 batch_size = len(env_obs)
                 return dict(
                     action=action,
                     env_obs=env_obs,
                     reward=reward,
                     adv=jnp.zeros((batch_size)),
-                    log_p=aux["log_p"],
+                    log_p=aux.log_p,
                     ep_ret=ep_ret,
-                    value=aux["value"],
+                    value=aux.value,
                     done=done,
                     ep_len=jnp.array(ep_len),
                 )
@@ -116,18 +118,22 @@ class PPO(BasePolicy):
 
     def train(
         self,
-        update_iters: int,
-        steps_per_epoch: int,
-        num_envs: int,
         rng_key: PRNGKey,
         epochs: int,
         ac: ActorCritic,
-        batch_size: int,
-        logger: Logger,
         train_callback: Callable = None,
         verbose: int = 1,
     ):
-        # TODO create full jittable version
+        """
+
+        Args :
+            epochs : int
+                Number of epochs to train. Each epoch consists of one rollout and one update phase.
+
+                `self.cfg.steps_per_epoch`
+
+        """
+
         train_start_time = time.time()
         if self.jax_env:
 
@@ -143,18 +149,18 @@ class PPO(BasePolicy):
                 res = ac.step(rng_key, actor, critic, obs)
                 return np.array(res[0]), res[1]
 
-        env_steps_per_epoch = num_envs * steps_per_epoch
+        env_steps_per_epoch = self.cfg.num_envs * self.cfg.steps_per_epoch
         for t in range(epochs):
             rng_key, train_rng_key = jax.random.split(rng_key)
             actor, critic, aux = self.train_step(
                 rng_key=train_rng_key,
-                update_iters=update_iters,
-                rollout_steps_per_env=steps_per_epoch,
-                num_envs=num_envs,
+                update_iters=self.cfg.update_iters,
+                rollout_steps_per_env=self.cfg.steps_per_epoch,
+                num_envs=self.cfg.num_envs,
                 actor=ac.actor,
                 critic=ac.critic,
                 apply_fn=apply_fn,
-                batch_size=batch_size,
+                batch_size=self.cfg.batch_size,
             )
             ac.actor = actor
             ac.critic = critic
@@ -169,19 +175,19 @@ class PPO(BasePolicy):
                 rng_key, train_callback_rng_key = jax.random.split(rng_key)
                 train_callback(epoch=t, ac=ac, rng_key=train_callback_rng_key)
 
-            if logger is not None:
+            if self.logger is not None:
                 total_env_steps = (t + 1) * env_steps_per_epoch
                 actor_loss_aux: ActorAux = aux["update_aux"]["actor_loss_aux"]
                 critic_loss_aux: CriticAux = aux["update_aux"]["critic_loss_aux"]
                 total_time = time.time() - train_start_time
                 if episode_ends.any():
-                    logger.store(
+                    self.logger.store(
                         tag="train",
                         append=False,
                         ep_ret=ep_rets[episode_ends].flatten(),
                         ep_len=ep_lens[episode_ends].flatten(),
                     )
-                logger.store(
+                self.logger.store(
                     tag="train",
                     append=False,
                     ep_rew=ep_rews.flatten(),
@@ -195,7 +201,7 @@ class PPO(BasePolicy):
                     critic_updates=aux["update_aux"]["critic_updates"].item(),
                 )
 
-                logger.store(
+                self.logger.store(
                     tag="time",
                     append=False,
                     rollout=aux["rollout_time"],
@@ -204,7 +210,7 @@ class PPO(BasePolicy):
                     sps=total_env_steps / total_time,
                     epoch=t,
                 )
-                stats = logger.log(total_env_steps)
+                stats = self.logger.log(total_env_steps)
                 if verbose > 0:
                     if verbose == 1:
                         filtered_stat_keys = [
@@ -219,10 +225,10 @@ class PPO(BasePolicy):
                             "test/ep_len_avg",
                         ]
                         filtered_stats = {k: stats[k] for k in filtered_stat_keys if k in stats}
-                        logger.pretty_print_table(filtered_stats)
+                        self.logger.pretty_print_table(filtered_stats)
                     else:
-                        logger.pretty_print_table(stats)
-                logger.reset()
+                        self.logger.pretty_print_table(stats)
+                self.logger.reset()
 
     def train_step(
         self,
@@ -277,6 +283,7 @@ class PPO(BasePolicy):
         actor_loss_aux.replace(approx_kl=actor_loss_aux.approx_kl)
 
         update_time = time.time() - update_s_time
+        # TODO convert the dict below to a flax.struct.dataclass to improve speed
         return (
             actor,
             critic,

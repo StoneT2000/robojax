@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from chex import Array, PRNGKey
+from robojax.utils import tools
 
 EnvObs = TypeVar("EnvObs")
 EnvState = TypeVar("EnvState")
@@ -84,6 +85,7 @@ class GymLoop(BaseEnvLoop):
         for t in range(steps_per_env):
             rng_key, rng_fn_key = jax.random.split(rng_key)
             actions, aux = apply_fn(rng_fn_key, params, observations)
+            actions = tools.any_to_numpy(actions)
             next_observations, rewards, dones, infos = self.env.step(actions)
             ep_lengths += 1
             ep_returns += rewards

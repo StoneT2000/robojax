@@ -44,6 +44,11 @@ def make_env(env_id: str, jax_env: bool, num_envs: Optional[int] = 1, seed: Opti
         act_space = env.action_space()
     else:
         import gym
+        try:
+            import mani_skill2.envs
+        except:
+            print("Skipping ManiSkill2 import")
+            pass
         from stable_baselines3.common.env_util import make_vec_env
 
         env = make_vec_env(env_id, num_envs, seed=seed)
