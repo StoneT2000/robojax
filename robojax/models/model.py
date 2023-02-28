@@ -68,21 +68,21 @@ class Model:
     def save(self, save_path: str):
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         with open(save_path, "wb") as f:
-            f.write(flax.serialization.to_bytes(self._state_dict()))
+            f.write(flax.serialization.to_bytes(self.state_dict()))
 
     def load(self, load_path: str) -> "Model":
         with open(load_path, "rb") as f:
-            data = flax.serialization.from_bytes(self._state_dict(), f.read())
+            data = flax.serialization.from_bytes(self.state_dict(), f.read())
         return self.replace(**data)
 
-    def _state_dict(self):
+    def state_dict(self):
         return dict(
             params=self.params,
             opt_state=self.opt_state,
             step=self.step,
         )
 
-    def _load_state_dict(self, state_dict):
+    def load_state_dict(self, state_dict):
         return self.replace(**state_dict)
 
     def __getattribute__(self, name: str) -> Any:

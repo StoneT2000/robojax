@@ -55,8 +55,8 @@ class PPO(BasePolicy):
         self,
         jax_env: bool,
         env=None,
-        env_step=None,
-        env_reset=None,
+        eval_env=None,
+        logger_cfg=dict(),
         cfg: PPOConfig = {},
     ) -> None:
         self.jax_env = jax_env

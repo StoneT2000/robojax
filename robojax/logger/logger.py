@@ -279,7 +279,7 @@ class Logger:
         self.data = defaultdict(dict)
         self.stats = {}
 
-    def _state_dict(self):
+    def state_dict(self):
         return dict(best_stats=self.best_stats, last_log_step=self.last_log_step)
 
     def load(self, data):

@@ -10,7 +10,7 @@ from robojax.data.loop import EnvAction, EnvObs, EnvState, GymLoop, JaxLoop, Bas
 from robojax.logger.logger import Logger
 from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
-
+import flax
 
 class BasePolicy:
     def __init__(self, jax_env: bool, env=None, eval_env=None, logger_cfg: Any = dict()) -> None:
@@ -73,6 +73,33 @@ class BasePolicy:
         Total number of environment steps run so far
         """
         raise NotImplementedError()
+    
+    def state_dict(self):
+        """
+        Returns a state dict of this object
+        """
+        raise NotImplementedError()
+    
+    def save(self, save_path: str):
+        """
+        Save the RL agent, including model states, training states, env states (if possible).
+        """
+        state_dict = self.state_dict()
+        with open(save_path, "wb") as f:
+            f.write(flax.serialization.to_bytes(state_dict))
+        raise NotImplementedError()
+    
+
+
+
+    def load_from_path(self, load_path: str):
+        with open(load_path, "rb") as f:
+            data = flax.serialization.from_bytes(self.state_dict(), f.read())
+        self.ac = self.ac.load(data["ac"])
+        self.step = data["step"]
+        self.logger.load(data["logger"])
+        return self
+
     def evaluate(
         self,
         rng_key: PRNGKey,

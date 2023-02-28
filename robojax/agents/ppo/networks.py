@@ -105,24 +105,24 @@ class ActorCritic:
         dist, _ = actor(obs)
         return dist.sample(seed=rng_key)
 
-    def _state_dict(self):
+    def state_dict(self):
         return dict(
-            actor=self.actor._state_dict(),
-            critic=self.critic._state_dict(),
+            actor=self.actor.state_dict(),
+            critic=self.critic.state_dict(),
         )
 
     def save(self, save_path: str):
         Path(os.path.dirname(save_path)).mkdir(parents=True, exist_ok=True)
         with open(save_path, "wb") as f:
-            f.write(flax.serialization.to_bytes(self._state_dict()))
+            f.write(flax.serialization.to_bytes(self.state_dict()))
 
     def load(self, params_dict: Params):
-        self.actor = self.actor._load_state_dict(params_dict["actor"])
-        self.critic = self.critic._load_state_dict(params_dict["critic"])
+        self.actor = self.actor.load_state_dict(params_dict["actor"])
+        self.critic = self.critic.load_state_dict(params_dict["critic"])
         return self
 
     def load_from_path(self, load_path: str):
         with open(load_path, "rb") as f:
-            params_dict = flax.serialization.from_bytes(self._state_dict(), f.read())
+            params_dict = flax.serialization.from_bytes(self.state_dict(), f.read())
         self.load(params_dict)
         return self

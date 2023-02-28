@@ -315,18 +315,18 @@ class SAC(BasePolicy):
             ),
         )
 
-    def _state_dict(self):
-        state_dict = dict(ac=self.ac._state_dict(), step=self.step, logger=self.logger._state_dict())
+    def state_dict(self):
+        state_dict = dict(ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict())
         return state_dict
 
     def save(self, save_path: str):
-        state_dict = self._state_dict()
+        state_dict = self.state_dict()
         with open(save_path, "wb") as f:
             f.write(flax.serialization.to_bytes(state_dict))
 
     def load_from_path(self, load_path: str):
         with open(load_path, "rb") as f:
-            data = flax.serialization.from_bytes(self._state_dict(), f.read())
+            data = flax.serialization.from_bytes(self.state_dict(), f.read())
         self.ac = self.ac.load(data["ac"])
         self.step = data["step"]
         self.logger.load(data["logger"])
