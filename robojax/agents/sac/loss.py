@@ -94,6 +94,6 @@ def update_target(critic: Model, target_critic: Model, tau: float) -> Model:
     """
     update targret_critic with polyak averaging
     """
-    new_target_params = jax.tree_multimap(lambda p, tp: p * tau + tp * (1 - tau), critic.params, target_critic.params)
+    new_target_params = jax.tree_map(lambda p, tp: p * tau + tp * (1 - tau), critic.params, target_critic.params)
 
     return target_critic.replace(params=new_target_params)

@@ -16,7 +16,7 @@ from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_l
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
 from robojax.logger.logger import Logger
-from robojax.models.ac.core import ActorCritic
+from robojax.agents.ppo.networks import ActorCritic
 from robojax.models.model import Model, Params
 
 PRNGKey = chex.PRNGKey
