@@ -110,7 +110,6 @@ class Logger:
 
             self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
-
             if project_name is None:
                 project_name = workspace
             if not clear_out:

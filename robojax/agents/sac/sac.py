@@ -148,7 +148,14 @@ class SAC(BasePolicy):
 
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
 
-            (actions, next_env_obs, next_env_states, rewards, dones, infos,) = self._env_step(
+            (
+                actions,
+                next_env_obs,
+                next_env_states,
+                rewards,
+                dones,
+                infos,
+            ) = self._env_step(
                 env_rng_key,
                 env_obs,
                 env_states,
@@ -199,7 +206,13 @@ class SAC(BasePolicy):
                 for _ in range(self.cfg.grad_updates_per_step):
                     batch = self.replay_buffer.sample_random_batch(sample_key, self.cfg.batch_size)
                     batch = TimeStep(**batch)
-                    (new_actor, new_critic, new_target_critic, new_temp, aux,) = self.update_parameters(
+                    (
+                        new_actor,
+                        new_critic,
+                        new_target_critic,
+                        new_temp,
+                        aux,
+                    ) = self.update_parameters(
                         update_rng_key,
                         ac.actor,
                         ac.critic,

@@ -5,7 +5,7 @@ from omegaconf import DictConfig, OmegaConf
 
 
 def parse_cfg(cfg_path: str = None, default_cfg_path: str = None) -> OmegaConf:
-    """Parses a config file and returns an OmegaConf object. Priority is CLI configs, 
+    """Parses a config file and returns an OmegaConf object. Priority is CLI configs,
     then provided config, then the default config if it exists"""
     if default_cfg_path is not None:
         base = OmegaConf.load(default_cfg_path)
@@ -30,6 +30,6 @@ def clean_and_transform(cfg):
             clean_and_transform(cfg[k])
         if isinstance(v, str):
             if v[0] == "(" and v[-1] == ")":
-                cfg[k] = eval(v) # TODO: FIX
+                cfg[k] = eval(v)  # TODO: FIX
             elif v == "None":
                 cfg[k] = None

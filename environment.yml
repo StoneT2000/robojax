@@ -26,41 +26,35 @@ dependencies:
   # RL related
   - gym
 
-  - huggingface::transformers
-
   # Vision
   - opencv
   - transforms3d
 
   - pip:
     # Jax ecosystem
-    - jax[cpu]
     - chex
-    # - haiku
     - flax
     - distrax
     - optax
 
-  #   # Simulators
+    # Simulators
     - mujoco-py<2.2,>=2.1
     - gymnax
     - brax
 
-  #   # Video generation
+    # Video generation
     - moviepy
 
-  #   # Exp tracking
+    # Exp tracking
     - tensorboard
     - wandb
     - omegaconf
     - ml-collections
 
-  #   # More Deep Learning
-    - huggingface_hub
-    
+    # Visuals
     - pyglet>=1.4.0
 
-  #   # More RL
+    # More RL
     - stable-baselines3
 
     - pylint

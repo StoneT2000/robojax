@@ -105,12 +105,8 @@ def main(cfg):
         nonlocal best_ep_ret
         # every cfg.eval.eval_freq training epochs, evaluate our current model
         if epoch % cfg.eval.eval_freq == 0:
-            rng_key, *eval_env_rng_keys = jax.random.split(
-                rng_key, cfg.eval.num_eval_envs + 1
-            )
-            eval_buffer, _ = eval_loop.rollout(
-                eval_env_rng_keys, ac.actor, eval_apply, cfg.eval.steps_per_env
-            )
+            rng_key, *eval_env_rng_keys = jax.random.split(rng_key, cfg.eval.num_eval_envs + 1)
+            eval_buffer, _ = eval_loop.rollout(eval_env_rng_keys, ac.actor, eval_apply, cfg.eval.steps_per_env)
             eval_episode_ends = np.asarray(eval_buffer["done"])
             ep_rets = np.asarray(eval_buffer["ep_ret"])[eval_episode_ends].flatten()
             logger.store(
@@ -142,7 +138,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(
-        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/hopper_short.yml")
-    )
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/hopper_short.yml"))
     main(cfg)

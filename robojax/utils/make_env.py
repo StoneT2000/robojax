@@ -35,7 +35,6 @@ def make_env(env_id: str, jax_env: bool, num_envs: Optional[int] = 1, seed: Opti
         if is_gymnax_env:
             env, env_params = gymnax.make(env_id)
         elif is_brax_env:
-
             env = envs.create(env_id, auto_reset=True)
             env = BraxGymWrapper(env)
 

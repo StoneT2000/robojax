@@ -22,7 +22,6 @@ class BasePolicy:
         assert env is not None
         self.jax_env = jax_env
         if jax_env:
-
             self.env_step: Callable[
                 [PRNGKey, EnvState, EnvAction],
                 Tuple[EnvObs, EnvState, float, bool, Any],

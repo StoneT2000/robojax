@@ -55,7 +55,6 @@ def default_init(scale: Optional[float] = jnp.sqrt(2)):
 
 
 class DiagGaussianActor(nn.Module):
-
     features: Sequence[int]
     act_dims: int
     activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
