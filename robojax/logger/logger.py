@@ -157,7 +157,6 @@ class Logger:
         # output = json.dumps(config_json, indent=2, sort_keys=True)
         if verbose > 1:
             self.print("Saving config:\n", color="cyan", bold=True)
-        if verbose > 1:
             self.print(config)
         with open(config_path, "w") as out:
             out.write(OmegaConf.to_yaml(config))

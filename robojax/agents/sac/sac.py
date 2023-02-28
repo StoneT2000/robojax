@@ -39,7 +39,7 @@ class SAC(BasePolicy):
             logger_cfg["best_stats_cfg"] = {"test/ep_ret_avg": 1, "train/ep_ret_avg": 1}
         if "save_fn" not in logger_cfg:
             logger_cfg["save_fn"] = self.save
-        super().__init__(jax_env, env, logger_cfg)
+        super().__init__(jax_env, env, eval_env, logger_cfg)
         if isinstance(cfg, dict):
             self.cfg = SACConfig(**cfg)
         else:
@@ -78,17 +78,6 @@ class SAC(BasePolicy):
 
         if self.jax_env:
             self._env_step = jax.jit(self._env_step, static_argnames=["seed"])
-
-        self.eval_loop = None
-        if eval_env is not None:
-            if self.jax_env:
-                self.eval_loop = JaxLoop(
-                    eval_env.reset,
-                    eval_env.step,
-                    reset_env=True,
-                )
-            else:
-                self.eval_loop = GymLoop(eval_env)
 
     @partial(jax.jit, static_argnames=["self", "seed"])
     def _sample_action(self, rng_key, actor: DiagGaussianActor, env_obs, seed=False):

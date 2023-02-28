@@ -21,6 +21,7 @@ class BasePolicy:
         """
         assert env is not None
         self.jax_env = jax_env
+        self.loop: BaseEnvLoop = None
         if jax_env:
             self.env_step: Callable[
                 [PRNGKey, EnvState, EnvAction],
@@ -44,6 +45,18 @@ class BasePolicy:
             self.action_space = self.env.action_space
         self.obs_shape = get_obs_shape(self.observation_space)
         self.action_dim = get_action_dim(self.action_space)
+
+        # setup evaluation loop
+        self.eval_loop: BaseEnvLoop = None
+        if eval_env is not None:
+            if self.jax_env:
+                self.eval_loop = JaxLoop(
+                    eval_env.reset,
+                    eval_env.step,
+                    reset_env=True,
+                )
+            else:
+                self.eval_loop = GymLoop(eval_env)
 
         # auto generate an experiment name based on the environment name and current time
         if "exp_name" not in logger_cfg:
