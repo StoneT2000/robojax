@@ -74,7 +74,7 @@ class Logger:
         ----------
         wandb : bool
             Whether to use Weights and Biases and log to there
-        
+
         tensorboard : bool
             Whether to log locally to tensorboard
 
@@ -86,7 +86,7 @@ class Logger:
 
         project_name : str
             Used by wandb only. Defines the project name
-            
+
         clear_out : bool
             If true, clears out all previous logging information for this experiment. Otherwise appends data only
 

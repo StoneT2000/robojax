@@ -35,10 +35,6 @@ class SAC(BasePolicy):
         logger_cfg=dict(),
         cfg: SACConfig = {},
     ):
-        if "best_stats_cfg" not in logger_cfg:
-            logger_cfg["best_stats_cfg"] = {"test/ep_ret_avg": 1, "train/ep_ret_avg": 1}
-        if "save_fn" not in logger_cfg:
-            logger_cfg["save_fn"] = self.save
         super().__init__(jax_env, env, eval_env, logger_cfg)
         if isinstance(cfg, dict):
             self.cfg = SACConfig(**cfg)
@@ -118,11 +114,10 @@ class SAC(BasePolicy):
         if verbose:
             pbar = tqdm(total=self.cfg.num_train_steps, initial=self.step)
         while self.step < self.cfg.num_train_steps:
-
             # evaluate the current trained actor periodically
             if (
-                self.eval_loop is not None and
-                self.step % self.cfg.eval_freq == 0
+                self.eval_loop is not None
+                and self.step % self.cfg.eval_freq == 0
                 and self.step > 0
                 and self.step >= self.cfg.num_seed_steps
                 and self.cfg.eval_freq > 0
@@ -136,7 +131,6 @@ class SAC(BasePolicy):
                     params=ac.actor,
                     apply_fn=ac.act,
                 )
-
 
             # perform a rollout (usually single step in all parallel envs)
             rng_key, env_rng_key = jax.random.split(rng_key, 2)

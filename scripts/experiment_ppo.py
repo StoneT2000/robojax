@@ -14,14 +14,14 @@ from stable_baselines3.common.env_util import make_vec_env
 
 from robojax.agents.ppo import PPO
 from robojax.agents.ppo.config import PPOConfig
+from robojax.agents.ppo.networks import ActorCritic
 from robojax.cfg.parse import parse_cfg
 from robojax.data.loop import GymLoop, JaxLoop
 from robojax.logger import Logger
 from robojax.models import explore
-from robojax.agents.ppo.networks import ActorCritic
 from robojax.models.mlp import MLP
-from robojax.utils.spaces import get_action_dim
 from robojax.utils.make_env import make_env
+from robojax.utils.spaces import get_action_dim
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 

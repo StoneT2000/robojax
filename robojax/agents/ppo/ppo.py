@@ -13,10 +13,10 @@ from flax import struct
 from robojax.agents.base import BasePolicy
 from robojax.agents.ppo.config import PPOConfig, TimeStep
 from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_loss_fn
+from robojax.agents.ppo.networks import ActorCritic, StepAux
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
 from robojax.logger.logger import Logger
-from robojax.agents.ppo.networks import ActorCritic, StepAux
 from robojax.models.model import Model, Params
 
 PRNGKey = chex.PRNGKey
@@ -59,11 +59,15 @@ class PPO(BasePolicy):
         logger_cfg=dict(),
         cfg: PPOConfig = {},
     ) -> None:
-        self.jax_env = jax_env
-        self.cfg = PPOConfig(**cfg)
+        super().__init__(jax_env, env, eval_env, logger_cfg)
+        if isinstance(cfg, dict):
+            self.cfg = PPOConfig(**cfg)
+        else:
+            self.cfg = cfg
 
         self.last_env_obs_states = None
         if self.jax_env:
+            self.loop: JaxLoop
 
             def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux: StepAux):
                 return TimeStep(
@@ -79,12 +83,14 @@ class PPO(BasePolicy):
                     info=info,
                 )
 
-            self.loop = JaxLoop(
-                env_reset,
-                env_step,
-                rollout_callback=rollout_callback,
-                reset_env=self.cfg.reset_env,
-            )
+            self.loop.rollout_callback = rollout_callback
+            self.loop.reset_env = self.cfg.reset_env
+            # self.loop = JaxLoop(
+            #     env_reset,
+            #     env_step,
+            #     rollout_callback=rollout_callback,
+            #     reset_env=self.cfg.reset_env,
+            # )
             self.last_env_states = None
             self.collect_buffer = jax.jit(
                 self.collect_buffer,
@@ -106,7 +112,7 @@ class PPO(BasePolicy):
                     ep_len=jnp.array(ep_len),
                 )
 
-            self.loop = GymLoop(env, rollout_callback=rollout_callback)
+            self.loop.rollout_callback = rollout_callback
 
     def train(
         self,
@@ -225,14 +231,16 @@ class PPO(BasePolicy):
         rollout_steps_per_env: int,
         num_envs: int,
         actor: Model,
-        critic: Model,  # steps per env
-        apply_fn: Callable,  # rollout function
+        critic: Model,
+        apply_fn: Callable,
         batch_size: int,
     ):
         rng_key, buffer_rng_key = jax.random.split(rng_key)
         rollout_s_time = time.time()
 
         # TODO can we prevent compilation here where init_env_obs_states=None the first time for reset_env=False?
+
+        # if we don't reset the environment after each rollout, then we generate environment states
         if not self.cfg.reset_env:
             if self.last_env_obs_states is None:
                 rng_key, *env_reset_rng_keys = jax.random.split(rng_key, num_envs + 1)

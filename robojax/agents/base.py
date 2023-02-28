@@ -1,16 +1,17 @@
 import time
 from typing import Any, Callable, Tuple, Union
 
+import flax
 import jax
 import jax.numpy as jnp
 import numpy as np
 from chex import PRNGKey
 
-from robojax.data.loop import EnvAction, EnvObs, EnvState, GymLoop, JaxLoop, BaseEnvLoop
+from robojax.data.loop import BaseEnvLoop, EnvAction, EnvObs, EnvState, GymLoop, JaxLoop
 from robojax.logger.logger import Logger
 from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
-import flax
+
 
 class BasePolicy:
     def __init__(self, jax_env: bool, env=None, eval_env=None, logger_cfg: Any = dict()) -> None:
@@ -65,6 +66,11 @@ class BasePolicy:
                 exp_name = f"{env.name}/{exp_name}"
             logger_cfg["exp_name"] = exp_name
 
+        if "best_stats_cfg" not in logger_cfg:
+            logger_cfg["best_stats_cfg"] = {"test/ep_ret_avg": 1, "train/ep_ret_avg": 1}
+        if "save_fn" not in logger_cfg:
+            logger_cfg["save_fn"] = self.save
+
         self.logger = Logger(**logger_cfg)
 
     @property
@@ -73,13 +79,13 @@ class BasePolicy:
         Total number of environment steps run so far
         """
         raise NotImplementedError()
-    
+
     def state_dict(self):
         """
         Returns a state dict of this object
         """
         raise NotImplementedError()
-    
+
     def save(self, save_path: str):
         """
         Save the RL agent, including model states, training states, env states (if possible).
@@ -88,7 +94,7 @@ class BasePolicy:
         with open(save_path, "wb") as f:
             f.write(flax.serialization.to_bytes(state_dict))
         raise NotImplementedError()
-    
+
     def load(self, data):
         raise NotImplementedError
 

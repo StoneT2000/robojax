@@ -37,6 +37,8 @@ class RolloutAux:
 
 
 class BaseEnvLoop(ABC):
+    rollout_callback: Callable
+
     def __init__(self) -> None:
         pass
 
