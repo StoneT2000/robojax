@@ -324,9 +324,8 @@ class SAC(BasePolicy):
         with open(save_path, "wb") as f:
             f.write(flax.serialization.to_bytes(state_dict))
 
-    def load_from_path(self, load_path: str):
-        with open(load_path, "rb") as f:
-            data = flax.serialization.from_bytes(self.state_dict(), f.read())
+    def load(self, data):
         self.ac = self.ac.load(data["ac"])
         self.step = data["step"]
         self.logger.load(data["logger"])
+        return self

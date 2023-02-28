@@ -17,7 +17,7 @@ class BasePolicy:
         """
         Base class for a policy
 
-        Equips it with loopers
+        Equips it with loopers and loggers
         """
         assert env is not None
         self.jax_env = jax_env
@@ -89,15 +89,13 @@ class BasePolicy:
             f.write(flax.serialization.to_bytes(state_dict))
         raise NotImplementedError()
     
-
-
+    def load(self, data):
+        raise NotImplementedError
 
     def load_from_path(self, load_path: str):
         with open(load_path, "rb") as f:
             data = flax.serialization.from_bytes(self.state_dict(), f.read())
-        self.ac = self.ac.load(data["ac"])
-        self.step = data["step"]
-        self.logger.load(data["logger"])
+        self.load(data)
         return self
 
     def evaluate(

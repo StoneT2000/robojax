@@ -72,7 +72,21 @@ class Logger:
 
         Parameters
         ----------
+        wandb : bool
+            Whether to use Weights and Biases and log to there
+        
+        tensorboard : bool
+            Whether to log locally to tensorboard
 
+        workspace : str
+            A workspace to store all experiments in a group together to
+
+        exp_name : str
+            Name of this particular experiment we are logging for
+
+        project_name : str
+            Used by wandb only. Defines the project name
+            
         clear_out : bool
             If true, clears out all previous logging information for this experiment. Otherwise appends data only
 
@@ -83,6 +97,8 @@ class Logger:
         save_fn : Callable
             function that saves some relevant models/state. Called whenever a stat is improved based on best_stats_cfg
 
+        cfg : Dict | OmegaConf
+            A dict or OmegaConf object containing all configuration details for this experiment
         """
         self.wandb = wandb
         if wandb_cfg is None:
@@ -221,7 +237,7 @@ class Logger:
         """
         log accumulated data to tensorboard if enabled and to the terminal and locally.
 
-        Statistics are then retrievable as a dict via get_statistics
+        Statistics are then retrievable as a dict via get_data
 
         """
         if step < self.last_log_step:
@@ -285,3 +301,4 @@ class Logger:
     def load(self, data):
         self.best_stats = data["best_stats"]
         self.last_log_step = data["last_log_step"]
+        return self
