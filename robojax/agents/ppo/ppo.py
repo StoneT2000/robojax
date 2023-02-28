@@ -16,7 +16,7 @@ from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_l
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
 from robojax.logger.logger import Logger
-from robojax.agents.ppo.networks import ActorCritic
+from robojax.agents.ppo.networks import ActorCritic, StepAux
 from robojax.models.model import Model, Params
 
 PRNGKey = chex.PRNGKey
@@ -65,15 +65,15 @@ class PPO(BasePolicy):
         self.last_env_obs_states = None
         if self.jax_env:
 
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux: StepAux):
                 return TimeStep(
                     action=action,
                     env_obs=env_obs,
                     reward=reward,
                     adv=0,
-                    log_p=aux["log_p"],
+                    log_p=aux.log_p,
                     ep_ret=ep_ret,
-                    value=aux["value"],
+                    value=aux.value,
                     done=done,
                     ep_len=ep_len,
                     info=info,

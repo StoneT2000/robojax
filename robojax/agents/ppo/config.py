@@ -30,9 +30,16 @@ class PPOConfig:
     dapg_lambda: Optional[float] = 0.1
     dapg_damping: Optional[float] = 0.99
     target_kl: Optional[float] = 0.01
-    reset_env: Optional[
-        bool
-    ] = True  # if false, when collecting interactions we will not reset env directly and carry over env states
+    reset_env: Optional[bool] = True
+    """
+    if False, when collecting interactions we will not reset env directly and carry over env states.
+    
+    It is useful to set to False for solving environments via massive parallelization of interactions (e.g. using Brax).
+    This is because to make massive parallelization useful and faster for training, we step through each parallel env much less (and often much less than the max episode length). 
+    As a result, if we reset after each rollout, our agent will only ever learn to solve the early parts of an environment. 
+    Thus by setting reset_env to False, over time the agent's rollouts (assuming each env may reset at various times) will 
+    be a more diverse collection of behaviors at different time points in the environment.
+    """
 
 
 @struct.dataclass

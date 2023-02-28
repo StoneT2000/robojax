@@ -18,6 +18,7 @@ from robojax.models.model import Model
 
 Params = flax.core.FrozenDict[str, Any]
 
+
 def mlp(sizes, activation, output_activation=None):  # TODO
     layers = []
     for j in range(len(sizes) - 1):
@@ -50,10 +51,12 @@ class Actor(nn.Module):
         dist = self.explorer(a)
         return dist, a
 
+
 @struct.dataclass
 class StepAux:
     value: Array
     log_p: Array
+
 
 class ActorCritic:
     """

@@ -1,19 +1,19 @@
 import time
-from typing import Any, Callable, Tuple
+from typing import Any, Callable, Tuple, Union
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from chex import PRNGKey
 
-from robojax.data.loop import EnvAction, EnvObs, EnvState, GymLoop, JaxLoop
+from robojax.data.loop import EnvAction, EnvObs, EnvState, GymLoop, JaxLoop, BaseEnvLoop
 from robojax.logger.logger import Logger
 from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
 
 
 class BasePolicy:
-    def __init__(self, jax_env: bool, env=None, logger_cfg: Any = dict()) -> None:
+    def __init__(self, jax_env: bool, env=None, eval_env=None, logger_cfg: Any = dict()) -> None:
         """
         Base class for a policy
 
@@ -45,6 +45,7 @@ class BasePolicy:
         self.obs_shape = get_obs_shape(self.observation_space)
         self.action_dim = get_action_dim(self.action_space)
 
+        # auto generate an experiment name based on the environment name and current time
         if "exp_name" not in logger_cfg:
             exp_name = f"sac/{round(time.time_ns() / 1000)}"
             if hasattr(env, "name"):
@@ -53,15 +54,28 @@ class BasePolicy:
 
         self.logger = Logger(**logger_cfg)
 
+    @property
+    def total_env_steps(self):
+        """
+        Total number of environment steps run so far
+        """
+        raise NotImplementedError()
     def evaluate(
         self,
         rng_key: PRNGKey,
         num_envs: int,
         steps_per_env: int,
-        eval_loop,
+        eval_loop: BaseEnvLoop,
         params: Params,
         apply_fn: Callable[[PRNGKey, EnvObs], EnvAction],
     ):
+        """
+        Evaluation function that uses an evaluation loop and executes the apply_fn policy with the given params
+
+        Runs `num_envs * steps_per_env` total steps, split across `num_envs` envs
+
+        Will use the provided logger and store the evaluation returns, episode lengths, and log it all.
+        """
         rng_key, *eval_rng_keys = jax.random.split(rng_key, num_envs + 1)
         eval_buffer, _ = eval_loop.rollout(
             rng_keys=jnp.stack(eval_rng_keys),

@@ -16,7 +16,16 @@ conda env create -f environment.yml
 
 To install jax with cuda support, follow the instructions on their [README](https://github.com/google/jax).
 
-## Usage
+## Organization
+
+The following modules are usually shared between RL algorithms
+
+- JaxLoop / Environment Loop for collecting rollouts
+- Evaluation Protocol for evaluating agent during training
+- Loggers for logging training and test data
+- Generic `Model` interface
+
+Everything else is usually kept inside the RL algorithm module e.g. `robojax.agents.ppo` contains the PPO Config, Actor Critic models, loss functions etc. all separate from e.g. `robojax.agents.sac`.
 
 ## Benchmarking
 See https://wandb.ai/stonet2000/robojax?workspace=user-stonet2000 for all benchmarked results on this library

@@ -129,25 +129,28 @@ class SAC(BasePolicy):
         if verbose:
             pbar = tqdm(total=self.cfg.num_train_steps, initial=self.step)
         while self.step < self.cfg.num_train_steps:
+
+            # evaluate the current trained actor periodically
             if (
+                self.eval_loop is not None and
                 self.step % self.cfg.eval_freq == 0
                 and self.step > 0
                 and self.step >= self.cfg.num_seed_steps
                 and self.cfg.eval_freq > 0
             ):
                 rng_key, eval_rng_key = jax.random.split(rng_key, 2)
-                if self.eval_loop is not None:
-                    self.evaluate(
-                        eval_rng_key,
-                        num_envs=self.cfg.num_eval_envs,
-                        steps_per_env=self.cfg.eval_steps,
-                        eval_loop=self.eval_loop,
-                        params=ac.actor,
-                        apply_fn=ac.act,
-                    )
+                self.evaluate(
+                    eval_rng_key,
+                    num_envs=self.cfg.num_eval_envs,
+                    steps_per_env=self.cfg.eval_steps,
+                    eval_loop=self.eval_loop,
+                    params=ac.actor,
+                    apply_fn=ac.act,
+                )
 
+
+            # perform a rollout (usually single step in all parallel envs)
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
-
             (
                 actions,
                 next_env_obs,
