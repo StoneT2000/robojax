@@ -61,6 +61,28 @@ class PPOConfig:
     """
 
 
+    eval_freq: Optional[int] = 10
+    """
+    Every eval_freq training steps (composed of rollout and update) an evaluation is performed
+    """
+    eval_steps: Optional[int] = 1000
+    """
+    Number of evaluation steps taken for each eval environment
+    """
+    num_eval_envs: Optional[int] = 4
+    """
+    Number of evaluation envs to use
+    """
+
+    log_freq: Optional[int] = 1
+    """
+    Every log_freq training steps metrics (e.g. TODO) are logged
+    """
+    save_freq: Optional[int] = 10
+    """
+    Every save_freq training steps the current training state is saved.
+    """
+
 @struct.dataclass
 class TimeStep:
     log_p: chex.Array = None

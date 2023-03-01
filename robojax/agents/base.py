@@ -92,7 +92,6 @@ class BasePolicy:
         state_dict = self.state_dict()
         with open(save_path, "wb") as f:
             f.write(flax.serialization.to_bytes(state_dict))
-        raise NotImplementedError()
 
     def load(self, data):
         raise NotImplementedError

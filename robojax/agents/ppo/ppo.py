@@ -53,6 +53,7 @@ class PPO(BasePolicy):
     def __init__(
         self,
         jax_env: bool,
+        ac: ActorCritic,
         env,
         num_envs,
         eval_env=None,
@@ -65,7 +66,9 @@ class PPO(BasePolicy):
         else:
             self.cfg = cfg
 
+        self.step = 0
         self.last_env_obs_states = None
+        self.ac: ActorCritic = ac
 
         # for jax or gym envs, define a custom rollout callback which collects the data we need for our replay buffer
         if self.jax_env:
@@ -115,7 +118,6 @@ class PPO(BasePolicy):
         self,
         rng_key: PRNGKey,
         epochs: int,
-        ac: ActorCritic,
         train_callback: Callable = None,
         verbose: int = 1,
     ):
@@ -130,19 +132,10 @@ class PPO(BasePolicy):
         """
 
         train_start_time = time.time()
-        if self.jax_env:
-
-            def apply_fn(rng_key, params, obs):
-                actor, critic = params
-                res = ac.step(rng_key, actor, critic, obs)
-                return res
-
-        else:
-
-            def apply_fn(rng_key, params, obs):
-                actor, critic = params
-                res = ac.step(rng_key, actor, critic, obs)
-                return np.array(res[0]), res[1]
+        def apply_fn(rng_key, params, obs):
+            actor, critic = params
+            res = self.ac.step(rng_key, actor, critic, obs)
+            return res
 
         env_steps_per_epoch = self.cfg.num_envs * self.cfg.steps_per_epoch
         for t in range(epochs):
@@ -152,13 +145,13 @@ class PPO(BasePolicy):
                 update_iters=self.cfg.update_iters,
                 rollout_steps_per_env=self.cfg.steps_per_epoch,
                 num_envs=self.cfg.num_envs,
-                actor=ac.actor,
-                critic=ac.critic,
+                actor=self.ac.actor,
+                critic=self.ac.critic,
                 apply_fn=apply_fn,
                 batch_size=self.cfg.batch_size,
             )
-            ac.actor = actor
-            ac.critic = critic
+            self.ac.actor = actor
+            self.ac.critic = critic
 
             buffer = aux["buffer"]
             ep_lens = np.asarray(buffer.ep_len)
@@ -168,7 +161,7 @@ class PPO(BasePolicy):
 
             if train_callback is not None:
                 rng_key, train_callback_rng_key = jax.random.split(rng_key)
-                train_callback(epoch=t, ac=ac, rng_key=train_callback_rng_key)
+                train_callback(epoch=t, ac=self.ac, rng_key=train_callback_rng_key)
 
             if self.logger is not None:
                 total_env_steps = (t + 1) * env_steps_per_epoch
@@ -236,6 +229,7 @@ class PPO(BasePolicy):
         apply_fn: Callable,
         batch_size: int,
     ):
+        self.step += 1
         rng_key, buffer_rng_key = jax.random.split(rng_key)
         rollout_s_time = time.time()
 
@@ -436,3 +430,14 @@ class PPO(BasePolicy):
         )
 
         return buffer, aux
+
+    def state_dict(self):
+        state_dict = dict(ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict())
+        return state_dict
+
+    def load(self, data):
+        self.ac = self.ac.load(data["ac"])
+        self.step = data["step"]
+        self.logger.load(data["logger"])
+        return self
+

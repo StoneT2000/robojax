@@ -28,65 +28,19 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 def main(cfg):
     env_id = cfg.env_id
-    num_envs = cfg.train.num_envs
-
-    # is_brax_env = False
-    # is_gymnax_env = False
-    # explorer = explore.Categorical()
-    # eval_loop = None
-    # if cfg.jax_env:
-    #     if env_id in gymnax.registered_envs:
-    #         is_gymnax_env = True
-    #     elif env_id in envs._envs:
-    #         is_brax_env = True
-    #     if is_gymnax_env:
-    #         env, env_params = gymnax.make(env_id)
-    #         env_step, env_reset = env.step, env.reset
-    #         act_dims = int(env.action_space().n)
-    #         sample_obs = env_reset(jax.random.PRNGKey(0))[0]
-    #     elif is_brax_env:
-    #         env = envs.create(env_id, auto_reset=cfg.auto_reset)
-
-    #         def env_step(rng_key, state, action):
-    #             state = env.step(state, action)
-    #             return (
-    #                 state.obs,
-    #                 state,
-    #                 state.reward,
-    #                 state.done != 0.0,
-    #                 dict(**state.info, metrics=state.metrics),
-    #             )
-
-    #         def env_reset(rng_key):
-    #             state = env.reset(rng_key)
-    #             return state.obs, state
-
-    #         act_dims = env.action_size
-    #         explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
-    #         sample_obs = env.reset(jax.random.PRNGKey(0)).obs
-    #     algo = PPO(env_step=env_step, env_reset=env_reset, jax_env=cfg.jax_env)
-    #     eval_loop = JaxLoop(env_reset=env_reset, env_step=env_step)
-    # else:
-    #     env = gym.make(env_id)
-    #     env = make_vec_env(env_id, num_envs, seed=cfg.seed)
-    #     algo = PPO(env=env, jax_env=cfg.jax_env)
-    #     act_dims = get_action_dim(env.action_space)
-    #     sample_obs = env.reset()
-    #     eval_loop = GymLoop(env)
+    
     env, env_meta = make_env(env_id, jax_env=cfg.jax_env, num_envs=cfg.ppo.num_envs, seed=cfg.seed)
     eval_env, _ = make_env(
         env_id,
         jax_env=cfg.jax_env,
-        num_envs=cfg.sac.num_eval_envs,
+        num_envs=cfg.ppo.num_eval_envs,
         seed=cfg.seed + 1000,
     )
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
 
-
-    explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
-
     # create our actor critic models
     act_dims = sample_acts.shape[0]
+    explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
     actor = MLP([256, 256, act_dims], output_activation=nn.tanh)
     critic = MLP([256, 256, 256, 256, 1], output_activation=None)
     ac = ActorCritic(
@@ -104,15 +58,13 @@ def main(cfg):
     ppo_cfg = PPOConfig(**cfg.ppo)
     algo = PPO(
         env=env,
+        num_envs=cfg.ppo.num_envs,
         eval_env=eval_env,
         jax_env=cfg.jax_env,
         ac=ac,
         logger_cfg=dict(cfg=cfg, **cfg.logger),
         cfg=ppo_cfg,
     )
-    # def eval_apply(rng_key, params, obs):
-    #     actor = params
-    #     return actor(obs)[1], {}
 
     # best_ep_ret = 0
 
@@ -141,7 +93,7 @@ def main(cfg):
     algo.train(
         rng_key=jax.random.PRNGKey(cfg.seed),
         epochs=cfg.train.epochs,
-        ac=ac,
+        
         verbose=1
         # train_callback=train_callback,
     )

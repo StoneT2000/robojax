@@ -319,6 +319,7 @@ class SAC(BasePolicy):
         )
 
     def state_dict(self):
+        # TODO add option to save buffer?
         state_dict = dict(ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict())
         return state_dict
 
