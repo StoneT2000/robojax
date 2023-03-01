@@ -29,13 +29,14 @@ class SAC(BasePolicy):
         self,
         jax_env: bool,
         ac: ActorCritic,
+        num_envs,
+        env,
         seed_sampler: Callable[[PRNGKey], EnvAction] = None,
-        env=None,
         eval_env=None,
         logger_cfg=dict(),
         cfg: SACConfig = {},
     ):
-        super().__init__(jax_env, env, eval_env, logger_cfg)
+        super().__init__(jax_env, env, eval_env, num_envs, logger_cfg)
         if isinstance(cfg, dict):
             self.cfg = SACConfig(**cfg)
         else:
@@ -72,6 +73,7 @@ class SAC(BasePolicy):
         if self.cfg.target_entropy is None:
             self.cfg.target_entropy = -self.action_dim / 2
 
+        # Jax env specific code to improve speed
         if self.jax_env:
             self._env_step = jax.jit(self._env_step, static_argnames=["seed"])
 
@@ -258,7 +260,6 @@ class SAC(BasePolicy):
                 self.logger.store(
                     tag="time",
                     append=False,
-                    # rollout=rollout_time,
                     total=total_time,
                     step=self.step,
                 )

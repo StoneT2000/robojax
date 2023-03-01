@@ -16,7 +16,6 @@ from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_l
 from robojax.agents.ppo.networks import ActorCritic, StepAux
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
-from robojax.logger.logger import Logger
 from robojax.models.model import Model, Params
 
 PRNGKey = chex.PRNGKey
@@ -54,12 +53,13 @@ class PPO(BasePolicy):
     def __init__(
         self,
         jax_env: bool,
-        env=None,
+        env,
+        num_envs,
         eval_env=None,
         logger_cfg=dict(),
         cfg: PPOConfig = {},
     ) -> None:
-        super().__init__(jax_env, env, eval_env, logger_cfg)
+        super().__init__(jax_env, env, eval_env, num_envs, logger_cfg)
         if isinstance(cfg, dict):
             self.cfg = PPOConfig(**cfg)
         else:
@@ -87,12 +87,6 @@ class PPO(BasePolicy):
 
             self.loop.rollout_callback = rollout_callback
             self.loop.reset_env = self.cfg.reset_env
-            # self.loop = JaxLoop(
-            #     env_reset,
-            #     env_step,
-            #     rollout_callback=rollout_callback,
-            #     reset_env=self.cfg.reset_env,
-            # )
             self.last_env_states = None
             self.collect_buffer = jax.jit(
                 self.collect_buffer,
@@ -100,6 +94,7 @@ class PPO(BasePolicy):
             )
         else:
             # we expect env to be a vectorized env now
+            self.loop: GymLoop
             def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux: StepAux):
                 batch_size = len(env_obs)
                 return dict(
@@ -246,11 +241,12 @@ class PPO(BasePolicy):
 
         # TODO can we prevent compilation here where init_env_obs_states=None the first time for reset_env=False?
 
-        # if we don't reset the environment after each rollout, then we generate environment states
-        if not self.cfg.reset_env:
+        # if we don't reset the environment after each rollout, then we generate environment states if we don't have any yet
+        # for non jax envs this just resets the environments
+        if not self.cfg.reset_env and self.jax_env:
             if self.last_env_obs_states is None:
-                rng_key, *env_reset_rng_keys = jax.random.split(rng_key, num_envs + 1)
-                self.last_env_obs_states = jax.jit(jax.vmap(self.loop.env_reset))(jnp.stack(env_reset_rng_keys))
+                rng_key, env_reset_rng_key = jax.random.split(rng_key, num_envs)
+                self.last_env_obs_states = self.loop.reset_loop(env_reset_rng_key)
         buffer, info = self.collect_buffer(
             rng_key=buffer_rng_key,
             rollout_steps_per_env=rollout_steps_per_env,
@@ -354,6 +350,7 @@ class PPO(BasePolicy):
                 return actor, ActorAux()
 
             new_actor, info_a = jax.lax.cond(update_actor, update_actor_fn, skip_update_actor_fn, actor)
+            # TODO if on step 0 update_actor is False, will we need to worry about it turning true later?
             update_actor = jax.lax.cond(info_a.approx_kl > self.cfg.target_kl, lambda: False, lambda: True)
             actor_updates += 1 * update_actor
 

@@ -50,6 +50,8 @@ class BaseEnvLoop(ABC):
         params: Any,
         apply_fn: Callable,
         steps_per_env: int,
+        max_episode_length: int = -1,
+        init_env_obs_states: Tuple[EnvObs, EnvState] = None,
     ) -> None:
         raise not NotImplementedError("Rollout not defined")
 
@@ -59,25 +61,51 @@ class GymLoop(BaseEnvLoop):
     RL loop for non jittable environments environment
     """
 
-    def __init__(self, env: gym.Env, rollout_callback: Callable = None) -> None:
+    def __init__(self, env: gym.Env, num_envs: int = 1, rollout_callback: Callable = None) -> None:
         self.env = env
+        self.num_envs = num_envs
         self.rollout_callback = rollout_callback
         super().__init__()
 
+    def reset_loop(self, rng_key: PRNGKey):
+        obs = self.env.reset()
+        return obs, None
     def rollout(
         self,
         rng_keys: List[PRNGKey],
         params: Any,
         apply_fn: Callable,
         steps_per_env: int,
+        max_episode_length: int = -1,
+        init_env_obs_states: Tuple[EnvObs, EnvState] = None,
     ):
         """
-        perform a rollout on a non jittable environment
+        Rollout across N parallelized non-jitted, non-state parameterized, environments with an actor function apply_fn and
+        return the rollout buffer as well as final environment observations and states if available.
+
+        Args :
+            rng_key : initial PRNGKey to use for any randomness
+
+            params : any function parameters passed to apply_fn
+
+            apply_fn : a function that takes as input a PRNGKey, params, and an environment observation
+                and returns a tuple with the action and any auxilliary data
+
+            steps : number of steps to rollout
+
+            max_episode_length : max number of steps before we truncate the current episode. If -1, we will not truncate any environments
+
+            init_env_obs_states : Initial environment observation and state to step forward from. If None, this calls the given self.env_reset function
+                to obtain the initial environment observation and state. If not None, it will not call env.reset first.
         """
         num_envs = len(rng_keys)
         rng_key = rng_keys[-1]
-        observations, ep_returns, ep_lengths = (
-            self.env.reset(),
+        if init_env_obs_states is None:
+            observations = self.env.reset()
+        else:
+            observations = init_env_obs_states[0]
+        
+        ep_returns, ep_lengths = (
             np.zeros(num_envs),
             np.zeros(num_envs, dtype=int),
         )
@@ -158,6 +186,7 @@ class JaxLoop(BaseEnvLoop):
             [PRNGKey, EnvState, EnvAction],
             Tuple[EnvObs, EnvState, float, bool, Any],
         ],
+        num_envs: int = 1,
         rollout_callback: Callable = None,
         reset_env: bool = True,
     ) -> None:
@@ -165,7 +194,15 @@ class JaxLoop(BaseEnvLoop):
         self.env_step = env_step
         self.rollout_callback = rollout_callback
         self.reset_env = reset_env
+        self.num_envs = num_envs
         super().__init__()
+
+    @partial(jax.jit, static_argnames=["self"])
+    def reset_loop(self, rng_key: PRNGKey):
+        rng_keys = jax.random.split(rng_key, self.num_envs + 1)
+        rng_key = rng_keys[0]
+        obs, states = jax.jit(jax.vmap(self.loop.env_reset))(rng_keys[1:])
+        return obs, states
 
     @partial(jax.jit, static_argnames=["self", "steps", "apply_fn", "max_episode_length"])
     def _rollout_single_env(

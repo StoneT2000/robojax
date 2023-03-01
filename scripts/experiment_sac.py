@@ -72,6 +72,7 @@ def main(cfg):
     algo = SAC(
         env=env,
         eval_env=eval_env,
+        num_envs=cfg.sac.num_envs,
         jax_env=cfg.jax_env,
         ac=ac,
         seed_sampler=seed_sampler,

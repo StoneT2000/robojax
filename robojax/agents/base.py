@@ -14,7 +14,7 @@ from robojax.utils.spaces import get_action_dim, get_obs_shape
 
 
 class BasePolicy:
-    def __init__(self, jax_env: bool, env=None, eval_env=None, logger_cfg: Any = dict()) -> None:
+    def __init__(self, jax_env: bool, env=None, eval_env=None, num_envs: int = 1, logger_cfg: Any = dict()) -> None:
         """
         Base class for a policy
 
@@ -33,7 +33,7 @@ class BasePolicy:
 
             self.env: gymnax.environments.environment.Environment = env
 
-            self.loop = JaxLoop(env_reset=self.env.reset, env_step=self.env.step)
+            self.loop = JaxLoop(env_reset=self.env.reset, env_step=self.env.step, num_envs=num_envs)
             self.observation_space = self.env.observation_space()
             self.action_space = self.env.action_space()
         else:
@@ -41,7 +41,7 @@ class BasePolicy:
 
             self.env: gym.Env = env
 
-            self.loop = GymLoop(self.env)
+            self.loop = GymLoop(self.env, num_envs=num_envs)
             self.observation_space = self.env.observation_space
             self.action_space = self.env.action_space
         self.obs_shape = get_obs_shape(self.observation_space)
@@ -70,7 +70,6 @@ class BasePolicy:
             logger_cfg["best_stats_cfg"] = {"test/ep_ret_avg": 1, "train/ep_ret_avg": 1}
         if "save_fn" not in logger_cfg:
             logger_cfg["save_fn"] = self.save
-
         self.logger = Logger(**logger_cfg)
 
     @property

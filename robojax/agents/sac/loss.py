@@ -70,7 +70,7 @@ def update_actor(key: PRNGKey, actor: Model, critic: Model, temp: Model, batch: 
         q1, q2 = critic(batch.env_obs, actions)
         q = jnp.minimum(q1, q2)
         actor_loss = (log_probs * temp() - q).mean()
-        return actor_loss, ActorUpdateAux(**{"actor_loss": actor_loss, "entropy": -log_probs.mean()})
+        return actor_loss, ActorUpdateAux(actor_loss=actor_loss, entropy=-log_probs.mean())
 
     grad_fn = jax.grad(actor_loss_fn, has_aux=True)
     grads, aux = grad_fn(actor.params)
@@ -82,7 +82,7 @@ def update_temp(temp: Model, entropy: float, target_entropy: float) -> Tuple[Mod
     def temperature_loss_fn(temp_params):
         temperature = temp.apply_fn(temp_params)
         temp_loss = temperature * (entropy - target_entropy).mean()
-        return temp_loss, TempUpdateAux(**{"temp": temperature, "temp_loss": temp_loss})
+        return temp_loss, TempUpdateAux(temp=temperature, temp_loss=temp_loss)
 
     grad_fn = jax.grad(temperature_loss_fn, has_aux=True)
     grads, aux = grad_fn(temp.params)
