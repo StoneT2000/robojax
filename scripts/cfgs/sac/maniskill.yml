@@ -21,7 +21,7 @@ sac:
   learnable_temp: True
   initial_temperature: 1.0
 
-  max_episode_length: 1000
+  max_episode_length: 100
   
 model:
   actor_lr: 3e-4

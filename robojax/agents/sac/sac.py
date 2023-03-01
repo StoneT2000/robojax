@@ -123,7 +123,7 @@ class SAC(BasePolicy):
                 and self.cfg.eval_freq > 0
             ):
                 rng_key, eval_rng_key = jax.random.split(rng_key, 2)
-                self.evaluate(
+                eval_results = self.evaluate(
                     eval_rng_key,
                     num_envs=self.cfg.num_eval_envs,
                     steps_per_env=self.cfg.eval_steps,
@@ -131,6 +131,14 @@ class SAC(BasePolicy):
                     params=ac.actor,
                     apply_fn=ac.act,
                 )
+                self.logger.store(
+                    tag="test",
+                    ep_ret=eval_results["eval_ep_rets"],
+                    ep_len=eval_results["eval_ep_lens"],
+                    append=False,
+                )
+                self.logger.log(self.total_env_steps)
+                self.logger.reset()
 
             # perform a rollout (usually single step in all parallel envs)
             rng_key, env_rng_key = jax.random.split(rng_key, 2)

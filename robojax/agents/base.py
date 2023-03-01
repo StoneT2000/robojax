@@ -132,11 +132,4 @@ class BasePolicy:
         eval_episode_ends = np.asarray(eval_buffer["done"])
         eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
         eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
-        self.logger.store(
-            tag="test",
-            ep_ret=eval_ep_rets,
-            ep_len=eval_ep_lens,
-            append=False,
-        )
-        self.logger.log(self.total_env_steps)
-        self.logger.reset()
+        return dict(eval_ep_rets=eval_ep_rets, eval_ep_lens=eval_ep_lens)
