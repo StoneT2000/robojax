@@ -39,8 +39,11 @@ def main(cfg):
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
 
     # create our actor critic models
-    act_dims = sample_acts.shape[0]
-    explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
+    # act_dims = 2#sample_acts
+    act_dims = get_action_dim(env_meta.act_space)
+    print("A",act_dims)
+    explorer=explore.Categorical()
+    # explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
     actor = MLP([256, 256, act_dims], output_activation=nn.tanh)
     critic = MLP([256, 256, 256, 256, 1], output_activation=None)
     ac = ActorCritic(
@@ -93,9 +96,7 @@ def main(cfg):
     algo.train(
         rng_key=jax.random.PRNGKey(cfg.seed),
         epochs=cfg.train.epochs,
-        
         verbose=1
-        # train_callback=train_callback,
     )
     ac.save(model_path)
 

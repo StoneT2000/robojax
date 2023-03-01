@@ -7,9 +7,17 @@ jax_platform_name: gpu
 seed: 0
 
 ppo:
+  num_envs: 2048
+  batch_size: 8192
+  update_iters: 32
+  steps_per_epoch: 16
   gamma: 0.95
   ent_coef: 1e-2
   reset_env: False
+
+  num_eval_envs: 16
+  eval_steps: 1000 # one episode each
+  eval_freq: 20
   
 model:
   actor_lr: 3e-4
@@ -17,17 +25,7 @@ model:
  
 
 train:
-  num_envs: 2048
-  batch_size: 8192
-  update_iters: 32
   epochs: 1000
-  steps_per_epoch: 16
-
-eval:
-  num_eval_envs: 16
-  steps_per_env: 1000 # one episode each
-  eval_freq: 20
-
 
 logger:
   tensorboard: True

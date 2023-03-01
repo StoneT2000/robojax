@@ -51,7 +51,7 @@ def get_action_dim(action_space: spaces.Space) -> int:
         return int(np.prod(action_space.shape))
     elif isinstance(action_space, spaces.Discrete) or isinstance(action_space, jax_spaces.Discrete):
         # Action is an int
-        return 1
+        return action_space.n
     elif isinstance(action_space, spaces.MultiDiscrete):
         # Number of discrete actions
         return int(len(action_space.nvec))
