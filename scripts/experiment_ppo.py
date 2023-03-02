@@ -41,11 +41,11 @@ def main(cfg):
     # create our actor critic models
     # act_dims = 2#sample_acts
     act_dims = get_action_dim(env_meta.act_space)
-    print("A",act_dims)
-    explorer=explore.Categorical()
-    # explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
+    # print("A",act_dims)
+    # explorer=explore.Categorical()
+    explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
     actor = MLP([256, 256, act_dims], output_activation=nn.tanh)
-    critic = MLP([256, 256, 256, 256, 1], output_activation=None)
+    critic = MLP([256, 256, 1], output_activation=None)
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,

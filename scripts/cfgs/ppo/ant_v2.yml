@@ -5,8 +5,8 @@ algo: ppo
 # Algorithm configurations
 ppo:
   num_envs: 1
-  batch_size: 512
-  update_iters: 32
+  batch_size: 64
+  update_iters: 320
   steps_per_epoch: 2048
   gamma: 0.99
   gae_lambda: 0.95

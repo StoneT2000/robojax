@@ -30,8 +30,9 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
     not_dones = ~dones
 
     value_diffs = gamma * values[1:] * not_dones - values[:-1]
+
     # in value_diffs we zero out whenever an episode was finished.
-    # steps where done = True, then values[1:] is zeroed as it is the value for the next episode
+    # steps t where done = True, then values[1:][t] is zeroed (next_value at step t) as it is the value for the next episode
     deltas = rewards + value_diffs
 
     def body_fun(gae, t):
@@ -417,6 +418,7 @@ class PPO(BasePolicy):
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         # TODO can we speed up this replace op?
+        # exclude last step which was used just for bootstrapping. e.g. https://github.com/deepmind/acme/blob/master/acme/agents/jax/ppo/learning.py#L331
         buffer = buffer.replace(
             adv=advantages,
             ep_ret=returns,
