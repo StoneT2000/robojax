@@ -1,15 +1,18 @@
 from dataclasses import dataclass
 from typing import Optional
 
-import jax
-from chex import Array
-from gymnasium import spaces
 import gymnasium
 import gymnasium.vector
-from gymnasium.vector import VectorEnv, AsyncVectorEnv
-from gymnasium.wrappers import TimeLimit, RecordVideo
-from robojax.wrappers.maniskill2 import ManiSkill2Wrapper, ContinuousTaskWrapper
+import jax
 import numpy as np
+from chex import Array
+from gymnasium import spaces
+from gymnasium.vector import AsyncVectorEnv, VectorEnv
+from gymnasium.wrappers import RecordVideo, TimeLimit
+
+from robojax.wrappers.maniskill2 import ContinuousTaskWrapper, ManiSkill2Wrapper
+
+
 @dataclass
 class EnvMeta:
     sample_obs: Array

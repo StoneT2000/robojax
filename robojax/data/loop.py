@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from chex import Array, PRNGKey
+
 from robojax.utils import tools
 
 EnvObs = TypeVar("EnvObs")

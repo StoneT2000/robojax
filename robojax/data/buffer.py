@@ -12,6 +12,7 @@ import numpy as np
 from chex import PRNGKey
 from flax import struct
 
+
 class BaseBuffer(ABC):
     """
     Base class that represent a buffer (rollout or replay)

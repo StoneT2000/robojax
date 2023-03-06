@@ -1,7 +1,8 @@
 import gym
 import gymnasium
 import gymnasium.spaces as spaces
-from gymnasium.core import Env, ObsType, ActType
+from gymnasium.core import ActType, Env, ObsType
+
 
 class ManiSkill2Wrapper(gymnasium.Wrapper):
     

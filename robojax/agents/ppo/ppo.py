@@ -8,8 +8,8 @@ import gymnasium
 import jax
 import jax.numpy as jnp
 import numpy as np
-from flax import struct
 import tree
+from flax import struct
 
 from robojax.agents.base import BasePolicy
 from robojax.agents.ppo.config import PPOConfig, TimeStep
