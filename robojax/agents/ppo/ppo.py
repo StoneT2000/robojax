@@ -123,7 +123,6 @@ class PPO(BasePolicy):
         self,
         rng_key: PRNGKey,
         epochs: int,
-        train_callback: Callable = None,
         verbose: int = 1,
     ):
         """
@@ -132,7 +131,7 @@ class PPO(BasePolicy):
             epochs : int
                 Number of epochs to train. Each epoch consists of one rollout and one update phase.
 
-                `self.cfg.steps_per_epoch`
+                `self.cfg.steps_per_epoch * self.cfg.num_envs` interactions are sampled in one rollout.
 
         """
 
@@ -158,18 +157,39 @@ class PPO(BasePolicy):
             self.ac.actor = actor
             self.ac.critic = critic
 
-            buffer = aux["buffer"]
+            buffer = aux["buffer"] # (T, num_envs)
             ep_lens = np.asarray(buffer.ep_len)
             ep_rets = np.asarray(buffer.orig_ret)
             ep_rews = np.asarray(buffer.reward)
             episode_ends = np.asarray(buffer.done)
 
-            if train_callback is not None:
-                rng_key, train_callback_rng_key = jax.random.split(rng_key)
-                train_callback(epoch=t, ac=self.ac, rng_key=train_callback_rng_key)
-
+            
+            ### Logging ###
             if self.logger is not None:
-                total_env_steps = (t + 1) * env_steps_per_epoch
+                if (
+                    self.eval_loop is not None
+                    and self.step % self.cfg.eval_freq == 0
+                    and self.step > 0
+                    and self.cfg.eval_freq > 0
+                ):
+                    rng_key, eval_rng_key = jax.random.split(rng_key, 2)
+                    eval_results = self.evaluate(
+                        eval_rng_key,
+                        num_envs=self.cfg.num_eval_envs,
+                        steps_per_env=self.cfg.eval_steps,
+                        eval_loop=self.eval_loop,
+                        params=self.ac.actor,
+                        apply_fn=lambda rng_key, actor, obs: (self.ac.act(rng_key, actor, obs, deterministic=True), {})
+                    )
+                    self.logger.store(
+                        tag="test",
+                        ep_ret=eval_results["eval_ep_rets"],
+                        ep_len=eval_results["eval_ep_lens"],
+                        append=False,
+                    )
+                    self.logger.log(self.total_env_steps)
+                    self.logger.reset()
+
                 actor_loss_aux: ActorAux = aux["update_aux"]["actor_loss_aux"]
                 critic_loss_aux: CriticAux = aux["update_aux"]["critic_loss_aux"]
                 total_time = time.time() - train_start_time
@@ -185,7 +205,7 @@ class PPO(BasePolicy):
                     append=False,
                     ep_rew=ep_rews.flatten(),
                     fps=env_steps_per_epoch / aux["rollout_time"],
-                    env_steps=total_env_steps,
+                    env_steps=self.total_env_steps,
                     entropy=np.asarray(actor_loss_aux.entropy),
                     actor_loss=np.asarray(actor_loss_aux.actor_loss),
                     approx_kl=np.asarray(actor_loss_aux.approx_kl),
@@ -200,12 +220,12 @@ class PPO(BasePolicy):
                     rollout=aux["rollout_time"],
                     update=aux["update_time"],
                     total=total_time,
-                    sps=total_env_steps / total_time,
+                    sps=self.total_env_steps / total_time,
                     epoch=t,
                 )
-                stats = self.logger.log(total_env_steps)
+                stats = self.logger.log(self.total_env_steps)
                 if verbose > 0:
-                    if verbose == 1:
+                    if verbose >= 1:
                         filtered_stat_keys = [
                             "train/ep_len_avg",
                             "train/ep_ret_avg",
@@ -223,6 +243,8 @@ class PPO(BasePolicy):
                         self.logger.pretty_print_table(stats)
                 self.logger.reset()
 
+
+            self.step += 1
     def train_step(
         self,
         rng_key: PRNGKey,
@@ -435,7 +457,10 @@ class PPO(BasePolicy):
             ep_len=buffer.ep_len[:-1],
         )
         return buffer, aux
-
+    @property
+    def total_env_steps(self):
+        env_steps_per_epoch = self.cfg.num_envs * self.cfg.steps_per_epoch
+        return (self.step + 1) * env_steps_per_epoch
     def state_dict(self):
         state_dict = dict(ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict())
         return state_dict

@@ -52,8 +52,7 @@ class BaseEnvLoop(ABC):
         params: Any,
         apply_fn: Callable,
         steps_per_env: int,
-        max_episode_length: int = -1,
-        init_env_states: Tuple[EnvObs, EnvState] = None,
+        init_env_states: Tuple[EnvObs, EnvState, np.ndarray, np.ndarray] = None,
     ) -> None:
         raise not NotImplementedError("Rollout not defined")
 
@@ -105,14 +104,12 @@ class GymLoop(BaseEnvLoop):
         num_envs = len(rng_keys)
         rng_key = rng_keys[-1]
         if init_env_states is None:
-            print("LOOPER RESET")
             observations, _ = self.env.reset()
             ep_returns, ep_lengths = (
                 np.zeros(num_envs, dtype=float),
                 np.zeros(num_envs, dtype=int),
             )
         else:
-            print("LOOPER RESET SKIP")
             observations = init_env_states[0]
             ep_returns = init_env_states[2]
             ep_lengths = init_env_states[3]
@@ -162,16 +159,11 @@ class GymLoop(BaseEnvLoop):
             for k, v in rb.items():
                 data[k].append(v)
             observations = next_observations
-            for idx, (terminated, truncated, info) in enumerate(zip(terminations, truncations, infos)):
+            for idx, (terminated, truncated) in enumerate(zip(terminations, truncations)):
                 # if episode is terminated or truncated short, 
                 if terminated or truncated:
                     ep_returns[idx] = 0
                     ep_lengths[idx] = 0
-                # if there is a final observation and episode was truncated
-                # this is useful for e.g. PPO which can use value bootstrapping to improve performance
-                if 'final_observation' in info:
-                    pass
-
         # stack data
         for k in data:
             data[k] = jnp.stack(data[k])

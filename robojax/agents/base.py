@@ -127,7 +127,7 @@ class BasePolicy:
         )
         eval_ep_lens = np.asarray(eval_buffer["ep_len"])
         eval_ep_rets = np.asarray(eval_buffer["ep_ret"])
-        eval_episode_ends = np.asarray(eval_buffer["done"])
+        eval_episode_ends = np.logical_or(np.asarray(eval_buffer["truncated"]), np.asarray(eval_buffer["terminated"]))
         eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
         eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
         return dict(eval_ep_rets=eval_ep_rets, eval_ep_lens=eval_ep_lens)

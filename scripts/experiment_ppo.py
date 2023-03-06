@@ -23,14 +23,17 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 def main(cfg):
     env_cfg = cfg.env
     env_id = env_cfg.env_id
+
+    video_path = osp.join(cfg.logger.workspace, cfg.logger.exp_name, "videos")
     
-    env, env_meta = make_env(env_id=env_id, jax_env=cfg.jax_env, max_episode_steps=env_cfg.max_episode_steps, num_envs=cfg.ppo.num_envs, seed=cfg.seed)
+    env, env_meta = make_env(env_id=env_id, jax_env=cfg.jax_env, max_episode_steps=env_cfg.max_episode_steps, num_envs=cfg.ppo.num_envs, seed=cfg.seed,)
     eval_env, _ = make_env(
         env_id=env_id,
         jax_env=cfg.jax_env,
         max_episode_steps=env_cfg.max_episode_steps,
         num_envs=cfg.ppo.num_eval_envs,
         seed=cfg.seed + 1000,
+        record_video_path=video_path
     )
     # import ipdb;ipdb.set_trace()
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
