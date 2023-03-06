@@ -56,8 +56,8 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
             lambda x : TimeLimit(x, max_episode_steps=max_episode_steps)
         ])
         env.reset(seed=seed)
-        obs_space = env.observation_space
-        act_space = env.action_space
+        obs_space = env.single_observation_space
+        act_space = env.single_action_space
         sample_obs = obs_space.sample()
         sample_acts = act_space.sample()
     return env, EnvMeta(

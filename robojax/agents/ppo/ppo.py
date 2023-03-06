@@ -68,14 +68,18 @@ class PPO(BasePolicy):
             self.cfg = cfg
 
         self.step = 0
-        self.last_env_obs_states = None
+        self.last_env_states = None
+        """
+        When cfg.reset_env is False, we keep track of the last env states (obs, state, return, length) so we start the next rollout from there
+        """
         self.ac: ActorCritic = ac
 
         # for jax or gym envs, define a custom rollout callback which collects the data we need for our replay buffer
         if self.jax_env:
             self.loop: JaxLoop
 
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux: StepAux):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, terminated, truncated, info, aux: StepAux):
+                done = terminated | truncated
                 return TimeStep(
                     action=action,
                     env_obs=env_obs,
@@ -91,7 +95,6 @@ class PPO(BasePolicy):
 
             self.loop.rollout_callback = rollout_callback
             self.loop.reset_env = self.cfg.reset_env
-            self.last_env_states = None
             self.collect_buffer = jax.jit(
                 self.collect_buffer,
                 static_argnames=["rollout_steps_per_env", "num_envs", "apply_fn"],
@@ -99,8 +102,9 @@ class PPO(BasePolicy):
         else:
             # we expect env to be a vectorized env now
             self.loop: GymLoop
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux: StepAux):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, terminated, truncated, info, aux: StepAux):
                 batch_size = len(env_obs)
+                done = np.logical_or(terminated, truncated)
                 return dict(
                     action=action,
                     env_obs=env_obs,
@@ -234,14 +238,14 @@ class PPO(BasePolicy):
         rng_key, buffer_rng_key = jax.random.split(rng_key)
         rollout_s_time = time.time()
 
-        # TODO can we prevent compilation here where init_env_obs_states=None the first time for reset_env=False?
+        # TODO can we prevent compilation here where init_env_states=None the first time for reset_env=False?
 
         # if we don't reset the environment after each rollout, then we generate environment states if we don't have any yet
         # for non jax envs this just resets the environments
         if not self.cfg.reset_env and self.jax_env:
-            if self.last_env_obs_states is None:
+            if self.last_env_states is None:
                 rng_key, env_reset_rng_key = jax.random.split(rng_key, num_envs)
-                self.last_env_obs_states = self.loop.reset_loop(env_reset_rng_key)
+                self.last_env_states = self.loop.reset_loop(env_reset_rng_key)
         buffer, info = self.collect_buffer(
             rng_key=buffer_rng_key,
             rollout_steps_per_env=rollout_steps_per_env,
@@ -249,11 +253,12 @@ class PPO(BasePolicy):
             actor=actor,
             critic=critic,
             apply_fn=apply_fn,
-            init_env_obs_states=self.last_env_obs_states,
+            init_env_states=self.last_env_states,
         )
+
         if not self.cfg.reset_env:
             info: RolloutAux
-            self.last_env_obs_states = (info.final_env_obs, info.final_env_state)
+            self.last_env_states = (info.final_env_obs, info.final_env_state, info.final_ep_returns, info.final_ep_lengths)
 
         rollout_time = time.time() - rollout_s_time
         update_s_time = time.time()
@@ -384,7 +389,7 @@ class PPO(BasePolicy):
         actor,
         critic,
         apply_fn: Callable,
-        init_env_obs_states=None,
+        init_env_states=None,
     ):
         # buffer collection is not jitted if env is not jittable
 
@@ -396,8 +401,7 @@ class PPO(BasePolicy):
             params=(actor, critic),
             apply_fn=apply_fn,
             steps_per_env=rollout_steps_per_env + 1,  # extra 1 for final value computation
-            max_episode_length=self.cfg.max_episode_length,
-            init_env_obs_states=init_env_obs_states,
+            init_env_states=init_env_states,
         )
         buffer: TimeStep
 
@@ -430,7 +434,6 @@ class PPO(BasePolicy):
             done=buffer.done[:-1],
             ep_len=buffer.ep_len[:-1],
         )
-
         return buffer, aux
 
     def state_dict(self):

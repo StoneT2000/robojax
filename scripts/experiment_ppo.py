@@ -32,16 +32,17 @@ def main(cfg):
         num_envs=cfg.ppo.num_eval_envs,
         seed=cfg.seed + 1000,
     )
-    import ipdb;ipdb.set_trace()
+    # import ipdb;ipdb.set_trace()
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
 
     # create our actor critic models
     act_dims = get_action_dim(env_meta.act_space)
     # print("A",act_dims)
-    # explorer=explore.Categorical()
-    explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
-    actor = MLP([256, 256, act_dims], output_activation=nn.tanh)
-    critic = MLP([256, 256, 1], output_activation=None)
+    explorer=explore.Categorical()
+    # explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
+    actor = MLP([64, 64, act_dims], output_activation=nn.tanh)
+    print("ACTIDM", act_dims, env_meta.act_space)
+    critic = MLP([64, 64, 1], output_activation=None)
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,
