@@ -22,9 +22,13 @@ Translating CleanRL hyperparameters to Robojax hyperparameters for PPO
 | `update_epochs` | `ppo.update_iters / (ppo.steps_per_epoch * ppo.num_envs // batch_size)` (computed) | Number of iterations over the entire replay buffer, with each iteration consisting of a number of gradient updates. In Robojax you directly control the number of updates. |
 | `update_epochs * (batch_size // mini_batch_size)` (computed) | `ppo.update_iters` | Number of gradient updates
 | `total_timesteps` | `train.epochs * ppo.steps_per_epoch * ppo.num_envs` | Total number of interactions |
-Some other notes: CleanRL reports episode data (return, length) the moment the episode ends in PPO. RoboJax reports aggregated metrics (min, max, mean) of the same data for the same rollout.
 
-CleanRL also does not explicitly reset all the environments to `t=0` between rollouts. 
+Some other notes: CleanRL reports episode data (return, length) the moment the episode ends in PPO. RoboJax reports aggregated metrics (min, max, mean) of the same data for the same rollout when reset_env = True, otherwise reports the saame way
+
+CleanRL also does not explicitly reset all the environments to `t=0` between rollouts (saame behavior achieved with ppo.reset_env = False)
+
+CleanRL global_step is the number of interactions sampled. RoboJax logs results based on global_step as well.
+
 
 ```
 python scripts/experiment_ppo.py env.env_id="CartPole-v1" env.max_episode_steps=500 eval_env.max_episode_steps=500

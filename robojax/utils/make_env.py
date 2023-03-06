@@ -4,10 +4,12 @@ from typing import Optional
 import jax
 from chex import Array
 from gymnasium import spaces
-import gymnasium as gym
+import gymnasium
 import gymnasium.vector
 from gymnasium.vector.vector_env import VectorEnv
 from gymnasium.wrappers import TimeLimit
+from robojax.wrappers.maniskill2 import ManiSkill2Wrapper, ContinuousTaskWrapper
+
 @dataclass
 class EnvMeta:
     sample_obs: Array
@@ -46,18 +48,21 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
         obs_space = env.observation_space()
         act_space = env.action_space()
     else:
+        wrappers = []
         try:
             import mani_skill2.envs
+            gymnasium.register("LiftCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:LiftCubeEnv")
+            wrappers.append(lambda x : ManiSkill2Wrapper(x))
         except:
             print("Skipping ManiSkill2 import")
             pass
+        wrappers.append(lambda x : TimeLimit(x, max_episode_steps=max_episode_steps))
+        
         # create a vector env parallelized across CPUs with the given timelimit and auto-reset
-        env: VectorEnv = gym.vector.make(env_id, num_envs=num_envs, wrappers=[
-            lambda x : TimeLimit(x, max_episode_steps=max_episode_steps)
-        ])
-        env.reset(seed=seed)
+        env: VectorEnv = gymnasium.vector.make(env_id, num_envs=num_envs, wrappers=wrappers, disable_env_checker=True)
         obs_space = env.single_observation_space
         act_space = env.single_action_space
+        env.reset(seed=seed)
         sample_obs = obs_space.sample()
         sample_acts = act_space.sample()
     return env, EnvMeta(

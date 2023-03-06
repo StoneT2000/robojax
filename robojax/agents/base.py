@@ -61,7 +61,7 @@ class BasePolicy:
 
         # auto generate an experiment name based on the environment name and current time
         if "exp_name" not in logger_cfg:
-            exp_name = f"sac/{round(time.time_ns() / 1000)}"
+            exp_name = f"{round(time.time_ns() / 1000)}"
             if hasattr(env, "name"):
                 exp_name = f"{env.name}/{exp_name}"
             logger_cfg["exp_name"] = exp_name

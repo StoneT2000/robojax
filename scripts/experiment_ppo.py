@@ -38,10 +38,9 @@ def main(cfg):
     # create our actor critic models
     act_dims = get_action_dim(env_meta.act_space)
     # print("A",act_dims)
-    explorer=explore.Categorical()
-    # explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
-    actor = MLP([64, 64, act_dims], output_activation=nn.tanh)
-    print("ACTIDM", act_dims, env_meta.act_space)
+    # explorer=explore.Categorical()
+    explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
+    actor = MLP([64, 64, act_dims], output_activation=None)
     critic = MLP([64, 64, 1], output_activation=None)
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),
@@ -99,5 +98,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_cartpole.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_pickcube.yml"))
     main(cfg)
