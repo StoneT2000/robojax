@@ -68,7 +68,7 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
         if mani_skill2_env:
             def make_env(env_id, idx, record_video):
                 def _init():
-                    env = gymnasium.make(env_id, disable_env_checker=True)
+                    env = gymnasium.make(env_id, disable_env_checker=True, control_mode="pd_ee_delta_pose")
                     if record_video and idx == 0:
                         env = RecordEpisode(env, record_video_path, info_on_video=True)
                     for wrapper in wrappers:

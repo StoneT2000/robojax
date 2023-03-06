@@ -7,6 +7,8 @@ algo: ppo
 env:
   env_id: None
   max_episode_steps: 100
+  env_kwargs:
+    control_mode: "pd_ee_delta_pose"
 eval_env:
   max_episode_steps: 200
 
