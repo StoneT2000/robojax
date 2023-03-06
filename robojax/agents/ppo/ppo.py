@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Tuple
 
 import chex
 import distrax
-import gym
+import gymnasium
 import jax
 import jax.numpy as jnp
 import numpy as np

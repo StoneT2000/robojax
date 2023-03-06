@@ -8,7 +8,7 @@ from collections import defaultdict
 from functools import partial
 from typing import Any, Callable, List, Tuple, TypeVar
 
-import gym
+import gymnasium
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -59,6 +59,11 @@ class BaseEnvLoop(ABC):
 class GymLoop(BaseEnvLoop):
     """
     RL loop for non jittable environments environment
+
+    Args :
+        rollout_callback: Callable
+            A rollout_callback function that is called after each env step. The output of this function is appended into a rollout buffer that is returned at the end of the 
+            rollout function
     """
 
     def __init__(self, env: gym.Env, num_envs: int = 1, rollout_callback: Callable = None) -> None:
@@ -76,7 +81,6 @@ class GymLoop(BaseEnvLoop):
         params: Any,
         apply_fn: Callable,
         steps_per_env: int,
-        max_episode_length: int = -1,
         init_env_obs_states: Tuple[EnvObs, EnvState] = None,
     ):
         """
@@ -92,8 +96,6 @@ class GymLoop(BaseEnvLoop):
                 and returns a tuple with the action and any auxilliary data
 
             steps : number of steps to rollout
-
-            max_episode_length : max number of steps before we truncate the current episode. If -1, we will not truncate any environments
 
             init_env_obs_states : Initial environment observation and state to step forward from. If None, this calls the given self.env_reset function
                 to obtain the initial environment observation and state. If not None, it will not call env.reset first.
@@ -114,19 +116,25 @@ class GymLoop(BaseEnvLoop):
             rng_key, rng_fn_key = jax.random.split(rng_key)
             actions, aux = apply_fn(rng_fn_key, params, observations)
             actions = tools.any_to_numpy(actions)
-            next_observations, rewards, dones, infos = self.env.step(actions)
+            next_observations, rewards, terminations, truncations, infos = self.env.step(actions)
             ep_lengths += 1
             ep_returns += rewards
-            epoch_ended = t == steps_per_env - 1
+
+            # determine true next observations s_{t+1} if some episodes truncated and not s_0 for terminated or truncated episodes
+            true_next_observations = next_observations.copy()
+            for idx, (terminated, truncated, info) in enumerate(zip(terminations, truncations, infos)):
+                if 'final_observation' in info:
+                    true_next_observations[idx] = info['final_observation']
             if self.rollout_callback is not None:
                 rb = self.rollout_callback(
-                    action=actions,
-                    env_obs=observations,
-                    reward=rewards,
-                    ep_ret=ep_returns.copy(),
-                    ep_len=ep_lengths.copy(),
-                    next_env_obs=next_observations,
-                    done=dones,
+                    action=actions, # a_{t}
+                    env_obs=observations, # s_{t}
+                    reward=rewards, # r_{t}
+                    ep_ret=ep_returns.copy(), # sum_{i=0}^t r_{i}
+                    ep_len=ep_lengths.copy(), # t
+                    next_env_obs=true_next_observations, # s_{t+1} and not s_0 of new episode
+                    terminated=terminations,
+                    truncated=truncations,
                     info=infos,
                     aux=aux,
                 )
@@ -137,15 +145,21 @@ class GymLoop(BaseEnvLoop):
                     reward=rewards,
                     ep_ret=ep_returns.copy(),
                     ep_len=ep_lengths.copy(),
-                    done=dones,
+                    terminated=terminations,
+                    truncated=truncations,
                 )
             for k, v in rb.items():
                 data[k].append(v)
             observations = next_observations
-            for idx, terminal in enumerate(dones):
-                if terminal or epoch_ended:
+            for idx, (terminated, truncated, info) in enumerate(zip(terminations, truncations, infos)):
+                # if episode is terminated or truncated short, 
+                if terminated or truncated:
                     ep_returns[idx] = 0
                     ep_lengths[idx] = 0
+                # if there is a final observation and episode was truncated
+                # this is useful for e.g. PPO which can use value bootstrapping to improve performance
+                if 'final_observation' in info:
+                    pass
 
         # stack data
         for k in data:

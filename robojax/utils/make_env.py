@@ -3,9 +3,11 @@ from typing import Optional
 
 import jax
 from chex import Array
-from gym import spaces
-
-
+from gymnasium import spaces
+import gymnasium as gym
+import gymnasium.vector
+from gymnasium.vector.vector_env import VectorEnv
+from gymnasium.wrappers import TimeLimit
 @dataclass
 class EnvMeta:
     sample_obs: Array
@@ -14,7 +16,7 @@ class EnvMeta:
     act_space: spaces.Space
 
 
-def make_env(env_id: str, jax_env: bool, num_envs: Optional[int] = 1, seed: Optional[int] = 0):
+def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optional[int] = 1, seed: Optional[int] = 0):
     """
     Utility function to create a jax/non-jax based environment given an env_id
     """
@@ -36,6 +38,7 @@ def make_env(env_id: str, jax_env: bool, num_envs: Optional[int] = 1, seed: Opti
             env, env_params = gymnax.make(env_id)
         elif is_brax_env:
             env = envs.create(env_id, auto_reset=True)
+            # TODO make brax gym gymnasium compatible
             env = BraxGymWrapper(env)
 
         sample_obs = env.reset(jax.random.PRNGKey(0))[0]
@@ -43,15 +46,16 @@ def make_env(env_id: str, jax_env: bool, num_envs: Optional[int] = 1, seed: Opti
         obs_space = env.observation_space()
         act_space = env.action_space()
     else:
-        import gym
         try:
             import mani_skill2.envs
         except:
             print("Skipping ManiSkill2 import")
             pass
-        from stable_baselines3.common.env_util import make_vec_env
-
-        env = make_vec_env(env_id, num_envs, seed=seed)
+        # create a vector env parallelized across CPUs with the given timelimit and auto-reset
+        env: VectorEnv = gym.vector.make(env_id, num_envs=num_envs, wrappers=[
+            lambda x : TimeLimit(x, max_episode_steps=max_episode_steps)
+        ])
+        env.reset(seed=seed)
         obs_space = env.observation_space
         act_space = env.action_space
         sample_obs = obs_space.sample()

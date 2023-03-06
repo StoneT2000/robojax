@@ -2,7 +2,6 @@ import os
 import os.path as osp
 import warnings
 
-import gym
 import gymnax
 import jax
 import jax.numpy as jnp
@@ -27,19 +26,21 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def main(cfg):
-    env_id = cfg.env_id
+    env_cfg = cfg.env
+    env_id = env_cfg.env_id
     
-    env, env_meta = make_env(env_id, jax_env=cfg.jax_env, num_envs=cfg.ppo.num_envs, seed=cfg.seed)
+    env, env_meta = make_env(env_id=env_id, jax_env=cfg.jax_env, max_episode_steps=env_cfg.max_episode_steps, num_envs=cfg.ppo.num_envs, seed=cfg.seed)
     eval_env, _ = make_env(
-        env_id,
+        env_id=env_id,
         jax_env=cfg.jax_env,
+        max_episode_steps=env_cfg.max_episode_steps,
         num_envs=cfg.ppo.num_eval_envs,
         seed=cfg.seed + 1000,
     )
+    import ipdb;ipdb.set_trace()
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
 
     # create our actor critic models
-    # act_dims = 2#sample_acts
     act_dims = get_action_dim(env_meta.act_space)
     # print("A",act_dims)
     # explorer=explore.Categorical()

@@ -11,8 +11,6 @@ import jax.numpy as jnp
 import numpy as np
 from chex import PRNGKey
 from flax import struct
-from gym import spaces
-
 
 class BaseBuffer(ABC):
     """

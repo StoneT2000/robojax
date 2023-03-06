@@ -37,9 +37,9 @@ class BasePolicy:
             self.observation_space = self.env.observation_space()
             self.action_space = self.env.action_space()
         else:
-            import gym
+            import gymnasium
 
-            self.env: gym.Env = env
+            self.env: gymnasium.Env = env
 
             self.loop = GymLoop(self.env, num_envs=num_envs)
             self.observation_space = self.env.observation_space
