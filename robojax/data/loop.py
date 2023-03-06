@@ -8,7 +8,7 @@ from collections import defaultdict
 from functools import partial
 from typing import Any, Callable, List, Tuple, TypeVar
 
-import gymnasium
+import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import numpy as np

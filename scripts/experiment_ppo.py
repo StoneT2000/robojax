@@ -2,21 +2,16 @@ import os
 import os.path as osp
 import warnings
 
-import gymnax
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from brax import envs
 from flax import linen as nn
-from stable_baselines3.common.env_util import make_vec_env
 
 from robojax.agents.ppo import PPO
 from robojax.agents.ppo.config import PPOConfig
 from robojax.agents.ppo.networks import ActorCritic
 from robojax.cfg.parse import parse_cfg
-from robojax.data.loop import GymLoop, JaxLoop
-from robojax.logger import Logger
 from robojax.models import explore
 from robojax.models.mlp import MLP
 from robojax.utils.make_env import make_env
@@ -103,5 +98,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_cartpole.yml"))
     main(cfg)

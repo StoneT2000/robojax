@@ -40,7 +40,7 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
             env = envs.create(env_id, auto_reset=True)
             # TODO make brax gym gymnasium compatible
             env = BraxGymWrapper(env)
-
+        # TODO add time limit wrapper of sorts
         sample_obs = env.reset(jax.random.PRNGKey(0))[0]
         sample_acts = env.action_space().sample(jax.random.PRNGKey(0))
         obs_space = env.observation_space()
