@@ -50,7 +50,7 @@ def main(cfg):
     # 64,64 for cartpole comparison 
     # actor = MLP([64, 64, act_dims], output_activation=None)
     # critic = MLP([64, 64, 1], output_activation=None)
-    actor = MLP([256, 256, act_dims], output_activation=None)
+    actor = MLP([256, 256, act_dims], output_activation=nn.tanh)
     critic = MLP([256, 256, 1], output_activation=None)
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),

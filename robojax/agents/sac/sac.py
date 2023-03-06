@@ -90,10 +90,11 @@ class SAC(BasePolicy):
         rng_key, act_rng_key, env_rng_key = jax.random.split(rng_key, 3)
         a = self._sample_action(act_rng_key, actor, env_obs, seed)
         if self.jax_env:
-            next_env_obs, next_env_state, reward, done, info = self.env_step(env_rng_key, env_state, a)
+            next_env_obs, next_env_state, reward, terminated, truncated, info = self.env_step(env_rng_key, env_state, a)
         else:
             a = np.asarray(a)
-            next_env_obs, reward, done, info = self.env.step(a)
+            next_env_obs, reward, terminated, truncated, info = self.env.step(a)
+            done = np.logical_or(terminated, truncated)
             next_env_state = None
         return a, next_env_obs, next_env_state, reward, done, info
 
