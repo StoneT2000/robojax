@@ -256,7 +256,6 @@ class PPO(BasePolicy):
         apply_fn: Callable,
         batch_size: int,
     ):
-        self.step += 1
         rng_key, buffer_rng_key = jax.random.split(rng_key)
         rollout_s_time = time.time()
 
@@ -460,7 +459,7 @@ class PPO(BasePolicy):
     @property
     def total_env_steps(self):
         env_steps_per_epoch = self.cfg.num_envs * self.cfg.steps_per_epoch
-        return (self.step + 1) * env_steps_per_epoch
+        return self.step * env_steps_per_epoch
     def state_dict(self):
         state_dict = dict(ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict())
         return state_dict

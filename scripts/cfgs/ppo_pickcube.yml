@@ -14,14 +14,15 @@ eval_env:
 ppo:
   num_envs: 8
   batch_size: 400
-  update_iters: 32
+  update_iters: 120
   steps_per_epoch: 400
   gamma: 0.85
   gae_lambda: 0.95
+  target_kl: 0.05
   ent_coef: 0
   reset_env: True
 
-  eval_freq: 1
+  eval_freq: 10 
   eval_steps: 200
   num_eval_envs: 4
 
@@ -36,13 +37,6 @@ model:
 # Training time parameters
 train:
   epochs: 1000
-
-# Evaluation settings
-eval:
-  num_eval_envs: 8
-  steps_per_env: 1000 # one episode each
-  eval_freq: 20
-
 
 logger:
   tensorboard: True

@@ -21,21 +21,24 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def main(cfg):
+
+    # Setup the experiment parameters
     env_cfg = cfg.env
-    env_id = env_cfg.env_id
+    cfg.eval_env = {**env_cfg, **cfg.eval_env}
+    eval_env_cfg = cfg.eval_env
 
     video_path = osp.join(cfg.logger.workspace, cfg.logger.exp_name, "videos")
-    
-    env, env_meta = make_env(env_id=env_id, jax_env=cfg.jax_env, max_episode_steps=env_cfg.max_episode_steps, num_envs=cfg.ppo.num_envs, seed=cfg.seed,)
+
+    env, env_meta = make_env(env_id=env_cfg.env_id, jax_env=cfg.jax_env, max_episode_steps=env_cfg.max_episode_steps, num_envs=cfg.ppo.num_envs, seed=cfg.seed)
     eval_env, _ = make_env(
-        env_id=env_id,
+        env_id=eval_env_cfg.env_id,
         jax_env=cfg.jax_env,
-        max_episode_steps=env_cfg.max_episode_steps,
+        max_episode_steps=eval_env_cfg.max_episode_steps,
         num_envs=cfg.ppo.num_eval_envs,
         seed=cfg.seed + 1000,
         record_video_path=video_path
     )
-    # import ipdb;ipdb.set_trace()
+
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
 
     # create our actor critic models
@@ -43,8 +46,12 @@ def main(cfg):
     # print("A",act_dims)
     # explorer=explore.Categorical()
     explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
-    actor = MLP([64, 64, act_dims], output_activation=None)
-    critic = MLP([64, 64, 1], output_activation=None)
+
+    # 64,64 for cartpole comparison 
+    # actor = MLP([64, 64, act_dims], output_activation=None)
+    # critic = MLP([64, 64, 1], output_activation=None)
+    actor = MLP([256, 256, act_dims], output_activation=None)
+    critic = MLP([256, 256, 1], output_activation=None)
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,
@@ -67,27 +74,6 @@ def main(cfg):
         logger_cfg=dict(cfg=cfg, **cfg.logger),
         cfg=ppo_cfg,
     )
-
-    # best_ep_ret = 0
-
-    # def train_callback(epoch, ac, rng_key, **kwargs):
-    #     nonlocal best_ep_ret
-    #     # every cfg.eval.eval_freq training epochs, evaluate our current model
-    #     if epoch % cfg.eval.eval_freq == 0:
-    #         rng_key, *eval_env_rng_keys = jax.random.split(rng_key, cfg.eval.num_eval_envs + 1)
-    #         eval_buffer, _ = eval_loop.rollout(eval_env_rng_keys, ac.actor, eval_apply, cfg.eval.steps_per_env)
-    #         eval_episode_ends = np.asarray(eval_buffer["done"])
-    #         ep_rets = np.asarray(eval_buffer["ep_ret"])[eval_episode_ends].flatten()
-    #         logger.store(
-    #             tag="test",
-    #             append=False,
-    #             ep_ret=ep_rets,
-    #             ep_len=np.asarray(eval_buffer["ep_len"])[eval_episode_ends].flatten(),
-    #         )
-    #         ep_ret_avg = ep_rets.mean()
-    #         if ep_ret_avg > best_ep_ret:
-    #             best_ep_ret = ep_ret_avg
-    #             ac.save(model_path)
 
     model_path = "weights.jx"  # osp.join(logger.exp_path, "weights.jx")
     # # ac.load(model_path)

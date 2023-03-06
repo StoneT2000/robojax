@@ -125,6 +125,7 @@ class BasePolicy:
             apply_fn=apply_fn,
             steps_per_env=steps_per_env,
         )
+        # TODO use eval_buffer info['stats'] to log custom stats
         eval_ep_lens = np.asarray(eval_buffer["ep_len"])
         eval_ep_rets = np.asarray(eval_buffer["ep_ret"])
         eval_episode_ends = np.logical_or(np.asarray(eval_buffer["truncated"]), np.asarray(eval_buffer["terminated"]))

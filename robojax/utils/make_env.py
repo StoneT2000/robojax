@@ -70,7 +70,7 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
                 def _init():
                     env = gymnasium.make(env_id, disable_env_checker=True)
                     if record_video and idx == 0:
-                        RecordEpisode(env, record_video_path, info_on_video=True)
+                        env = RecordEpisode(env, record_video_path, info_on_video=True)
                     for wrapper in wrappers:
                         env = wrapper(env)
                     return env
