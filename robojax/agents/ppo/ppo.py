@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from flax import struct
+import tree
 
 from robojax.agents.base import BasePolicy
 from robojax.agents.ppo.config import PPOConfig, TimeStep
@@ -189,6 +190,7 @@ class PPO(BasePolicy):
                     )
                     self.logger.log(self.total_env_steps)
                     self.logger.reset()
+                actor_updates = aux["update_aux"]["actor_updates"].item()
                 actor_loss_aux: ActorAux = aux["update_aux"]["actor_loss_aux"]
                 critic_loss_aux: CriticAux = aux["update_aux"]["critic_loss_aux"]
                 total_time = time.time() - train_start_time
@@ -205,11 +207,13 @@ class PPO(BasePolicy):
                     ep_rew=ep_rews.flatten(),
                     fps=env_steps_per_epoch / aux["rollout_time"],
                     env_steps=self.total_env_steps,
-                    entropy=np.asarray(actor_loss_aux.entropy),
-                    actor_loss=np.asarray(actor_loss_aux.actor_loss),
-                    approx_kl=np.asarray(actor_loss_aux.approx_kl),
+                    # note we slice after moving to numpy arrays for slight performance boost
+                    # as slicing jax arrays creates a call to compile a new dynamic_slice
+                    entropy=np.asarray(actor_loss_aux.entropy)[:actor_updates],
+                    actor_loss=np.asarray(actor_loss_aux.actor_loss)[:actor_updates],
+                    approx_kl=np.asarray(actor_loss_aux.approx_kl)[:actor_updates],
                     critic_loss=np.asarray(critic_loss_aux.critic_loss),
-                    actor_updates=aux["update_aux"]["actor_updates"].item(),
+                    actor_updates=actor_updates,
                     critic_updates=aux["update_aux"]["critic_updates"].item(),
                 )
 
@@ -293,11 +297,6 @@ class PPO(BasePolicy):
             batch_size=batch_size,
             buffer=buffer,
         )
-
-        # remove entries where we skipped updating actor due to early stopping
-        actor_loss_aux: ActorAux = update_aux["actor_loss_aux"]
-        actor_loss_aux = jax.tree_map(lambda x : x[:update_aux["actor_updates"]], actor_loss_aux)
-        update_aux["actor_loss_aux"] = actor_loss_aux
 
         update_time = time.time() - update_s_time
         # TODO convert the dict below to a flax.struct.dataclass to improve speed
@@ -395,6 +394,7 @@ class PPO(BasePolicy):
 
         update_init = (rng_key, actor, critic, update_actor, 0, 0, ActorAux())
         carry, update_aux = jax.lax.scan(update_step_fn, update_init, (), length=update_iters)
+
         _, actor, critic, _, actor_updates, critic_updates, _ = carry
 
         return (
