@@ -189,7 +189,6 @@ class PPO(BasePolicy):
                     )
                     self.logger.log(self.total_env_steps)
                     self.logger.reset()
-
                 actor_loss_aux: ActorAux = aux["update_aux"]["actor_loss_aux"]
                 critic_loss_aux: CriticAux = aux["update_aux"]["critic_loss_aux"]
                 total_time = time.time() - train_start_time
@@ -297,7 +296,8 @@ class PPO(BasePolicy):
 
         # remove entries where we skipped updating actor due to early stopping
         actor_loss_aux: ActorAux = update_aux["actor_loss_aux"]
-        actor_loss_aux.replace(approx_kl=actor_loss_aux.approx_kl)
+        actor_loss_aux = jax.tree_map(lambda x : x[:update_aux["actor_updates"]], actor_loss_aux)
+        update_aux["actor_loss_aux"] = actor_loss_aux
 
         update_time = time.time() - update_s_time
         # TODO convert the dict below to a flax.struct.dataclass to improve speed
@@ -343,11 +343,10 @@ class PPO(BasePolicy):
             num_envs=num_envs,
         )
 
-        def update_step_fn(data: Tuple[PRNGKey, Model, Model], unused):
-            rng_key, actor, critic, update_actor, actor_updates, critic_updates = data
+        def update_step_fn(data: Tuple[PRNGKey, Model, Model, bool, int, int, ActorAux], _):
+            rng_key, actor, critic, can_update_actor, actor_updates, critic_updates, prev_actor_loss_aux = data
             rng_key, sample_rng_key = jax.random.split(rng_key)
             batch = TimeStep(**sampler.sample_random_batch(sample_rng_key, batch_size))
-            info_a: ActorAux = None
             info_c = None
             new_actor = actor
             new_critic = critic
@@ -368,13 +367,14 @@ class PPO(BasePolicy):
                 return new_actor, info_a
 
             def skip_update_actor_fn(actor):
-                return actor, ActorAux()
-
-            new_actor, info_a = jax.lax.cond(update_actor, update_actor_fn, skip_update_actor_fn, actor)
-            # TODO if on step 0 update_actor is False, will we need to worry about it turning true later?
-            update_actor = jax.lax.cond(info_a.approx_kl > self.cfg.target_kl, lambda: False, lambda: True)
-            actor_updates += 1 * update_actor
-
+                return actor, prev_actor_loss_aux
+            
+            if update_actor:
+                new_actor, actor_loss_aux = jax.lax.cond(can_update_actor, update_actor_fn, skip_update_actor_fn, actor)
+                actor_updates += 1 * can_update_actor
+                can_update_actor = jax.lax.cond(actor_loss_aux.approx_kl > self.cfg.target_kl * 1.5, lambda: False, lambda: True)
+            else:
+                actor_loss_aux = prev_actor_loss_aux
             if update_critic:
                 grads_c_fn = jax.grad(
                     critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch),
@@ -387,14 +387,15 @@ class PPO(BasePolicy):
                 rng_key,
                 new_actor,
                 new_critic,
-                update_actor,
+                can_update_actor,
                 actor_updates,
                 critic_updates,
-            ), dict(actor_loss_aux=info_a, critic_loss_aux=info_c)
+                actor_loss_aux
+            ), dict(actor_loss_aux=actor_loss_aux, critic_loss_aux=info_c)
 
-        update_init = (rng_key, actor, critic, update_actor, 0, 0)
+        update_init = (rng_key, actor, critic, update_actor, 0, 0, ActorAux())
         carry, update_aux = jax.lax.scan(update_step_fn, update_init, (), length=update_iters)
-        _, actor, critic, _, actor_updates, critic_updates = carry
+        _, actor, critic, _, actor_updates, critic_updates, _ = carry
 
         return (
             actor,

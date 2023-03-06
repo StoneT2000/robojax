@@ -77,7 +77,8 @@ def main(cfg):
     )
 
     model_path = "weights.jx"  # osp.join(logger.exp_path, "weights.jx")
-    # # ac.load(model_path)
+    # model_path = "robojax_exps/LiftCube-v0_test5/models/best_train_ep_ret_avg_ckpt.jx"
+    # algo.load_from_path(model_path)
 
     algo.train(
         rng_key=jax.random.PRNGKey(cfg.seed),
