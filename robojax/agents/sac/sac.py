@@ -17,12 +17,13 @@ from robojax.agents.base import BasePolicy
 from robojax.agents.sac import loss
 from robojax.agents.sac.config import SACConfig, TimeStep
 from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
-from robojax.data import buffer
 from robojax.data.buffer import GenericBuffer
-from robojax.data.loop import EnvAction, EnvObs, GymLoop, JaxLoop
+from robojax.data.loop import EnvAction
 from robojax.models import Model
 from robojax.models.model import Params
+from robojax.utils import tools
 
+# TODO: Create a algo state / training state with separaable non-jax component (e.g. replay buffer) for easy saving and continuing runs
 
 class SAC(BasePolicy):
     def __init__(
@@ -41,8 +42,6 @@ class SAC(BasePolicy):
             self.cfg = SACConfig(**cfg)
         else:
             self.cfg = cfg
-
-        assert self.cfg.max_episode_length is not None
 
         self.step = 0
         self.ac: ActorCritic = ac
@@ -64,6 +63,10 @@ class SAC(BasePolicy):
         else:
             buffer_config["env_obs"] = (self.obs_shape, np.float32)
         buffer_config["next_env_obs"] = buffer_config["env_obs"]
+
+        # note that we use GenericBuffer class, which is not backed by jax for storing
+        # interactions due to jax being slow for adding small amounts of data and moving data
+        # off the GPU
         self.replay_buffer = GenericBuffer(
             buffer_size=self.cfg.replay_buffer_capacity,
             n_envs=self.cfg.num_envs,
@@ -92,13 +95,17 @@ class SAC(BasePolicy):
         if self.jax_env:
             next_env_obs, next_env_state, reward, terminated, truncated, info = self.env_step(env_rng_key, env_state, a)
         else:
-            a = np.asarray(a)
+            a = tools.any_to_numpy(a)            
             next_env_obs, reward, terminated, truncated, info = self.env.step(a)
-            done = np.logical_or(terminated, truncated)
             next_env_state = None
-        return a, next_env_obs, next_env_state, reward, done, info
+        return a, next_env_obs, next_env_state, reward, terminated, truncated, info
 
-    def train(self, rng_key: PRNGKey, verbose=1):
+    def train(self, steps: int, rng_key: PRNGKey, verbose=1):
+        """
+        Args :
+            steps : int
+                Number of training steps to perform, where each step consists of interaactions and a policy update.
+        """
         train_start_time = time.time()
         ac = self.ac
         episodes = 0
@@ -109,14 +116,17 @@ class SAC(BasePolicy):
         )
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
         if self.jax_env:
-            env_obs, env_states = self.env_reset(reset_rng_key)
+            # TODO gymnax API in gymnasium style should return obs, states, and infos
+            env_obs, env_states, _ = self.env_reset(reset_rng_key)
         else:
-            env_obs = self.env.reset()
+            env_obs, _ = self.env.reset()
             env_states = None
 
         if verbose:
-            pbar = tqdm(total=self.cfg.num_train_steps, initial=self.step)
-        while self.step < self.cfg.num_train_steps:
+            pbar = tqdm(total=steps, initial=self.step)
+
+        start_step = self.step
+        while self.step < start_step + steps:
             # evaluate the current trained actor periodically
             if (
                 self.eval_loop is not None
@@ -150,7 +160,8 @@ class SAC(BasePolicy):
                 next_env_obs,
                 next_env_states,
                 rewards,
-                dones,
+                terminations,
+                truncations,
                 infos,
             ) = self._env_step(
                 env_rng_key,
@@ -159,14 +170,18 @@ class SAC(BasePolicy):
                 ac.actor,
                 seed=self.step < self.cfg.num_seed_steps,
             )
+
+            dones = terminations | truncations
             dones = np.array(dones)
             rewards = np.array(rewards)
+            # TODO: handle dict observations + is there a more memory efficient way to store o_{t} and o_{t+1} without repeating a lot?
             true_next_env_obs = next_env_obs.copy()
             ep_lens += 1
             ep_rets += rewards
             self.step += 1
 
-            masks = ((~dones) | (ep_lens == self.cfg.max_episode_length)).astype(float)
+            masks = ((~dones) | (truncations)).astype(float)
+            # masks = ((~dones) | (ep_lens == self.cfg.max_episode_length)).astype(float)
             if dones.any():
                 self.logger.store(
                     tag="train",
@@ -181,7 +196,7 @@ class SAC(BasePolicy):
                 ep_rets[dones] = 0.0
                 for i, d in enumerate(dones):
                     if d:
-                        true_next_env_obs[i] = infos[i]["terminal_observation"]
+                        true_next_env_obs[i] = infos["final_observation"][i]
 
             self.replay_buffer.store(
                 env_obs=env_obs,
@@ -297,9 +312,11 @@ class SAC(BasePolicy):
             self.cfg.discount,
             self.cfg.backup_entropy,
         )
+        # init dummy values
         new_actor, actor_update_aux = actor, loss.ActorUpdateAux()
         new_temp, temp_update_aux = temp, loss.TempUpdateAux(temp=temp())
         new_target = target_critic
+        
         if update_target:
             new_target = loss.update_target(critic, target_critic, self.cfg.tau)
         if update_actor:

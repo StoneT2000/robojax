@@ -24,14 +24,15 @@ class BasePolicy:
         self.jax_env = jax_env
         self.loop: BaseEnvLoop = None
         if jax_env:
+            import gymnax.environments.environment
+            # TODO see when gymnax upgrades to gymnasium
+            self.env: gymnax.environments.environment.Environment = env
             self.env_step: Callable[
                 [PRNGKey, EnvState, EnvAction],
-                Tuple[EnvObs, EnvState, float, bool, Any],
-            ] = env.step
-            self.env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState]] = env.reset
-            import gymnax.environments.environment
-
-            self.env: gymnax.environments.environment.Environment = env
+                Tuple[EnvObs, EnvState, float, bool, bool, Any],
+            ] = self.env.step
+            self.env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState, Any]] = self.env.reset
+            
 
             self.loop = JaxLoop(env_reset=self.env.reset, env_step=self.env.step, num_envs=num_envs)
             self.observation_space = self.env.observation_space()
@@ -39,11 +40,11 @@ class BasePolicy:
         else:
             import gymnasium
 
-            self.env: gymnasium.Env = env
+            self.env: gymnasium.vector.VectorEnv = env
 
             self.loop = GymLoop(self.env, num_envs=num_envs)
-            self.observation_space = self.env.observation_space
-            self.action_space = self.env.action_space
+            self.observation_space = self.env.single_observation_space
+            self.action_space = self.env.single_action_space
         self.obs_shape = get_obs_shape(self.observation_space)
         self.action_dim = get_action_dim(self.action_space)
 

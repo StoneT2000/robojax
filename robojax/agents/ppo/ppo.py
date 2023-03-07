@@ -50,6 +50,7 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
     advantages = advantages[::-1]
     return jax.lax.stop_gradient(advantages)
 
+# TODO: Create a algo state / training state with separaable non-jax component (e.g. replay buffer) for easy saving and continuing runs
 
 class PPO(BasePolicy):
     def __init__(

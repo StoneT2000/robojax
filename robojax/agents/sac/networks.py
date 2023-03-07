@@ -73,6 +73,9 @@ class DiagGaussianActor(nn.Module):
         else:
             self.log_std = self.param("log_std", nn.initializers.zeros, (self.act_dims,))
         self.mlp = MLP(self.features, self.activation, self.output_activation)
+
+        # scale of orthgonal initialization is recommended to be (high - low) / 2.
+        # We always assume envs are normalized so 1 is correct
         self.action_head = nn.Dense(self.act_dims, kernel_init=default_init(1))
 
     def __call__(self, x, deterministic=False):

@@ -220,7 +220,7 @@ class JaxLoop(BaseEnvLoop):
     def reset_loop(self, rng_key: PRNGKey):
         rng_keys = jax.random.split(rng_key, self.num_envs + 1)
         rng_key = rng_keys[0]
-        obs, states = jax.jit(jax.vmap(self.loop.env_reset))(rng_keys[1:])
+        obs, states, _ = jax.jit(jax.vmap(self.loop.env_reset))(rng_keys[1:])
         return obs, states
 
     @partial(jax.jit, static_argnames=["self", "steps", "apply_fn"])
