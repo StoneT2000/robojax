@@ -5,6 +5,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Tuple
 
+from collections import defaultdict
+
 import distrax
 import flax
 import jax
@@ -132,7 +134,7 @@ class SAC(BasePolicy):
                 self.eval_loop is not None
                 and self.step % self.cfg.eval_freq == 0
                 and self.step > 0
-                and self.step >= self.cfg.num_seed_steps
+                and self.step >= self.cfg.num_seed_steps // self.cfg.steps_per_env
                 and self.cfg.eval_freq > 0
             ):
                 rng_key, eval_rng_key = jax.random.split(rng_key, 2)
@@ -154,70 +156,80 @@ class SAC(BasePolicy):
                 self.logger.reset()
 
             # perform a rollout (usually single step in all parallel envs)
-            rng_key, env_rng_key = jax.random.split(rng_key, 2)
-            (
-                actions,
-                next_env_obs,
-                next_env_states,
-                rewards,
-                terminations,
-                truncations,
-                infos,
-            ) = self._env_step(
-                env_rng_key,
-                env_obs,
-                env_states,
-                ac.actor,
-                seed=self.step < self.cfg.num_seed_steps,
-            )
-
-            dones = terminations | truncations
-            dones = np.array(dones)
-            rewards = np.array(rewards)
-            # TODO: handle dict observations + is there a more memory efficient way to store o_{t} and o_{t+1} without repeating a lot?
-            true_next_env_obs = next_env_obs.copy()
-            ep_lens += 1
-            ep_rets += rewards
-            self.step += 1
-
-            masks = ((~dones) | (truncations)).astype(float)
-            # masks = ((~dones) | (ep_lens == self.cfg.max_episode_length)).astype(float)
-            if dones.any():
-                # note for continuous task wrapped envs where there is no early done, all envs finish at the same time unless
-                # they are staggered. So masks is never false.
-                self.logger.store(
-                    tag="train",
-                    ep_ret=ep_rets[dones],
-                    ep_len=ep_lens[dones],
-                    append=False,
+            for local_step in range(self.cfg.steps_per_env):
+                rng_key, env_rng_key = jax.random.split(rng_key, 2)
+                (
+                    actions,
+                    next_env_obs,
+                    next_env_states,
+                    rewards,
+                    terminations,
+                    truncations,
+                    infos,
+                ) = self._env_step(
+                    env_rng_key,
+                    env_obs,
+                    env_states,
+                    ac.actor,
+                    seed=self.step < self.cfg.num_seed_steps // self.cfg.steps_per_env,
                 )
-                self.logger.log(self.total_env_steps)
-                self.logger.reset()
-                episodes += dones.sum()
-                ep_lens[dones] = 0.0
-                ep_rets[dones] = 0.0
-                for i, d in enumerate(dones):
-                    if d:
-                        true_next_env_obs[i] = infos["final_observation"][i]
 
-            self.replay_buffer.store(
-                env_obs=env_obs,
-                reward=rewards,
-                action=actions,
-                mask=masks,
-                next_env_obs=true_next_env_obs,
-            )
+                dones = terminations | truncations
+                dones = np.array(dones)
+                rewards = np.array(rewards)
+                # TODO: handle dict observations + is there a more memory efficient way to store o_{t} and o_{t+1} without repeating a lot?
+                true_next_env_obs = next_env_obs.copy()
+                ep_lens += 1
+                ep_rets += rewards
 
-            env_obs = next_env_obs
-            env_states = next_env_states
+                masks = ((~dones) | (truncations)).astype(float)
+                # masks = ((~dones) | (ep_lens == self.cfg.max_episode_length)).astype(float)
+                if dones.any():
+                    # note for continuous task wrapped envs where there is no early done, all envs finish at the same time unless
+                    # they are staggered. So masks is never false.
+                    # if you want to always value bootstrap set masks to false.
+                    self.logger.store(
+                        tag="train",
+                        ep_ret=ep_rets[dones],
+                        ep_len=ep_lens[dones],
+                        append=False,
+                    )
+                    episodes += dones.sum()
+                    ep_lens[dones] = 0.0
+                    ep_rets[dones] = 0.0
+                    stats_dict = defaultdict(list)
+                    for i, d in enumerate(dones):
+                        if d:
+                            true_next_env_obs[i] = infos["final_observation"][i]
+                            final_info = infos['final_info'][i]
+                            if 'stats' in final_info:
+                                for k in final_info['stats']:
+                                    stats_dict[k].append(final_info['stats'][k])
 
+                    self.logger.store(tag="train", append=False, **stats_dict)
+                    self.logger.log(self.total_env_steps)
+                    self.logger.reset()
+
+
+                self.replay_buffer.store(
+                    env_obs=env_obs,
+                    reward=rewards,
+                    action=actions,
+                    mask=masks,
+                    next_env_obs=true_next_env_obs,
+                )
+
+                env_obs = next_env_obs
+                env_states = next_env_states
+
+            self.step += 1
             # update policy
-            if self.step >= self.cfg.num_seed_steps:
+            if self.step >= self.cfg.num_seed_steps // self.cfg.steps_per_env:
                 update_time_start = time.time()
-                rng_key, update_rng_key, sample_key = jax.random.split(rng_key, 3)
                 update_actor = self.step % self.cfg.actor_update_freq == 0
                 update_target = self.step % self.cfg.target_update_freq == 0
                 for _ in range(self.cfg.grad_updates_per_step):
+                    rng_key, update_rng_key, sample_key = jax.random.split(rng_key, 3)
                     batch = self.replay_buffer.sample_random_batch(sample_key, self.cfg.batch_size)
                     batch = TimeStep(**batch)
                     (
@@ -284,7 +296,7 @@ class SAC(BasePolicy):
                 self.logger.log(self.total_env_steps)
                 self.logger.reset()
 
-            if self.step % self.cfg.save_freq == 0 and self.step >= self.cfg.num_seed_steps:
+            if self.step % self.cfg.save_freq == 0 and self.step >= self.cfg.num_seed_steps // self.cfg.steps_per_env:
                 self.save(os.path.join(self.logger.model_path, f"ckpt_{self.total_env_steps}.jx"))
 
     @property
