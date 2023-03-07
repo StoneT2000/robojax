@@ -10,14 +10,7 @@ class ManiSkill2Wrapper(gymnasium.Wrapper):
         super().__init__(env)
         self._action_space = spaces.Box(env.action_space.low, env.action_space.high, env.action_space.shape, env.action_space.dtype)
         self._observation_space = spaces.Box(env.observation_space.low, env.observation_space.high, env.observation_space.shape, env.observation_space.dtype)
-        self._metadata = {
-            "render_modes": ["rgb_array"],
-            "render_fps": 50,
-        }
-    @property
-    def render_mode(self) -> str:
-        """Returns the :attr:`Env` :attr:`render_mode`."""
-        return "rgb_array"
+
     def reset(self,*, seed=None, options=None):
         self.env.seed(seed)
         obs = self.env.reset()

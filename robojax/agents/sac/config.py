@@ -22,7 +22,10 @@ class SACConfig:
     """
     replay_buffer_capacity: int
     """
-    Max number of env interactions stored before the oldest entries begin to be removed
+    Max number of env interactions per parallel env stored before the oldest entries begin to be removed. The actual number of interactions storeable is
+    replay_buffer_capacity * num_envs
+
+    num_seed_steps will fill out (num_seed_steps * steps_per_env) / replay_buffer_capacity fraction of the replay buffer.
     """
 
     batch_size: int

@@ -21,7 +21,7 @@ class EnvMeta:
     act_space: spaces.Space
 
 
-def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optional[int] = 1, seed: Optional[int] = 0, record_video_path: str = None):
+def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optional[int] = 1, seed: Optional[int] = 0, record_video_path: str = None, env_kwargs = dict()):
     """
     Utility function to create a jax/non-jax based environment given an env_id
     """
@@ -59,6 +59,7 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
             from mani_skill2.utils.registration import REGISTERED_ENVS
             from mani_skill2.utils.wrappers import RecordEpisode
             gymnasium.register("LiftCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:LiftCubeEnv")
+            gymnasium.register("PickCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:PickCubeEnv")
             # wrappers.append(lambda x: RecordEpisode(x, output_dir="videos" + str(np.random.randint(0, 1000)), info_on_video=True))
             if env_id in REGISTERED_ENVS:
                 mani_skill2_env = True
@@ -71,9 +72,19 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
         if mani_skill2_env:
             def make_env(env_id, idx, record_video):
                 def _init():
-                    env = gymnasium.make(env_id, disable_env_checker=True, control_mode="pd_ee_delta_pose")
+                    env = gymnasium.make(env_id, disable_env_checker=True, **env_kwargs)
                     if record_video and idx == 0:
                         env = RecordEpisode(env, record_video_path, info_on_video=True)
+                    for wrapper in wrappers:
+                        env = wrapper(env)
+                    return env
+                return _init
+        else:
+            def make_env(env_id, idx, record_video):
+                def _init():
+                    env = gymnasium.make(env_id, disable_env_checker=True, **env_kwargs)
+                    if record_video and idx == 0:
+                        env = RecordVideo(env, record_video_path)
                     for wrapper in wrappers:
                         env = wrapper(env)
                     return env

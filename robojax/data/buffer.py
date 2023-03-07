@@ -62,6 +62,11 @@ class GenericBuffer(BaseBuffer):
     Note that by default everything is stored as a numpy array in this buffer. See JaxBuffer for a version that stores with jax arrays.
 
     config - dict(k->v) where k is buffer name and v[0] is shape, v[1] is numpy dtype, v[2] is data is dict or not. if is_dict, then shape and dtype should be a dict of shapes and dtypes
+
+    Args :
+
+        buffer_size : int
+            The size of the replay buffer for each parallel env. In total this can store at capacity of buffer_size * n_envs interactions.
     """
 
     def __init__(self, buffer_size: int, device="cpu", n_envs: int = 1, config=dict()):
