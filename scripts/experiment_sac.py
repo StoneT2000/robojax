@@ -79,7 +79,18 @@ def main(cfg):
         logger_cfg=dict(cfg=cfg, **cfg.logger),
         cfg=sac_cfg,
     )
-
+    # algo.load_from_path("robojax_exps/maniskill2/PickCube-v0_4_scale_by_10_gamma0.8_2updates/models/best_train_ep_ret_avg_ckpt.jx")
+    # res = algo.evaluate(
+    #     jax.random.PRNGKey(0),
+    #     cfg.sac.num_eval_envs,
+    #     1000,
+    #     eval_loop=algo.eval_loop,
+    #     params=ac.actor,
+    #     apply_fn=algo.ac.act,
+    # )
+    # print(res)
+    # print((res['eval_ep_lens'] < 200).mean())
+    # exit()
     # train our algorithm with an initial seed
     algo.train(
         rng_key=jax.random.PRNGKey(cfg.seed),
@@ -87,5 +98,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac_pickcube_tmu.yml"))
     main(cfg)
