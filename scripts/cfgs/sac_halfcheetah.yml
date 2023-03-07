@@ -5,10 +5,10 @@ algo: sac
 
 # Environment configuration
 env:
-  env_id: None
-  max_episode_steps: 200
+  env_id: "HalfCheetah-v2"
+  max_episode_steps: 1000
 eval_env:
-  max_episode_steps: 200
+  max_episode_steps: 1000
 
 sac:
   num_seed_steps: 10_000
@@ -19,7 +19,7 @@ sac:
   grad_updates_per_step: 1
 
   eval_freq: 20_000
-  eval_steps: 200
+  eval_steps: 1000
   num_eval_envs: 4
 
   log_freq: 1000

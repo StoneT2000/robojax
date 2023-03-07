@@ -8,7 +8,7 @@ from typing import Dict, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 from gymnax.environments import spaces as jax_spaces
 
 

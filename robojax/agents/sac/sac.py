@@ -5,6 +5,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Tuple
 
+from collections import defaultdict
+
 import distrax
 import flax
 import jax
@@ -17,12 +19,13 @@ from robojax.agents.base import BasePolicy
 from robojax.agents.sac import loss
 from robojax.agents.sac.config import SACConfig, TimeStep
 from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
-from robojax.data import buffer
 from robojax.data.buffer import GenericBuffer
-from robojax.data.loop import EnvAction, EnvObs, GymLoop, JaxLoop
+from robojax.data.loop import EnvAction
 from robojax.models import Model
 from robojax.models.model import Params
+from robojax.utils import tools
 
+# TODO: Create a algo state / training state with separaable non-jax component (e.g. replay buffer) for easy saving and continuing runs
 
 class SAC(BasePolicy):
     def __init__(
@@ -41,8 +44,6 @@ class SAC(BasePolicy):
             self.cfg = SACConfig(**cfg)
         else:
             self.cfg = cfg
-
-        assert self.cfg.max_episode_length is not None
 
         self.step = 0
         self.ac: ActorCritic = ac
@@ -64,6 +65,10 @@ class SAC(BasePolicy):
         else:
             buffer_config["env_obs"] = (self.obs_shape, np.float32)
         buffer_config["next_env_obs"] = buffer_config["env_obs"]
+
+        # note that we use GenericBuffer class, which is not backed by jax for storing
+        # interactions due to jax being slow for adding small amounts of data and moving data
+        # off the GPU
         self.replay_buffer = GenericBuffer(
             buffer_size=self.cfg.replay_buffer_capacity,
             n_envs=self.cfg.num_envs,
@@ -90,14 +95,19 @@ class SAC(BasePolicy):
         rng_key, act_rng_key, env_rng_key = jax.random.split(rng_key, 3)
         a = self._sample_action(act_rng_key, actor, env_obs, seed)
         if self.jax_env:
-            next_env_obs, next_env_state, reward, done, info = self.env_step(env_rng_key, env_state, a)
+            next_env_obs, next_env_state, reward, terminated, truncated, info = self.env_step(env_rng_key, env_state, a)
         else:
-            a = np.asarray(a)
-            next_env_obs, reward, done, info = self.env.step(a)
+            a = tools.any_to_numpy(a)            
+            next_env_obs, reward, terminated, truncated, info = self.env.step(a)
             next_env_state = None
-        return a, next_env_obs, next_env_state, reward, done, info
+        return a, next_env_obs, next_env_state, reward, terminated, truncated, info
 
-    def train(self, rng_key: PRNGKey, verbose=1):
+    def train(self, steps: int, rng_key: PRNGKey, verbose=1):
+        """
+        Args :
+            steps : int
+                Number of training steps to perform, where each step consists of interaactions and a policy update.
+        """
         train_start_time = time.time()
         ac = self.ac
         episodes = 0
@@ -108,20 +118,23 @@ class SAC(BasePolicy):
         )
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
         if self.jax_env:
-            env_obs, env_states = self.env_reset(reset_rng_key)
+            # TODO gymnax API in gymnasium style should return obs, states, and infos
+            env_obs, env_states, _ = self.env_reset(reset_rng_key)
         else:
-            env_obs = self.env.reset()
+            env_obs, _ = self.env.reset()
             env_states = None
 
         if verbose:
-            pbar = tqdm(total=self.cfg.num_train_steps, initial=self.step)
-        while self.step < self.cfg.num_train_steps:
+            pbar = tqdm(total=steps, initial=self.step)
+
+        start_step = self.step
+        while self.step < start_step + steps:
             # evaluate the current trained actor periodically
             if (
                 self.eval_loop is not None
                 and self.step % self.cfg.eval_freq == 0
                 and self.step > 0
-                and self.step >= self.cfg.num_seed_steps
+                and self.step >= self.cfg.num_seed_steps // self.cfg.steps_per_env
                 and self.cfg.eval_freq > 0
             ):
                 rng_key, eval_rng_key = jax.random.split(rng_key, 2)
@@ -143,63 +156,80 @@ class SAC(BasePolicy):
                 self.logger.reset()
 
             # perform a rollout (usually single step in all parallel envs)
-            rng_key, env_rng_key = jax.random.split(rng_key, 2)
-            (
-                actions,
-                next_env_obs,
-                next_env_states,
-                rewards,
-                dones,
-                infos,
-            ) = self._env_step(
-                env_rng_key,
-                env_obs,
-                env_states,
-                ac.actor,
-                seed=self.step < self.cfg.num_seed_steps,
-            )
-            dones = np.array(dones)
-            rewards = np.array(rewards)
-            true_next_env_obs = next_env_obs.copy()
-            ep_lens += 1
-            ep_rets += rewards
-            self.step += 1
-
-            masks = ((~dones) | (ep_lens == self.cfg.max_episode_length)).astype(float)
-            if dones.any():
-                self.logger.store(
-                    tag="train",
-                    ep_ret=ep_rets[dones],
-                    ep_len=ep_lens[dones],
-                    append=False,
+            for local_step in range(self.cfg.steps_per_env):
+                rng_key, env_rng_key = jax.random.split(rng_key, 2)
+                (
+                    actions,
+                    next_env_obs,
+                    next_env_states,
+                    rewards,
+                    terminations,
+                    truncations,
+                    infos,
+                ) = self._env_step(
+                    env_rng_key,
+                    env_obs,
+                    env_states,
+                    ac.actor,
+                    seed=self.step < self.cfg.num_seed_steps // self.cfg.steps_per_env,
                 )
-                self.logger.log(self.total_env_steps)
-                self.logger.reset()
-                episodes += dones.sum()
-                ep_lens[dones] = 0.0
-                ep_rets[dones] = 0.0
-                for i, d in enumerate(dones):
-                    if d:
-                        true_next_env_obs[i] = infos[i]["terminal_observation"]
 
-            self.replay_buffer.store(
-                env_obs=env_obs,
-                reward=rewards,
-                action=actions,
-                mask=masks,
-                next_env_obs=true_next_env_obs,
-            )
+                dones = terminations | truncations
+                dones = np.array(dones)
+                rewards = np.array(rewards)
+                # TODO: handle dict observations + is there a more memory efficient way to store o_{t} and o_{t+1} without repeating a lot?
+                true_next_env_obs = next_env_obs.copy()
+                ep_lens += 1
+                ep_rets += rewards
 
-            env_obs = next_env_obs
-            env_states = next_env_states
+                masks = ((~dones) | (truncations)).astype(float)
+                # masks = ((~dones) | (ep_lens == self.cfg.max_episode_length)).astype(float)
+                if dones.any():
+                    # note for continuous task wrapped envs where there is no early done, all envs finish at the same time unless
+                    # they are staggered. So masks is never false.
+                    # if you want to always value bootstrap set masks to false.
+                    self.logger.store(
+                        tag="train",
+                        ep_ret=ep_rets[dones],
+                        ep_len=ep_lens[dones],
+                        append=False,
+                    )
+                    episodes += dones.sum()
+                    ep_lens[dones] = 0.0
+                    ep_rets[dones] = 0.0
+                    stats_dict = defaultdict(list)
+                    for i, d in enumerate(dones):
+                        if d:
+                            true_next_env_obs[i] = infos["final_observation"][i]
+                            final_info = infos['final_info'][i]
+                            if 'stats' in final_info:
+                                for k in final_info['stats']:
+                                    stats_dict[k].append(final_info['stats'][k])
 
+                    self.logger.store(tag="train", append=False, **stats_dict)
+                    self.logger.log(self.total_env_steps)
+                    self.logger.reset()
+
+
+                self.replay_buffer.store(
+                    env_obs=env_obs,
+                    reward=rewards,
+                    action=actions,
+                    mask=masks,
+                    next_env_obs=true_next_env_obs,
+                )
+
+                env_obs = next_env_obs
+                env_states = next_env_states
+
+            self.step += 1
             # update policy
-            if self.step >= self.cfg.num_seed_steps:
+            if self.step >= self.cfg.num_seed_steps // self.cfg.steps_per_env:
                 update_time_start = time.time()
-                rng_key, update_rng_key, sample_key = jax.random.split(rng_key, 3)
                 update_actor = self.step % self.cfg.actor_update_freq == 0
                 update_target = self.step % self.cfg.target_update_freq == 0
                 for _ in range(self.cfg.grad_updates_per_step):
+                    rng_key, update_rng_key, sample_key = jax.random.split(rng_key, 3)
                     batch = self.replay_buffer.sample_random_batch(sample_key, self.cfg.batch_size)
                     batch = TimeStep(**batch)
                     (
@@ -266,7 +296,7 @@ class SAC(BasePolicy):
                 self.logger.log(self.total_env_steps)
                 self.logger.reset()
 
-            if self.step % self.cfg.save_freq == 0 and self.step >= self.cfg.num_seed_steps:
+            if self.step % self.cfg.save_freq == 0 and self.step >= self.cfg.num_seed_steps // self.cfg.steps_per_env:
                 self.save(os.path.join(self.logger.model_path, f"ckpt_{self.total_env_steps}.jx"))
 
     @property
@@ -296,9 +326,11 @@ class SAC(BasePolicy):
             self.cfg.discount,
             self.cfg.backup_entropy,
         )
+        # init dummy values
         new_actor, actor_update_aux = actor, loss.ActorUpdateAux()
         new_temp, temp_update_aux = temp, loss.TempUpdateAux(temp=temp())
         new_target = target_critic
+        
         if update_target:
             new_target = loss.update_target(critic, target_critic, self.cfg.tau)
         if update_actor:

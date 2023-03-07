@@ -1,41 +1,44 @@
 jax_env: False
 
 seed: 0
-algo: sac
+algo: ppo
 
 # Environment configuration
 env:
   env_id: None
-  max_episode_steps: 200
+  max_episode_steps: 100
+  env_kwargs:
+    control_mode: "pd_ee_delta_pose"
 eval_env:
   max_episode_steps: 200
 
-sac:
-  num_seed_steps: 10_000
-  replay_buffer_capacity: 1_000_000
-  batch_size: 256
-  num_envs: 1
-  steps_per_env: 1
-  grad_updates_per_step: 1
+# Algorithm configurations
+ppo:
+  num_envs: 8
+  batch_size: 400
+  update_iters: 120
+  steps_per_epoch: 400
+  gamma: 0.85
+  gae_lambda: 0.95
+  target_kl: 0.05
+  ent_coef: 0
+  reset_env: True
 
-  eval_freq: 20_000
+  eval_freq: 10 
   eval_steps: 200
   num_eval_envs: 4
 
   log_freq: 1000
   save_freq: 100_000
 
-  learnable_temp: True
-  initial_temperature: 1.0
-
-  max_episode_length: 1000
-  
+# Model configs
 model:
   actor_lr: 3e-4
   critic_lr: 3e-4
 
-train: 
-  steps: 1_000_000
+# Training time parameters
+train:
+  epochs: 1000
 
 logger:
   tensorboard: True

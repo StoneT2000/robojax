@@ -24,26 +24,27 @@ class BasePolicy:
         self.jax_env = jax_env
         self.loop: BaseEnvLoop = None
         if jax_env:
+            import gymnax.environments.environment
+            # TODO see when gymnax upgrades to gymnasium
+            self.env: gymnax.environments.environment.Environment = env
             self.env_step: Callable[
                 [PRNGKey, EnvState, EnvAction],
-                Tuple[EnvObs, EnvState, float, bool, Any],
-            ] = env.step
-            self.env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState]] = env.reset
-            import gymnax.environments.environment
-
-            self.env: gymnax.environments.environment.Environment = env
+                Tuple[EnvObs, EnvState, float, bool, bool, Any],
+            ] = self.env.step
+            self.env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState, Any]] = self.env.reset
+            
 
             self.loop = JaxLoop(env_reset=self.env.reset, env_step=self.env.step, num_envs=num_envs)
             self.observation_space = self.env.observation_space()
             self.action_space = self.env.action_space()
         else:
-            import gym
+            import gymnasium
 
-            self.env: gym.Env = env
+            self.env: gymnasium.vector.VectorEnv = env
 
             self.loop = GymLoop(self.env, num_envs=num_envs)
-            self.observation_space = self.env.observation_space
-            self.action_space = self.env.action_space
+            self.observation_space = self.env.single_observation_space
+            self.action_space = self.env.single_action_space
         self.obs_shape = get_obs_shape(self.observation_space)
         self.action_dim = get_action_dim(self.action_space)
 
@@ -61,7 +62,7 @@ class BasePolicy:
 
         # auto generate an experiment name based on the environment name and current time
         if "exp_name" not in logger_cfg:
-            exp_name = f"sac/{round(time.time_ns() / 1000)}"
+            exp_name = f"{round(time.time_ns() / 1000)}"
             if hasattr(env, "name"):
                 exp_name = f"{env.name}/{exp_name}"
             logger_cfg["exp_name"] = exp_name
@@ -125,9 +126,10 @@ class BasePolicy:
             apply_fn=apply_fn,
             steps_per_env=steps_per_env,
         )
+        # TODO use eval_buffer info['stats'] to log custom stats
         eval_ep_lens = np.asarray(eval_buffer["ep_len"])
         eval_ep_rets = np.asarray(eval_buffer["ep_ret"])
-        eval_episode_ends = np.asarray(eval_buffer["done"])
+        eval_episode_ends = np.logical_or(np.asarray(eval_buffer["truncated"]), np.asarray(eval_buffer["terminated"]))
         eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
         eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
         return dict(eval_ep_rets=eval_ep_rets, eval_ep_lens=eval_ep_lens)
