@@ -4,10 +4,11 @@ from typing import Any, Callable, Dict, Tuple
 
 import chex
 import distrax
-import gym
+import gymnasium
 import jax
 import jax.numpy as jnp
 import numpy as np
+import tree
 from flax import struct
 
 from robojax.agents.base import BasePolicy
@@ -49,6 +50,7 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
     advantages = advantages[::-1]
     return jax.lax.stop_gradient(advantages)
 
+# TODO: Create a algo state / training state with separaable non-jax component (e.g. replay buffer) for easy saving and continuing runs
 
 class PPO(BasePolicy):
     def __init__(
@@ -68,14 +70,18 @@ class PPO(BasePolicy):
             self.cfg = cfg
 
         self.step = 0
-        self.last_env_obs_states = None
+        self.last_env_states = None
+        """
+        When cfg.reset_env is False, we keep track of the last env states (obs, state, return, length) so we start the next rollout from there
+        """
         self.ac: ActorCritic = ac
 
         # for jax or gym envs, define a custom rollout callback which collects the data we need for our replay buffer
         if self.jax_env:
             self.loop: JaxLoop
 
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux: StepAux):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, terminated, truncated, info, aux: StepAux):
+                done = terminated | truncated
                 return TimeStep(
                     action=action,
                     env_obs=env_obs,
@@ -91,7 +97,6 @@ class PPO(BasePolicy):
 
             self.loop.rollout_callback = rollout_callback
             self.loop.reset_env = self.cfg.reset_env
-            self.last_env_states = None
             self.collect_buffer = jax.jit(
                 self.collect_buffer,
                 static_argnames=["rollout_steps_per_env", "num_envs", "apply_fn"],
@@ -99,8 +104,9 @@ class PPO(BasePolicy):
         else:
             # we expect env to be a vectorized env now
             self.loop: GymLoop
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, done, info, aux: StepAux):
+            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, terminated, truncated, info, aux: StepAux):
                 batch_size = len(env_obs)
+                done = np.logical_or(terminated, truncated)
                 return dict(
                     action=action,
                     env_obs=env_obs,
@@ -119,7 +125,6 @@ class PPO(BasePolicy):
         self,
         rng_key: PRNGKey,
         epochs: int,
-        train_callback: Callable = None,
         verbose: int = 1,
     ):
         """
@@ -128,7 +133,7 @@ class PPO(BasePolicy):
             epochs : int
                 Number of epochs to train. Each epoch consists of one rollout and one update phase.
 
-                `self.cfg.steps_per_epoch`
+                `self.cfg.steps_per_epoch * self.cfg.num_envs` interactions are sampled in one rollout.
 
         """
 
@@ -154,18 +159,39 @@ class PPO(BasePolicy):
             self.ac.actor = actor
             self.ac.critic = critic
 
-            buffer = aux["buffer"]
+            buffer = aux["buffer"] # (T, num_envs)
             ep_lens = np.asarray(buffer.ep_len)
             ep_rets = np.asarray(buffer.orig_ret)
             ep_rews = np.asarray(buffer.reward)
             episode_ends = np.asarray(buffer.done)
 
-            if train_callback is not None:
-                rng_key, train_callback_rng_key = jax.random.split(rng_key)
-                train_callback(epoch=t, ac=self.ac, rng_key=train_callback_rng_key)
-
+            
+            ### Logging ###
             if self.logger is not None:
-                total_env_steps = (t + 1) * env_steps_per_epoch
+                if (
+                    self.eval_loop is not None
+                    and self.step % self.cfg.eval_freq == 0
+                    and self.step > 0
+                    and self.cfg.eval_freq > 0
+                ):
+                    rng_key, eval_rng_key = jax.random.split(rng_key, 2)
+                    eval_results = self.evaluate(
+                        eval_rng_key,
+                        num_envs=self.cfg.num_eval_envs,
+                        steps_per_env=self.cfg.eval_steps,
+                        eval_loop=self.eval_loop,
+                        params=self.ac.actor,
+                        apply_fn=lambda rng_key, actor, obs: (self.ac.act(rng_key, actor, obs, deterministic=True), {})
+                    )
+                    self.logger.store(
+                        tag="test",
+                        ep_ret=eval_results["eval_ep_rets"],
+                        ep_len=eval_results["eval_ep_lens"],
+                        append=False,
+                    )
+                    self.logger.log(self.total_env_steps)
+                    self.logger.reset()
+                actor_updates = aux["update_aux"]["actor_updates"].item()
                 actor_loss_aux: ActorAux = aux["update_aux"]["actor_loss_aux"]
                 critic_loss_aux: CriticAux = aux["update_aux"]["critic_loss_aux"]
                 total_time = time.time() - train_start_time
@@ -181,12 +207,14 @@ class PPO(BasePolicy):
                     append=False,
                     ep_rew=ep_rews.flatten(),
                     fps=env_steps_per_epoch / aux["rollout_time"],
-                    env_steps=total_env_steps,
-                    entropy=np.asarray(actor_loss_aux.entropy),
-                    actor_loss=np.asarray(actor_loss_aux.actor_loss),
-                    approx_kl=np.asarray(actor_loss_aux.approx_kl),
+                    env_steps=self.total_env_steps,
+                    # note we slice after moving to numpy arrays for slight performance boost
+                    # as slicing jax arrays creates a call to compile a new dynamic_slice
+                    entropy=np.asarray(actor_loss_aux.entropy)[:actor_updates],
+                    actor_loss=np.asarray(actor_loss_aux.actor_loss)[:actor_updates],
+                    approx_kl=np.asarray(actor_loss_aux.approx_kl)[:actor_updates],
                     critic_loss=np.asarray(critic_loss_aux.critic_loss),
-                    actor_updates=aux["update_aux"]["actor_updates"].item(),
+                    actor_updates=actor_updates,
                     critic_updates=aux["update_aux"]["critic_updates"].item(),
                 )
 
@@ -196,12 +224,12 @@ class PPO(BasePolicy):
                     rollout=aux["rollout_time"],
                     update=aux["update_time"],
                     total=total_time,
-                    sps=total_env_steps / total_time,
+                    sps=self.total_env_steps / total_time,
                     epoch=t,
                 )
-                stats = self.logger.log(total_env_steps)
+                stats = self.logger.log(self.total_env_steps)
                 if verbose > 0:
-                    if verbose == 1:
+                    if verbose >= 1:
                         filtered_stat_keys = [
                             "train/ep_len_avg",
                             "train/ep_ret_avg",
@@ -219,6 +247,8 @@ class PPO(BasePolicy):
                         self.logger.pretty_print_table(stats)
                 self.logger.reset()
 
+
+            self.step += 1
     def train_step(
         self,
         rng_key: PRNGKey,
@@ -230,18 +260,17 @@ class PPO(BasePolicy):
         apply_fn: Callable,
         batch_size: int,
     ):
-        self.step += 1
         rng_key, buffer_rng_key = jax.random.split(rng_key)
         rollout_s_time = time.time()
 
-        # TODO can we prevent compilation here where init_env_obs_states=None the first time for reset_env=False?
+        # TODO can we prevent compilation here where init_env_states=None the first time for reset_env=False?
 
         # if we don't reset the environment after each rollout, then we generate environment states if we don't have any yet
         # for non jax envs this just resets the environments
         if not self.cfg.reset_env and self.jax_env:
-            if self.last_env_obs_states is None:
+            if self.last_env_states is None:
                 rng_key, env_reset_rng_key = jax.random.split(rng_key, num_envs)
-                self.last_env_obs_states = self.loop.reset_loop(env_reset_rng_key)
+                self.last_env_states = self.loop.reset_loop(env_reset_rng_key)
         buffer, info = self.collect_buffer(
             rng_key=buffer_rng_key,
             rollout_steps_per_env=rollout_steps_per_env,
@@ -249,11 +278,12 @@ class PPO(BasePolicy):
             actor=actor,
             critic=critic,
             apply_fn=apply_fn,
-            init_env_obs_states=self.last_env_obs_states,
+            init_env_states=self.last_env_states,
         )
+
         if not self.cfg.reset_env:
             info: RolloutAux
-            self.last_env_obs_states = (info.final_env_obs, info.final_env_state)
+            self.last_env_states = (info.final_env_obs, info.final_env_state, info.final_ep_returns, info.final_ep_lengths)
 
         rollout_time = time.time() - rollout_s_time
         update_s_time = time.time()
@@ -268,10 +298,6 @@ class PPO(BasePolicy):
             batch_size=batch_size,
             buffer=buffer,
         )
-
-        # remove entries where we skipped updating actor due to early stopping
-        actor_loss_aux: ActorAux = update_aux["actor_loss_aux"]
-        actor_loss_aux.replace(approx_kl=actor_loss_aux.approx_kl)
 
         update_time = time.time() - update_s_time
         # TODO convert the dict below to a flax.struct.dataclass to improve speed
@@ -317,11 +343,10 @@ class PPO(BasePolicy):
             num_envs=num_envs,
         )
 
-        def update_step_fn(data: Tuple[PRNGKey, Model, Model], unused):
-            rng_key, actor, critic, update_actor, actor_updates, critic_updates = data
+        def update_step_fn(data: Tuple[PRNGKey, Model, Model, bool, int, int, ActorAux], _):
+            rng_key, actor, critic, can_update_actor, actor_updates, critic_updates, prev_actor_loss_aux = data
             rng_key, sample_rng_key = jax.random.split(rng_key)
             batch = TimeStep(**sampler.sample_random_batch(sample_rng_key, batch_size))
-            info_a: ActorAux = None
             info_c = None
             new_actor = actor
             new_critic = critic
@@ -342,13 +367,14 @@ class PPO(BasePolicy):
                 return new_actor, info_a
 
             def skip_update_actor_fn(actor):
-                return actor, ActorAux()
-
-            new_actor, info_a = jax.lax.cond(update_actor, update_actor_fn, skip_update_actor_fn, actor)
-            # TODO if on step 0 update_actor is False, will we need to worry about it turning true later?
-            update_actor = jax.lax.cond(info_a.approx_kl > self.cfg.target_kl, lambda: False, lambda: True)
-            actor_updates += 1 * update_actor
-
+                return actor, prev_actor_loss_aux
+            
+            if update_actor:
+                new_actor, actor_loss_aux = jax.lax.cond(can_update_actor, update_actor_fn, skip_update_actor_fn, actor)
+                actor_updates += 1 * can_update_actor
+                can_update_actor = jax.lax.cond(actor_loss_aux.approx_kl > self.cfg.target_kl * 1.5, lambda: False, lambda: True)
+            else:
+                actor_loss_aux = prev_actor_loss_aux
             if update_critic:
                 grads_c_fn = jax.grad(
                     critic_loss_fn(critic_apply_fn=critic.apply_fn, batch=batch),
@@ -361,14 +387,16 @@ class PPO(BasePolicy):
                 rng_key,
                 new_actor,
                 new_critic,
-                update_actor,
+                can_update_actor,
                 actor_updates,
                 critic_updates,
-            ), dict(actor_loss_aux=info_a, critic_loss_aux=info_c)
+                actor_loss_aux
+            ), dict(actor_loss_aux=actor_loss_aux, critic_loss_aux=info_c)
 
-        update_init = (rng_key, actor, critic, update_actor, 0, 0)
+        update_init = (rng_key, actor, critic, update_actor, 0, 0, ActorAux())
         carry, update_aux = jax.lax.scan(update_step_fn, update_init, (), length=update_iters)
-        _, actor, critic, _, actor_updates, critic_updates = carry
+
+        _, actor, critic, _, actor_updates, critic_updates, _ = carry
 
         return (
             actor,
@@ -384,7 +412,7 @@ class PPO(BasePolicy):
         actor,
         critic,
         apply_fn: Callable,
-        init_env_obs_states=None,
+        init_env_states=None,
     ):
         # buffer collection is not jitted if env is not jittable
 
@@ -396,8 +424,7 @@ class PPO(BasePolicy):
             params=(actor, critic),
             apply_fn=apply_fn,
             steps_per_env=rollout_steps_per_env + 1,  # extra 1 for final value computation
-            max_episode_length=self.cfg.max_episode_length,
-            init_env_obs_states=init_env_obs_states,
+            init_env_states=init_env_states,
         )
         buffer: TimeStep
 
@@ -430,9 +457,11 @@ class PPO(BasePolicy):
             done=buffer.done[:-1],
             ep_len=buffer.ep_len[:-1],
         )
-
         return buffer, aux
-
+    @property
+    def total_env_steps(self):
+        env_steps_per_epoch = self.cfg.num_envs * self.cfg.steps_per_epoch
+        return self.step * env_steps_per_epoch
     def state_dict(self):
         state_dict = dict(ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict())
         return state_dict

@@ -5,20 +5,24 @@ algo: sac
 
 # Environment configuration
 env:
-  env_id: None
-  max_episode_steps: 200
+  env_id: "PickCube-v0"
+  max_episode_steps: 100
+  env_kwargs:
+    control_mode: "pd_ee_delta_pose"
 eval_env:
   max_episode_steps: 200
 
 sac:
-  num_seed_steps: 10_000
+  num_seed_steps: 4_000
   replay_buffer_capacity: 1_000_000
-  batch_size: 256
-  num_envs: 1
+  batch_size: 512
+  num_envs: 4
   steps_per_env: 1
-  grad_updates_per_step: 1
+  grad_updates_per_step: 2
 
-  eval_freq: 20_000
+  discount: 0.8
+
+  eval_freq: 10_000
   eval_steps: 200
   num_eval_envs: 4
 
@@ -27,15 +31,13 @@ sac:
 
   learnable_temp: True
   initial_temperature: 1.0
-
-  max_episode_length: 1000
   
 model:
   actor_lr: 3e-4
   critic_lr: 3e-4
 
 train: 
-  steps: 1_000_000
+  steps: 250_000
 
 logger:
   tensorboard: True
@@ -44,4 +46,4 @@ logger:
   workspace: "robojax_exps"
   project_name: "robojax"
   wandb_cfg:
-    group: "benchmark"
+    group: "maniskill2_benchmark"

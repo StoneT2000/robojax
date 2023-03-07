@@ -31,9 +31,9 @@ def update_critic(
     batch: TimeStep,
     discount: float,
     backup_entropy: bool,
-) -> Tuple[Model, Any]:
+) -> Tuple[Model, CriticUpdateAux]:
     dist = actor(batch.next_env_obs)
-    # next_actions, next_log_probs = dist.sample_and_log_prob(seed=key)
+    # next_actions, next_log_probs = dist.sample_and_log_prob(seed=key) # doing it together is unstable, we opt for the stable alternative below
     next_actions = dist.sample(seed=key)
     next_log_probs = dist.log_prob(next_actions)
     next_q1, next_q2 = target_critic(batch.next_env_obs, next_actions)
@@ -62,7 +62,7 @@ class ActorUpdateAux:
     entropy: Array = None
 
 
-def update_actor(key: PRNGKey, actor: Model, critic: Model, temp: Model, batch: TimeStep) -> Tuple[Model, Any]:
+def update_actor(key: PRNGKey, actor: Model, critic: Model, temp: Model, batch: TimeStep) -> Tuple[Model, ActorUpdateAux]:
     def actor_loss_fn(actor_params) -> Tuple[jnp.ndarray, Any]:
         dist = actor.apply_fn(actor_params, batch.env_obs)
         actions = dist.sample(seed=key)
@@ -78,7 +78,7 @@ def update_actor(key: PRNGKey, actor: Model, critic: Model, temp: Model, batch: 
     return new_actor, aux
 
 
-def update_temp(temp: Model, entropy: float, target_entropy: float) -> Tuple[Model, Any]:
+def update_temp(temp: Model, entropy: float, target_entropy: float) -> Tuple[Model, TempUpdateAux]:
     def temperature_loss_fn(temp_params):
         temperature = temp.apply_fn(temp_params)
         temp_loss = temperature * (entropy - target_entropy).mean()
@@ -92,7 +92,7 @@ def update_temp(temp: Model, entropy: float, target_entropy: float) -> Tuple[Mod
 
 def update_target(critic: Model, target_critic: Model, tau: float) -> Model:
     """
-    update targret_critic with polyak averaging
+    update target_critic with polyak averaging
     """
     new_target_params = jax.tree_map(lambda p, tp: p * tau + tp * (1 - tau), critic.params, target_critic.params)
 

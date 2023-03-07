@@ -27,6 +27,22 @@ The following modules are usually shared between RL algorithms
 
 Everything else is usually kept inside the RL algorithm module e.g. `robojax.agents.ppo` contains the PPO Config, Actor Critic models, loss functions etc. all separate from e.g. `robojax.agents.sac`.
 
+## General Structure of an Algorithm
+
+Each algorithm/agent comes equipped with a env loop and optionally a eval env loop for training and evaluation. We expect environments used already have truncation and auto reset in them.
+
+During training they sample from the loop for some number of steps then update the policy and repeat.
+
+<!-- Async sampling? -->
+
+## What's done at thee wrapper level and what's done at the agent level?
+
+TimeLimits and Truncations - Wrapper
+
+Auto Reset - Wrapper
+
+Vectorization - Env looper
+
 ## Benchmarking
 See https://wandb.ai/stonet2000/robojax?workspace=user-stonet2000 for all benchmarked results on this library
 

@@ -24,7 +24,7 @@ dependencies:
   - isort
 
   # RL related
-  - gym
+  - gymnasium
 
   # Vision
   - opencv

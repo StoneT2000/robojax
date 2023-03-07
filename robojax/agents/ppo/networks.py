@@ -101,7 +101,8 @@ class ActorCritic:
     @partial(jax.jit, static_argnames=["self", "deterministic"])
     def act(self, rng_key: PRNGKey, actor: Actor, obs, deterministic=False):
         if deterministic:
-            return actor(obs)
+            _, a = actor(obs)
+            return a
         dist, _ = actor(obs)
         return dist.sample(seed=rng_key)
 
