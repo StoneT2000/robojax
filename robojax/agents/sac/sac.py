@@ -183,6 +183,8 @@ class SAC(BasePolicy):
             masks = ((~dones) | (truncations)).astype(float)
             # masks = ((~dones) | (ep_lens == self.cfg.max_episode_length)).astype(float)
             if dones.any():
+                # note for continuous task wrapped envs where there is no early done, all envs finish at the same time unless
+                # they are staggered. So masks is never false.
                 self.logger.store(
                     tag="train",
                     ep_ret=ep_rets[dones],

@@ -12,13 +12,15 @@ eval_env:
 sac:
   num_seed_steps: 10_000
   replay_buffer_capacity: 1_000_000
-  batch_size: 256
-  num_envs: 1
+  batch_size: 512
+  num_envs: 4
   steps_per_env: 1
   grad_updates_per_step: 1
 
+  discount: 0.85
+
   eval_freq: 20_000
-  eval_steps: 1000
+  eval_steps: 200
   num_eval_envs: 4
 
   log_freq: 1000
@@ -26,8 +28,6 @@ sac:
 
   learnable_temp: True
   initial_temperature: 1.0
-
-  max_episode_length: 1000
   
 model:
   actor_lr: 3e-4
