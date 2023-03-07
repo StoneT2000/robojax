@@ -16,7 +16,7 @@ eval_env:
 ppo:
   num_envs: 8
   batch_size: 400
-  update_iters: 200
+  update_iters: 120
   steps_per_epoch: 400
   gamma: 0.85
   gae_lambda: 0.95
