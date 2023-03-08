@@ -81,7 +81,7 @@ class PickCubeEnv(StationaryManipulationEnv):
             is_robot_static=is_robot_static,
             success=is_obj_placed and is_robot_static,
         )
-
+    
     def compute_dense_reward(self, info, **kwargs):
         """
         stage_scaler multiplies stage i by (1 + stage_scaler * i)
@@ -109,10 +109,11 @@ class PickCubeEnv(StationaryManipulationEnv):
                 reward += place_reward * (1 + self.reward_config['stage_scaler'] * 1)
 
                 # static reward
-                if self.check_obj_placed():
-                    qvel = self.agent.robot.get_qvel()[:-2]
-                    static_reward = 1 - np.tanh(5 * np.linalg.norm(qvel))
-                    reward += static_reward * (1 + self.reward_config['stage_scaler'] * 2)
+                if self.reward_config['static_reward']:
+                    if self.check_obj_placed():
+                        qvel = self.agent.robot.get_qvel()[:-2]
+                        static_reward = 1 - np.tanh(5 * np.linalg.norm(qvel))
+                        reward += static_reward * (1 + self.reward_config['stage_scaler'] * 2)
         if self.reward_config['scale_reward']:
             reward = reward / 5
         return reward

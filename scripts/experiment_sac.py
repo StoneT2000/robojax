@@ -12,7 +12,7 @@ from robojax.agents.sac.networks import DiagGaussianActor, DoubleCritic
 from robojax.cfg.parse import parse_cfg
 from robojax.utils.make_env import make_env
 from robojax.utils.spaces import get_action_dim
-
+from omegaconf import OmegaConf
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
@@ -28,7 +28,7 @@ def main(cfg):
     video_path = osp.join(cfg.logger.workspace, cfg.logger.exp_name, "videos")
 
     # create envs
-    env, env_meta = make_env(env_id=env_cfg.env_id, jax_env=cfg.jax_env, max_episode_steps=env_cfg.max_episode_steps, num_envs=cfg.sac.num_envs, seed=cfg.seed, env_kwargs=env_cfg.env_kwargs)
+    env, env_meta = make_env(env_id=env_cfg.env_id, jax_env=cfg.jax_env, max_episode_steps=env_cfg.max_episode_steps, num_envs=cfg.sac.num_envs, seed=cfg.seed, env_kwargs=OmegaConf.to_container(env_cfg.env_kwargs))
     eval_env, _ = make_env(
         env_id=eval_env_cfg.env_id,
         jax_env=cfg.jax_env,
@@ -36,7 +36,7 @@ def main(cfg):
         num_envs=cfg.sac.num_eval_envs,
         seed=cfg.seed + 1000,
         record_video_path=video_path,
-        env_kwargs=eval_env_cfg.env_kwargs
+        env_kwargs=OmegaConf.to_container(eval_env_cfg.env_kwargs)
     )
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
 

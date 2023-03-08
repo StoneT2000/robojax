@@ -207,7 +207,7 @@ class SAC(BasePolicy):
                                     stats_dict[k].append(final_info['stats'][k])
 
                     self.logger.store(tag="train", append=False, **stats_dict)
-                    self.logger.log(self.total_env_steps)
+                    self.logger.log(self.total_env_steps + (local_step + 1) * self.cfg.num_envs)
                     self.logger.reset()
 
 
