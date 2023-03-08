@@ -5,10 +5,15 @@ algo: sac
 
 # Environment configuration
 env:
-  env_id: "PickCube-v0"
+  env_id: "PickCube-v1"
   max_episode_steps: 100
   env_kwargs:
     control_mode: "pd_ee_delta_pos"
+    reward_config:
+      static_reward: True
+      stage_scaler: 2
+      grasp_reward: True
+      scale_reward: True
 eval_env:
   max_episode_steps: 200
 
@@ -17,19 +22,19 @@ sac:
   replay_buffer_capacity: 1_000_000
   batch_size: 1024
   num_envs: 4
-  steps_per_env: 16
-  grad_updates_per_step: 32
+  steps_per_env: 1
+  grad_updates_per_step: 2
 
   discount: 0.8
-  tau: 0.01
-  backup_entropy: False
+  # tau: 0.01
+  # backup_entropy: False
 
-  eval_freq: 1000
+  eval_freq: 10_000
   eval_steps: 200
   num_eval_envs: 4
 
-  log_freq: 100
-  save_freq: 1000
+  log_freq: 1000
+  save_freq: 10_00
 
   learnable_temp: True
   initial_temperature: 1.0

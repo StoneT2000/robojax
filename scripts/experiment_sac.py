@@ -60,8 +60,8 @@ def main(cfg):
 
     # create actor and critics models
     act_dims = get_action_dim(env_meta.act_space)
-    actor = DiagGaussianActor(features=[256, 256, 256], act_dims=act_dims, state_dependent_std=True)
-    critic = DoubleCritic(features=[256, 256, 256])
+    actor = DiagGaussianActor(features=[128, 128], act_dims=act_dims, state_dependent_std=True)
+    critic = DoubleCritic(features=[128, 128])
     
     ac = ActorCritic(
         jax.random.PRNGKey(cfg.seed),
@@ -105,5 +105,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac_pickcube_tmu.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac_pickcube_stao.yml"))
     main(cfg)

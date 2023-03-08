@@ -56,10 +56,12 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
         mani_skill2_env = False
         try:
             import mani_skill2.envs
+            import robojax.experimental.envs.pick_cube
             from mani_skill2.utils.registration import REGISTERED_ENVS
             from mani_skill2.utils.wrappers import RecordEpisode
             gymnasium.register("LiftCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:LiftCubeEnv")
-            gymnasium.register("PickCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:PickCubeEnv")
+            # gymnasium.register("PickCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:PickCubeEnv")
+            gymnasium.register("PickCube-v1", "robojax.experimental.envs.pick_cube:PickCubeEnv")
             # wrappers.append(lambda x: RecordEpisode(x, output_dir="videos" + str(np.random.randint(0, 1000)), info_on_video=True))
             if env_id in REGISTERED_ENVS:
                 mani_skill2_env = True
