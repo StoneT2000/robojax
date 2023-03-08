@@ -29,12 +29,12 @@ sac:
   # tau: 0.01
   # backup_entropy: False
 
-  eval_freq: 10_000
+  eval_freq: -1
   eval_steps: 200
-  num_eval_envs: 4
+  num_eval_envs: 0
 
   log_freq: 1000
-  save_freq: 10_00
+  save_freq: 10_000
 
   learnable_temp: True
   initial_temperature: 1.0

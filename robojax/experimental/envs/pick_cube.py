@@ -21,6 +21,14 @@ class PickCubeEnv(StationaryManipulationEnv):
         self.cube_half_size = np.array([0.02] * 3, np.float32)
         super().__init__(*args, **kwargs)
 
+        self.max_reward = 0
+
+        self.staged_reward_weights = [1, 1, 1]
+        for i in range(3):
+            self.staged_reward_weights[i] = (1 + i * self.reward_config["stage_scaler"])
+            self.max_reward += self.staged_reward_weights[i]
+        self.max_reward += 2
+
     def _load_actors(self):
         self._add_ground(render=self.bg_name is None)
         self.obj = self._build_cube(self.cube_half_size)
@@ -89,14 +97,15 @@ class PickCubeEnv(StationaryManipulationEnv):
         max reward is 5 (on success)
         """
         reward = 0.0
+        
 
         if info["success"]:
-            reward += 5
+            reward += self.max_reward
         else:
             tcp_to_obj_pos = self.obj.pose.p - self.tcp.pose.p
             tcp_to_obj_dist = np.linalg.norm(tcp_to_obj_pos)
             reaching_reward = 1 - np.tanh(5 * tcp_to_obj_dist)
-            reward += reaching_reward
+            reward += reaching_reward * self.staged_reward_weights[0]
 
             is_grasped = self.agent.check_grasp(self.obj)
             if self.reward_config['grasp_reward']:
@@ -106,16 +115,16 @@ class PickCubeEnv(StationaryManipulationEnv):
                 
                 obj_to_goal_dist = np.linalg.norm(self.goal_pos - self.obj.pose.p)
                 place_reward = 1 - np.tanh(5 * obj_to_goal_dist)
-                reward += place_reward * (1 + self.reward_config['stage_scaler'] * 1)
+                reward += place_reward * self.staged_reward_weights[1]
 
                 # static reward
                 if self.reward_config['static_reward']:
                     if self.check_obj_placed():
                         qvel = self.agent.robot.get_qvel()[:-2]
                         static_reward = 1 - np.tanh(5 * np.linalg.norm(qvel))
-                        reward += static_reward * (1 + self.reward_config['stage_scaler'] * 2)
+                        reward += static_reward * self.staged_reward_weights[2]
         if self.reward_config['scale_reward']:
-            reward = reward / 5
+            reward = reward / self.max_reward
         return reward
 
     def render(self, mode="human"):
