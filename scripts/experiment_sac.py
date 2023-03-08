@@ -59,6 +59,8 @@ def main(cfg):
 
     # define hyperparameters for SAC
     sac_cfg = SACConfig(**cfg.sac)
+    import dataclasses
+    cfg.sac = dataclasses.asdict(sac_cfg)
 
     # create actor and critics models
     act_dims = get_action_dim(env_meta.act_space)
@@ -87,7 +89,7 @@ def main(cfg):
         logger_cfg=dict(cfg=cfg, **cfg.logger),
         cfg=sac_cfg,
     )
-    # algo.load_from_path("robojax_exps/maniskill2/PickCube-v0_4_scale_by_10_gamma0.8_2updates/models/best_train_ep_ret_avg_ckpt.jx")
+    # algo.load_from_path("robojax_exps/maniskill2_rewardexp/PickCube-v1-5_s0/models/best_train_ep_ret_avg_ckpt.jx")
     # res = algo.evaluate(
     #     jax.random.PRNGKey(0),
     #     cfg.sac.num_eval_envs,
