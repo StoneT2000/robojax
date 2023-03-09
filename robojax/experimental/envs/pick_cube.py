@@ -15,7 +15,7 @@ class PickCubeEnv(StationaryManipulationEnv):
     goal_thresh = 0.025
     min_goal_dist = 0.05
 
-    def __init__(self, *args, obj_init_rot_z=True, reward_config=dict(static_reward=True, stage_scaler=2, grasp_reward=True), **kwargs):
+    def __init__(self, *args, obj_init_rot_z=True, reward_config=dict(static_reward=True, stage_scaler=2, grasp_reward=True, scale_reward=True), **kwargs):
         self.reward_config=reward_config
         self.obj_init_rot_z = obj_init_rot_z
         self.cube_half_size = np.array([0.02] * 3, np.float32)

@@ -62,7 +62,6 @@ class DiagGaussianActor(nn.Module):
 
     tanh_squash_distribution: bool = True
 
-    log_std_scale: float = -0.5
     state_dependent_std: bool = True
     log_std_range: Tuple[float, float] = (-5.0, 2.0)
 

@@ -6,14 +6,14 @@ algo: sac
 # Environment configuration
 env:
   env_id: "PegInsertionSide-v1"
-  max_episode_steps: 200
+  max_episode_steps: 100
   env_kwargs:
     control_mode: "pd_ee_delta_pose"
-    # reward_config:
-    #   static_reward: True
-    #   stage_scaler: 2
-    #   grasp_reward: True
-    #   scale_reward: True
+    reward_config:
+      # static_reward: True
+      # stage_scaler: 2
+      # grasp_reward: True
+      scale_reward: True
 eval_env:
   max_episode_steps: 200
 

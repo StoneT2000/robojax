@@ -15,6 +15,10 @@ from mani_skill2.envs.assembly.base_env import StationaryManipulationEnv
 class PegInsertionSideEnv(StationaryManipulationEnv):
     _clearance = 0.003
 
+    def __init__(self, *args, robot="panda", robot_init_qpos_noise=0.02, reward_config=dict(stage_scaler=2, grasp_reward=True, scale_reward=True), **kwargs):
+        super().__init__(*args, robot=robot, robot_init_qpos_noise=robot_init_qpos_noise, **kwargs)
+        self.reward_config = reward_config
+
     def reset(self, reconfigure=True, **kwargs):
         return super().reset(reconfigure=reconfigure, **kwargs)
 
@@ -194,7 +198,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
 
         defined as component(max_reward)
 
-        rotating(1) + reach(1) + grasp(2) + pre-insertion(3) + insertion reward(5) (max of 12?)
+        rotating(1) + reach(1) + grasp(2) + pre-insertion(3, 3 more for success) + insertion reward(5) (max of 15?)
 
         if rotation not correct, there are massive penalties
 
@@ -202,75 +206,76 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         reward = 0.0
 
         if info["success"]:
-            return 1
-
-        # grasp pose rotation reward
-        grasp_rot_loss = self.grasp_loss()
-        rotated_properly = grasp_rot_loss < 0.2
-        reward += 1 - grasp_rot_loss
-
-        gripper_pos = self.tcp.pose.p
-        tgt_gripper_pose = self.peg.pose
-        offset = sapien.Pose(
-            [-0.06, 0, 0]
-        )  # account for panda gripper width with a bit more leeway
-        tgt_gripper_pose = tgt_gripper_pose.transform(offset)
-        if rotated_properly:
-            # reaching reward
-            gripper_to_peg_dist = np.linalg.norm(gripper_pos - tgt_gripper_pose.p)
-            reaching_reward = 1 - np.tanh(
-                4.0 * np.maximum(gripper_to_peg_dist - 0.015, 0.0)
-            )
-            # reaching_reward = 1 - np.tanh(10.0 * gripper_to_peg_dist)
-            reward += reaching_reward
-
-            # grasp reward
-            is_grasped = self.agent.check_grasp(
-                self.peg, max_angle=20
-            )  # max_angle ensures that the gripper grasps the peg appropriately, not in a strange pose
-            if is_grasped:
-                reward += 2.0
-
-            # pre-insertion award, encouraging both the peg center and the peg head to match the yz coordinates of goal_pose
-            pre_inserted = False
-            if is_grasped:
-                peg_head_wrt_goal = self.goal_pose.inv() * self.peg_head_pose
-                peg_head_wrt_goal_yz_dist = np.linalg.norm(peg_head_wrt_goal.p[1:])
-                peg_wrt_goal = self.goal_pose.inv() * self.peg.pose
-                peg_wrt_goal_yz_dist = np.linalg.norm(peg_wrt_goal.p[1:])
-                if peg_head_wrt_goal_yz_dist < 0.01 and peg_wrt_goal_yz_dist < 0.01:
-                    pre_inserted = True
-                    reward += 3.0
-                pre_insertion_reward = 3 * (
-                    1
-                    - np.tanh(
-                        0.5 * (peg_head_wrt_goal_yz_dist + peg_wrt_goal_yz_dist)
-                        + 4.5
-                        * np.maximum(peg_head_wrt_goal_yz_dist, peg_wrt_goal_yz_dist)
-                    )
-                )
-                reward += pre_insertion_reward
-
-            # insertion reward
-            if is_grasped and pre_inserted:
-                peg_head_wrt_goal_inside_hole = (
-                    self.box_hole_pose.inv() * self.peg_head_pose
-                )
-                insertion_reward = 5 * (
-                    1 - np.tanh(5.0 * np.linalg.norm(peg_head_wrt_goal_inside_hole.p))
-                )
-                reward += insertion_reward
+            reward += 25
         else:
-            reward = reward - 10 * np.maximum(
-                self.peg.pose.p[2] + self.peg_half_size[2] + 0.01 - self.tcp.pose.p[2],
-                0.0,
-            )
-            reward = reward - 10 * np.linalg.norm(
-                tgt_gripper_pose.p[:2] - self.tcp.pose.p[:2]
-            )
+            # grasp pose rotation reward
+            grasp_rot_loss = self.grasp_loss()
+            rotated_properly = grasp_rot_loss < 0.2
+            reward += 1 - grasp_rot_loss
 
-        return reward / 25
+            gripper_pos = self.tcp.pose.p
+            tgt_gripper_pose = self.peg.pose
+            offset = sapien.Pose(
+                [-0.06, 0, 0]
+            )  # account for panda gripper width with a bit more leeway
+            tgt_gripper_pose = tgt_gripper_pose.transform(offset)
+            if rotated_properly:
+                # reaching reward
+                gripper_to_peg_dist = np.linalg.norm(gripper_pos - tgt_gripper_pose.p)
+                reaching_reward = 1 - np.tanh(
+                    4.0 * np.maximum(gripper_to_peg_dist - 0.015, 0.0)
+                )
+                # reaching_reward = 1 - np.tanh(10.0 * gripper_to_peg_dist)
+                reward += reaching_reward
+                # if robot grasped fine but reach isn't perfect, impact future reward too much?
 
+                # grasp reward
+                is_grasped = self.agent.check_grasp(
+                    self.peg, max_angle=20
+                )  # max_angle ensures that the gripper grasps the peg appropriately, not in a strange pose
+                if is_grasped:
+                    reward += 2.0
+
+                # pre-insertion award, encouraging both the peg center and the peg head to match the yz coordinates of goal_pose
+                pre_inserted = False
+                if is_grasped:
+                    peg_head_wrt_goal = self.goal_pose.inv() * self.peg_head_pose
+                    peg_head_wrt_goal_yz_dist = np.linalg.norm(peg_head_wrt_goal.p[1:])
+                    peg_wrt_goal = self.goal_pose.inv() * self.peg.pose
+                    peg_wrt_goal_yz_dist = np.linalg.norm(peg_wrt_goal.p[1:])
+                    if peg_head_wrt_goal_yz_dist < 0.01 and peg_wrt_goal_yz_dist < 0.01:
+                        pre_inserted = True
+                        reward += 3.0
+                    pre_insertion_reward = 3 * (
+                        1
+                        - np.tanh(
+                            0.5 * (peg_head_wrt_goal_yz_dist + peg_wrt_goal_yz_dist)
+                            + 4.5
+                            * np.maximum(peg_head_wrt_goal_yz_dist, peg_wrt_goal_yz_dist)
+                        )
+                    )
+                    reward += pre_insertion_reward
+
+                # insertion reward
+                if is_grasped and pre_inserted:
+                    peg_head_wrt_goal_inside_hole = (
+                        self.box_hole_pose.inv() * self.peg_head_pose
+                    )
+                    insertion_reward = 5 * (
+                        1 - np.tanh(5.0 * np.linalg.norm(peg_head_wrt_goal_inside_hole.p))
+                    )
+                    reward += insertion_reward
+            else:
+                reward = reward - 10 * np.maximum(
+                    self.peg.pose.p[2] + self.peg_half_size[2] + 0.01 - self.tcp.pose.p[2],
+                    0.0,
+                )
+                reward = reward - 10 * np.linalg.norm(
+                    tgt_gripper_pose.p[:2] - self.tcp.pose.p[:2]
+                )
+        if self.reward_config["scale_reward"]:
+            reward /= 25
+        return reward
     def _register_cameras(self):
         cam_cfg = super()._register_cameras()
         cam_cfg.pose = look_at([0, -0.3, 0.2], [0, 0, 0.1])
