@@ -31,7 +31,7 @@ sac:
 
   eval_freq: 200
   eval_steps: 200
-  num_eval_envs: 0
+  num_eval_envs: 4
 
   log_freq: 16
   save_freq: 200

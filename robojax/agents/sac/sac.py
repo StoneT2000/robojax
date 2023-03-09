@@ -187,7 +187,7 @@ class SAC(BasePolicy):
                 if dones.any():
                     # note for continuous task wrapped envs where there is no early done, all envs finish at the same time unless
                     # they are staggered. So masks is never false.
-                    # if you want to always value bootstrap set masks to false.
+                    # if you want to always value bootstrap set masks to true.
                     self.logger.store(
                         tag="train",
                         ep_ret=ep_rets[dones],
