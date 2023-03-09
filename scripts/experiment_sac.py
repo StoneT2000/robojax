@@ -109,5 +109,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac_pickcube_stao.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac_peginsertion_stao.yml"))
     main(cfg)

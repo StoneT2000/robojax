@@ -10,7 +10,7 @@ from gymnasium import spaces
 from gymnasium.vector import AsyncVectorEnv, VectorEnv
 from gymnasium.wrappers import RecordVideo, TimeLimit
 
-from robojax.wrappers.maniskill2 import ContinuousTaskWrapper, ManiSkill2Wrapper
+import robojax.wrappers.maniskill2 as ms2wrappers
 
 
 @dataclass
@@ -57,15 +57,24 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
         try:
             import mani_skill2.envs
             import robojax.experimental.envs.pick_cube
+            import robojax.experimental.envs.peginsertion
             from mani_skill2.utils.registration import REGISTERED_ENVS
             from mani_skill2.utils.wrappers import RecordEpisode
             gymnasium.register("LiftCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:LiftCubeEnv")
             # gymnasium.register("PickCube-v1", "mani_skill2.envs.pick_and_place.pick_cube:PickCubeEnv")
             gymnasium.register("PickCube-v1", "robojax.experimental.envs.pick_cube:PickCubeEnv")
+            gymnasium.register("PegInsertionSide-v1", "robojax.experimental.envs.peginsertion:PegInsertionSideEnv")
             if env_id in REGISTERED_ENVS:
                 mani_skill2_env = True
-                wrappers.append(lambda x : ManiSkill2Wrapper(x))
-                wrappers.append(lambda x : ContinuousTaskWrapper(x))
+                wrappers.append(lambda x : ms2wrappers.ManiSkill2Wrapper(x))
+                wrappers.append(lambda x : ms2wrappers.ContinuousTaskWrapper(x))
+                stats_wrapper = ms2wrappers.PickCubeStats
+                if "PickCube" in env_id:
+                    stats_wrapper = ms2wrappers.PickCubeStats
+                elif "PegInsertionSide" in env_id:
+                    stats_wrapper = ms2wrappers.PegInsertionSideStats
+                wrappers.append(lambda x : stats_wrapper(x))
+                    
         except:
             print("Skipping ManiSkill2 import")
             pass

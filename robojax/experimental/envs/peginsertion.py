@@ -175,14 +175,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
     def evaluate(self, **kwargs) -> dict:
         success, peg_head_pos_at_hole = self.has_peg_inserted()
         return dict(success=success, peg_head_pos_at_hole=peg_head_pos_at_hole)
-
-    def compute_dense_reward(self, info, **kwargs):
-        reward = 0.0
-
-        if info["success"]:
-            return 25.0
-
-        # grasp pose rotation reward
+    def grasp_loss(self):
         tcp_pose_wrt_peg = self.peg.pose.inv() * self.tcp.pose
         tcp_rot_wrt_peg = tcp_pose_wrt_peg.to_transformation_matrix()[:3, :3]
         gt_rot_1 = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
@@ -194,6 +187,25 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
             grasp_rot_loss_fxn(gt_rot_1 - tcp_rot_wrt_peg),
             grasp_rot_loss_fxn(gt_rot_2 - tcp_rot_wrt_peg),
         ) / (np.pi / 2)
+        return grasp_rot_loss
+    def compute_dense_reward(self, info, **kwargs):
+        """
+        Current default ms2 reward function is as follows
+
+        defined as component(max_reward)
+
+        rotating(1) + reach(1) + grasp(2) + pre-insertion(3) + insertion reward(5) (max of 12?)
+
+        if rotation not correct, there are massive penalties
+
+        """
+        reward = 0.0
+
+        if info["success"]:
+            return 1
+
+        # grasp pose rotation reward
+        grasp_rot_loss = self.grasp_loss()
         rotated_properly = grasp_rot_loss < 0.2
         reward += 1 - grasp_rot_loss
 
@@ -257,7 +269,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
                 tgt_gripper_pose.p[:2] - self.tcp.pose.p[:2]
             )
 
-        return reward
+        return reward / 25
 
     def _register_cameras(self):
         cam_cfg = super()._register_cameras()
