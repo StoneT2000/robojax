@@ -83,7 +83,7 @@ class DiagGaussianActor(nn.Module):
         if not self.tanh_squash_distribution:
             a = nn.tanh(a)
         if deterministic:
-            return a
+            return nn.tanh(a)
         if self.state_dependent_std:
             log_std = self.log_std(x)
             
