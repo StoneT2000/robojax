@@ -1,4 +1,4 @@
-# Robojax
+# Robojax (WIP)
 
 A high-performance reinforcement learning library in jax specialized for robotic learning. Works out of the box with jax based environments/engines like [Gymnax](https://github.com/RobertTLange/gymnax) and [Brax](https://github.com/google/brax/tree/main/brax), as well as non-jax based environments/engines like [Mujoco](https://github.com/deepmind/mujoco), [SAPIEN](https://github.com/haosulab/SAPIEN), [MetaWorld](https://github.com/rlworkgroup/metaworld) etc. 
 
