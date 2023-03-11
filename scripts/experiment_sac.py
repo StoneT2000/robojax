@@ -89,7 +89,7 @@ def main(cfg):
         logger_cfg=dict(cfg=cfg, **cfg.logger),
         cfg=sac_cfg,
     )
-    # algo.load_from_path("robojax_exps/maniskill2_rewardexp/PickCube-v1-5_s0/models/best_train_ep_ret_avg_ckpt.jx")
+    # algo.load_from_path("robojax_exps/maniskill2/PegInsertionSide/v4_s0/models/best_train_ep_ret_avg_ckpt.jx")
     # res = algo.evaluate(
     #     jax.random.PRNGKey(0),
     #     cfg.sac.num_eval_envs,

@@ -51,6 +51,7 @@ class BasePolicy:
         # setup evaluation loop
         self.eval_loop: BaseEnvLoop = None
         if eval_env is not None:
+            self.eval_env = eval_env
             if self.jax_env:
                 self.eval_loop = JaxLoop(
                     eval_env.reset,
