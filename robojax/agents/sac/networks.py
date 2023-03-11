@@ -62,9 +62,8 @@ class DiagGaussianActor(nn.Module):
 
     tanh_squash_distribution: bool = True
 
-    log_std_scale: float = -0.5
     state_dependent_std: bool = True
-    log_std_range: Tuple[float, float] = (-10.0, 2.0)
+    log_std_range: Tuple[float, float] = (-5.0, 2.0)
 
     def setup(self) -> None:
         if self.state_dependent_std:
@@ -84,12 +83,16 @@ class DiagGaussianActor(nn.Module):
         if not self.tanh_squash_distribution:
             a = nn.tanh(a)
         if deterministic:
-            return a
+            return nn.tanh(a)
         if self.state_dependent_std:
             log_std = self.log_std(x)
+            
+            # Spinning up implementaation
+            log_std = nn.tanh(log_std)
+            log_std = self.log_std_range[0] + 0.5 * (self.log_std_range[1] - self.log_std_range[0]) * (log_std + 1) 
         else:
             log_std = self.log_std
-        log_std = jnp.clip(log_std, self.log_std_range[0], self.log_std_range[1])
+        # log_std = jnp.clip(log_std, self.log_std_range[0], self.log_std_range[1])
         dist = tfd.MultivariateNormalDiag(a, jnp.exp(log_std))
         # distrax has some numerical imprecision bug atm where calling sample then log_prob can raise NaNs. tfd is more stable at the moment
         # dist = distrax.MultivariateNormalDiag(a, jnp.exp(log_std))

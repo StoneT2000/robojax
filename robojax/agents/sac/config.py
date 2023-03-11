@@ -18,14 +18,14 @@ class SACConfig:
 
     num_seed_steps: int
     """
-    Number of steps to take to seed the initial replay buffer. Will generate num_seed_steps * num_envs * steps_per_env frames of data.
+    Number of steps to take to seed the initial replay buffer. Will generate num_seed_steps * num_envs frames of data.
     """
     replay_buffer_capacity: int
     """
     Max number of env interactions per parallel env stored before the oldest entries begin to be removed. The actual number of interactions storeable is
     replay_buffer_capacity * num_envs
 
-    num_seed_steps will fill out (num_seed_steps * steps_per_env) / replay_buffer_capacity fraction of the replay buffer.
+    num_seed_steps will fill out (num_seed_steps) / replay_buffer_capacity fraction of the replay buffer.
     """
 
     batch_size: int
