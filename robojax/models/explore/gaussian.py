@@ -27,7 +27,5 @@ class Gaussian(nn.Module):
         dist = distrax.MultivariateNormalDiag(a, jnp.exp(self.log_std))
         return dist
 
-    def _log_prob_from_distribution(
-        self, dist: distrax.Distribution, a: Array
-    ) -> Array:
+    def _log_prob_from_distribution(self, dist: distrax.Distribution, a: Array) -> Array:
         return dist.log_prob(a)

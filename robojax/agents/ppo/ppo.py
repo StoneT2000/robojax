@@ -1,15 +1,11 @@
 import time
 from functools import partial
-from typing import Any, Callable, Dict, Tuple
+from typing import Callable, Dict, Tuple
 
 import chex
-import distrax
-import gymnasium
 import jax
 import jax.numpy as jnp
 import numpy as np
-import tree
-from flax import struct
 
 from robojax.agents.base import BasePolicy
 from robojax.agents.ppo.config import PPOConfig, TimeStep
@@ -17,7 +13,7 @@ from robojax.agents.ppo.loss import ActorAux, CriticAux, actor_loss_fn, critic_l
 from robojax.agents.ppo.networks import ActorCritic, StepAux
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
-from robojax.models.model import Model, Params
+from robojax.models.model import Model
 
 PRNGKey = chex.PRNGKey
 
@@ -269,9 +265,7 @@ class PPO(BasePolicy):
                             "test/ep_ret_avg",
                             "test/ep_len_avg",
                         ]
-                        filtered_stats = {
-                            k: stats[k] for k in filtered_stat_keys if k in stats
-                        }
+                        filtered_stats = {k: stats[k] for k in filtered_stat_keys if k in stats}
                         self.logger.pretty_print_table(filtered_stats)
                     else:
                         self.logger.pretty_print_table(stats)
@@ -378,9 +372,7 @@ class PPO(BasePolicy):
             num_envs=num_envs,
         )
 
-        def update_step_fn(
-            data: Tuple[PRNGKey, Model, Model, bool, int, int, ActorAux], _
-        ):
+        def update_step_fn(data: Tuple[PRNGKey, Model, Model, bool, int, int, ActorAux], _):
             (
                 rng_key,
                 actor,
@@ -415,9 +407,7 @@ class PPO(BasePolicy):
                 return actor, prev_actor_loss_aux
 
             if update_actor:
-                new_actor, actor_loss_aux = jax.lax.cond(
-                    can_update_actor, update_actor_fn, skip_update_actor_fn, actor
-                )
+                new_actor, actor_loss_aux = jax.lax.cond(can_update_actor, update_actor_fn, skip_update_actor_fn, actor)
                 actor_updates += 1 * can_update_actor
                 can_update_actor = jax.lax.cond(
                     actor_loss_aux.approx_kl > self.cfg.target_kl * 1.5,
@@ -445,18 +435,14 @@ class PPO(BasePolicy):
             ), dict(actor_loss_aux=actor_loss_aux, critic_loss_aux=info_c)
 
         update_init = (rng_key, actor, critic, update_actor, 0, 0, ActorAux())
-        carry, update_aux = jax.lax.scan(
-            update_step_fn, update_init, (), length=update_iters
-        )
+        carry, update_aux = jax.lax.scan(update_step_fn, update_init, (), length=update_iters)
 
         _, actor, critic, _, actor_updates, critic_updates, _ = carry
 
         return (
             actor,
             critic,
-            dict(
-                **update_aux, actor_updates=actor_updates, critic_updates=critic_updates
-            ),
+            dict(**update_aux, actor_updates=actor_updates, critic_updates=critic_updates),
         )
 
     def collect_buffer(
@@ -478,8 +464,7 @@ class PPO(BasePolicy):
             env_rng_keys,
             params=(actor, critic),
             apply_fn=apply_fn,
-            steps_per_env=rollout_steps_per_env
-            + 1,  # extra 1 for final value computation
+            steps_per_env=rollout_steps_per_env + 1,  # extra 1 for final value computation
             init_env_states=init_env_states,
         )
         buffer: TimeStep
@@ -521,9 +506,7 @@ class PPO(BasePolicy):
         return self.step * env_steps_per_epoch
 
     def state_dict(self):
-        state_dict = dict(
-            ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict()
-        )
+        state_dict = dict(ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict())
         return state_dict
 
     def load(self, data):

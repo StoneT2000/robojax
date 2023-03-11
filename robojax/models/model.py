@@ -63,9 +63,7 @@ class Model:
     def apply_gradients(self, grads):
         updates, updated_opt_state = self.tx.update(grads, self.opt_state, self.params)
         updated_params = optax.apply_updates(self.params, updates)
-        return self.replace(
-            step=self.step + 1, params=updated_params, opt_state=updated_opt_state
-        )
+        return self.replace(step=self.step + 1, params=updated_params, opt_state=updated_opt_state)
 
     def save(self, save_path: str):
         os.makedirs(os.path.dirname(save_path), exist_ok=True)

@@ -2,7 +2,6 @@
 Loss functions for the PPO agent
 """
 
-from functools import partial
 from typing import Callable
 
 import chex
@@ -12,7 +11,7 @@ import jax.numpy as jnp
 from flax import struct
 
 from robojax.agents.ppo.config import TimeStep
-from robojax.models import Model, Params
+from robojax.models import Params
 
 
 @struct.dataclass
@@ -27,9 +26,7 @@ class CriticAux:
     critic_loss: chex.Array = 0.0
 
 
-def actor_loss_fn(
-    clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep
-):
+def actor_loss_fn(clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep):
     def loss_fn(actor_params: Params):
         obs, act, adv, logp_old = batch.env_obs, batch.action, batch.adv, batch.log_p
         # TODO: turn into eval mode here?

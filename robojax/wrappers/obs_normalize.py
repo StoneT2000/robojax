@@ -17,9 +17,7 @@ class RunningMeanStd:
 
     @staticmethod
     def init(shape, dtype):
-        return RunningMeanStd(
-            shape, dtype, jnp.zeros(shape, dtype), jnp.ones(shape, dtype=dtype)
-        )
+        return RunningMeanStd(shape, dtype, jnp.zeros(shape, dtype), jnp.ones(shape, dtype=dtype))
 
     @partial(jax.jit)
     def update(self, batch: chex.Array):
@@ -36,11 +34,7 @@ class RunningMeanStd:
         new_mean = self.mean + delta * batch_count / tot_count
         m_a = self.var * self.count
         m_b = batch_var * batch_count
-        m_2 = (
-            m_a
-            + m_b
-            + jnp.square(delta) * self.count * batch_count / (self.count + batch_count)
-        )
+        m_2 = m_a + m_b + jnp.square(delta) * self.count * batch_count / (self.count + batch_count)
         new_var = m_2 / (self.count + batch_count)
 
         new_count = batch_count + self.count

@@ -2,15 +2,13 @@
 Adapted from SB3
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import partial
-from typing import Any, Dict, List, Optional, Union
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from chex import PRNGKey
-from flax import struct
 
 
 class BaseBuffer(ABC):
@@ -108,9 +106,7 @@ class GenericBuffer(BaseBuffer):
                         dtype=dtype[part_key],
                     )
             else:
-                self.buffers[k] = np.zeros(
-                    (self.buffer_size, self.n_envs) + shape, dtype=dtype
-                )
+                self.buffers[k] = np.zeros((self.buffer_size, self.n_envs) + shape, dtype=dtype)
 
     def store(self, **kwargs):
         """
@@ -152,10 +148,7 @@ class GenericBuffer(BaseBuffer):
     def _prepared_for_sampling(self, batch_size, drop_last_batch=True):
         if self.batch_idx == None:
             return False
-        if (
-            drop_last_batch
-            and self.batch_idx + batch_size > self.buffer_size * self.n_envs
-        ):
+        if drop_last_batch and self.batch_idx + batch_size > self.buffer_size * self.n_envs:
             return False
         if self.batch_idx > self.buffer_size * self.n_envs:
             return False
@@ -181,9 +174,7 @@ class GenericBuffer(BaseBuffer):
         batch_ids = self.batch_inds[self.batch_idx : self.batch_idx + batch_size]
         env_ids = self.batch_env_inds[self.batch_idx : self.batch_idx + batch_size]
         self.batch_idx = self.batch_idx + batch_size
-        return self._get_batch_by_ids(
-            buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
-        )
+        return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
 
     def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
         """
@@ -192,9 +183,7 @@ class GenericBuffer(BaseBuffer):
         batch_ids = np.random.randint(self.size(), size=batch_size)
         env_ids = np.random.randint(self.n_envs, size=batch_size)
         # np.random.randint
-        return self._get_batch_by_ids(
-            buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
-        )
+        return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
 
     # @partial(jax.jit, static_argnames=["self", "batch_size"])
     # def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):

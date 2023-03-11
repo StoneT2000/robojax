@@ -4,7 +4,6 @@ from typing import Optional
 import gymnasium
 import gymnasium.vector
 import jax
-import numpy as np
 from chex import Array
 from gymnasium import spaces
 from gymnasium.vector import AsyncVectorEnv, VectorEnv
@@ -63,20 +62,12 @@ def make_env(
 
         mani_skill2_env = False
         try:
-            import mani_skill2.envs
             from mani_skill2.utils.registration import REGISTERED_ENVS
             from mani_skill2.utils.wrappers import RecordEpisode
 
-            import robojax.experimental.envs.peginsertion
-            import robojax.experimental.envs.pick_cube
-
-            gymnasium.register(
-                "LiftCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:LiftCubeEnv"
-            )
+            gymnasium.register("LiftCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:LiftCubeEnv")
             # gymnasium.register("PickCube-v1", "mani_skill2.envs.pick_and_place.pick_cube:PickCubeEnv")
-            gymnasium.register(
-                "PickCube-v1", "robojax.experimental.envs.pick_cube:PickCubeEnv"
-            )
+            gymnasium.register("PickCube-v1", "robojax.experimental.envs.pick_cube:PickCubeEnv")
             gymnasium.register(
                 "PegInsertionSide-v1",
                 "robojax.experimental.envs.peginsertion:PegInsertionSideEnv",
@@ -94,7 +85,6 @@ def make_env(
 
         except:
             print("Skipping ManiSkill2 import")
-            pass
         wrappers.append(lambda x: TimeLimit(x, max_episode_steps=max_episode_steps))
         if mani_skill2_env:
 
@@ -125,10 +115,7 @@ def make_env(
         # create a vector env parallelized across CPUs with the given timelimit and auto-reset
         # env: VectorEnv = gymnasium.vector.make(env_id, num_envs=num_envs, wrappers=wrappers, disable_env_checker=True)
         env: VectorEnv = AsyncVectorEnv(
-            [
-                make_env(env_id, idx, record_video=record_video_path is not None)
-                for idx in range(num_envs)
-            ]
+            [make_env(env_id, idx, record_video=record_video_path is not None) for idx in range(num_envs)]
         )
         obs_space = env.single_observation_space
         act_space = env.single_action_space

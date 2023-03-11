@@ -21,17 +21,13 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         reward_config=dict(stage_scaler=2, grasp_reward=True, scale_reward=True),
         **kwargs
     ):
-        super().__init__(
-            *args, robot=robot, robot_init_qpos_noise=robot_init_qpos_noise, **kwargs
-        )
+        super().__init__(*args, robot=robot, robot_init_qpos_noise=robot_init_qpos_noise, **kwargs)
         self.reward_config = reward_config
 
     def reset(self, reconfigure=True, **kwargs):
         return super().reset(reconfigure=reconfigure, **kwargs)
 
-    def _build_box_with_hole(
-        self, inner_radius, outer_radius, depth, center=(0, 0), name="box_with_hole"
-    ):
+    def _build_box_with_hole(self, inner_radius, outer_radius, depth, center=(0, 0), name="box_with_hole"):
         builder = self._scene.create_actor_builder()
         thickness = (outer_radius - inner_radius) * 0.5
         # x-axis is hole direction
@@ -102,9 +98,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         # box with hole
         center = 0.5 * (length - radius) * self._episode_rng.uniform(-1, 1, size=2)
         inner_radius, outer_radius, depth = radius + self._clearance, length, length
-        self.box = self._build_box_with_hole(
-            inner_radius, outer_radius, depth, center=center
-        )
+        self.box = self._build_box_with_hole(inner_radius, outer_radius, depth, center=center)
         self.box_hole_offset = Pose(np.hstack([0, center]))
         self.box_hole_radius = inner_radius
 
@@ -128,9 +122,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
                 [0.0, np.pi / 8, 0, -np.pi * 5 / 8, 0, np.pi * 3 / 4, -np.pi / 4, 0.04, 0.04]
             )
             # fmt: on
-            qpos[:-2] += self._episode_rng.normal(
-                0, self.robot_init_qpos_noise, len(qpos) - 2
-            )
+            qpos[:-2] += self._episode_rng.normal(0, self.robot_init_qpos_noise, len(qpos) - 2)
             self.agent.reset(qpos)
             self.agent.robot.set_pose(Pose([-0.615, 0, 0]))
         else:
@@ -152,9 +144,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         self.goal_pos = self.box_hole_pose.p  # goal of peg head inside the hole
         # NOTE(jigu): The goal pose is computed based on specific geometries used in this task.
         # Only consider one side
-        self.goal_pose = (
-            self.box.pose * self.box_hole_offset * self.peg_head_offset.inv()
-        )
+        self.goal_pose = self.box.pose * self.box_hole_offset * self.peg_head_offset.inv()
         # self.peg.set_pose(self.goal_pose)
 
     def _get_obs_extra(self) -> OrderedDict:
@@ -175,12 +165,8 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         peg_head_pos_at_hole = (box_hole_pose.inv() * peg_head_pose).p
         # x-axis is hole direction
         x_flag = -0.015 <= peg_head_pos_at_hole[0]
-        y_flag = (
-            -self.box_hole_radius <= peg_head_pos_at_hole[1] <= self.box_hole_radius
-        )
-        z_flag = (
-            -self.box_hole_radius <= peg_head_pos_at_hole[2] <= self.box_hole_radius
-        )
+        y_flag = -self.box_hole_radius <= peg_head_pos_at_hole[1] <= self.box_hole_radius
+        z_flag = -self.box_hole_radius <= peg_head_pos_at_hole[2] <= self.box_hole_radius
         return (x_flag and y_flag and z_flag), peg_head_pos_at_hole
 
     def evaluate(self, **kwargs) -> dict:
@@ -192,9 +178,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         tcp_rot_wrt_peg = tcp_pose_wrt_peg.to_transformation_matrix()[:3, :3]
         gt_rot_1 = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
         gt_rot_2 = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, -1]])
-        grasp_rot_loss_fxn = lambda A: np.arcsin(
-            np.clip(1 / (2 * np.sqrt(2)) * np.sqrt(np.trace(A.T @ A)), 0, 1)
-        )
+        grasp_rot_loss_fxn = lambda A: np.arcsin(np.clip(1 / (2 * np.sqrt(2)) * np.sqrt(np.trace(A.T @ A)), 0, 1))
         grasp_rot_loss = np.minimum(
             grasp_rot_loss_fxn(gt_rot_1 - tcp_rot_wrt_peg),
             grasp_rot_loss_fxn(gt_rot_2 - tcp_rot_wrt_peg),
@@ -224,16 +208,12 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
 
             gripper_pos = self.tcp.pose.p
             tgt_gripper_pose = self.peg.pose
-            offset = sapien.Pose(
-                [-0.06, 0, 0]
-            )  # account for panda gripper width with a bit more leeway
+            offset = sapien.Pose([-0.06, 0, 0])  # account for panda gripper width with a bit more leeway
             tgt_gripper_pose = tgt_gripper_pose.transform(offset)
             if rotated_properly:
                 # reaching reward
                 gripper_to_peg_dist = np.linalg.norm(gripper_pos - tgt_gripper_pose.p)
-                reaching_reward = 1 - np.tanh(
-                    4.0 * np.maximum(gripper_to_peg_dist - 0.015, 0.0)
-                )
+                reaching_reward = 1 - np.tanh(4.0 * np.maximum(gripper_to_peg_dist - 0.015, 0.0))
                 # reaching_reward = 1 - np.tanh(10.0 * gripper_to_peg_dist)
                 reward += reaching_reward
                 # if robot grasped fine but reach isn't perfect, impact future reward too much?
@@ -259,35 +239,22 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
                         1
                         - np.tanh(
                             0.5 * (peg_head_wrt_goal_yz_dist + peg_wrt_goal_yz_dist)
-                            + 4.5
-                            * np.maximum(
-                                peg_head_wrt_goal_yz_dist, peg_wrt_goal_yz_dist
-                            )
+                            + 4.5 * np.maximum(peg_head_wrt_goal_yz_dist, peg_wrt_goal_yz_dist)
                         )
                     )
                     reward += pre_insertion_reward
 
                 # insertion reward
                 if is_grasped and pre_inserted:
-                    peg_head_wrt_goal_inside_hole = (
-                        self.box_hole_pose.inv() * self.peg_head_pose
-                    )
-                    insertion_reward = 5 * (
-                        1
-                        - np.tanh(5.0 * np.linalg.norm(peg_head_wrt_goal_inside_hole.p))
-                    )
+                    peg_head_wrt_goal_inside_hole = self.box_hole_pose.inv() * self.peg_head_pose
+                    insertion_reward = 5 * (1 - np.tanh(5.0 * np.linalg.norm(peg_head_wrt_goal_inside_hole.p)))
                     reward += insertion_reward
             else:
                 reward = reward - 10 * np.maximum(
-                    self.peg.pose.p[2]
-                    + self.peg_half_size[2]
-                    + 0.01
-                    - self.tcp.pose.p[2],
+                    self.peg.pose.p[2] + self.peg_half_size[2] + 0.01 - self.tcp.pose.p[2],
                     0.0,
                 )
-                reward = reward - 10 * np.linalg.norm(
-                    tgt_gripper_pose.p[:2] - self.tcp.pose.p[:2]
-                )
+                reward = reward - 10 * np.linalg.norm(tgt_gripper_pose.p[:2] - self.tcp.pose.p[:2])
         if self.reward_config["scale_reward"]:
             reward /= 25
         return reward

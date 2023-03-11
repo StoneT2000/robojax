@@ -1,6 +1,4 @@
-import os
 import os.path as osp
-import time
 import warnings
 
 import jax
@@ -75,9 +73,7 @@ def main(cfg):
 
     # create actor and critics models
     act_dims = get_action_dim(env_meta.act_space)
-    actor = DiagGaussianActor(
-        features=[256, 256, 256], act_dims=act_dims, state_dependent_std=True
-    )
+    actor = DiagGaussianActor(features=[256, 256, 256], act_dims=act_dims, state_dependent_std=True)
     critic = DoubleCritic(features=[256, 256, 256])
 
     ac = ActorCritic(
@@ -122,9 +118,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(
-        default_cfg_path=osp.join(
-            osp.dirname(__file__), "cfgs/sac_peginsertion_stao.yml"
-        )
-    )
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac_peginsertion_stao.yml"))
     main(cfg)

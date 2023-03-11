@@ -1,10 +1,7 @@
-import os
 import os.path as osp
 import warnings
 
 import jax
-import jax.numpy as jnp
-import numpy as np
 import optax
 from flax import linen as nn
 
@@ -90,7 +87,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(
-        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_pickcube.yml")
-    )
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_pickcube.yml"))
     main(cfg)

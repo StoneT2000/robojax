@@ -15,9 +15,7 @@ def speed_gymnax_random(env_name, num_env_steps, num_envs, rng, env_kwargs):
         env_params = {"max_steps_in_episode": 1000}
     else:
         env_params = {}
-    manager = RolloutWrapper(
-        None, env_name=env_name, env_params=env_params, env_kwargs=env_kwargs
-    )
+    manager = RolloutWrapper(None, env_name=env_name, env_params=env_params, env_kwargs=env_kwargs)
 
     # Multiple rollouts for same network (different rng, e.g. eval)
     rng, rng_batch = jax.random.split(rng)
@@ -83,9 +81,7 @@ if __name__ == "__main__":
     r_times = []
     for run_id in range(num_runs):
         rng_key, rng_run_key = jax.random.split(rng_key)
-        r_time = speed_gymnax_random(
-            "CartPole-v1", total_env_steps, num_envs, rng_run_key, {}
-        )
+        r_time = speed_gymnax_random("CartPole-v1", total_env_steps, num_envs, rng_run_key, {})
         r_times.append(r_time)
         print(f"Run {run_id + 1} - Env: {env_name} - Done after {r_time}")
     print(f"Avg: {np.mean(r_times)}, StdDev: {np.std(r_times)}")
@@ -94,9 +90,7 @@ if __name__ == "__main__":
     rng_key = jax.random.PRNGKey(0)
     for run_id in range(num_runs):
         rng_key, rng_run_key = jax.random.split(rng_key)
-        r_time = speed_gymnax_rollout_random(
-            "CartPole-v1", total_env_steps, num_envs, rng_run_key, {}
-        )
+        r_time = speed_gymnax_rollout_random("CartPole-v1", total_env_steps, num_envs, rng_run_key, {})
         r_times.append(r_time)
         print(f"Run {run_id + 1} - Env: {env_name} - Done after {r_time}")
     print(f"Avg: {np.mean(r_times)}, StdDev: {np.std(r_times)}")

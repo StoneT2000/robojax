@@ -14,13 +14,8 @@ DEFAULT_PRNG_RESERVE_SIZE = 1
 
 def assert_is_prng_key(key: PRNGKey):
     """Asserts that the given input looks like a `jax.random.PRNGKey`."""
-    type_error = ValueError(
-        "The provided key is not a JAX PRNGKey but a " f"{type(key)}:\n{key}"
-    )
-    if (
-        hasattr(jax.config, "jax_enable_custom_prng")
-        and jax.config.jax_enable_custom_prng
-    ):
+    type_error = ValueError("The provided key is not a JAX PRNGKey but a " f"{type(key)}:\n{key}")
+    if hasattr(jax.config, "jax_enable_custom_prng") and jax.config.jax_enable_custom_prng:
         if not isinstance(key, jax.random.KeyArray):
             raise type_error
     if not hasattr(key, "shape"):

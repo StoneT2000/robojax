@@ -5,7 +5,6 @@ import gymnasium.spaces as spaces
 # try:
 # from robojax.experimental.envs.peginsertion import PegInsertionSideEnv
 import numpy as np
-from gymnasium.core import ActType, Env, ObsType
 
 
 class ManiSkill2Wrapper(gymnasium.Wrapper):
@@ -68,16 +67,8 @@ class PegInsertionSideStats(gymnasium.Wrapper):
 
         peg_head_pos_at_hole = info["peg_head_pos_at_hole"]
         x_flag = -0.015 <= peg_head_pos_at_hole[0]
-        y_flag = (
-            -self.env.box_hole_radius
-            <= peg_head_pos_at_hole[1]
-            <= self.env.box_hole_radius
-        )
-        z_flag = (
-            -self.env.box_hole_radius
-            <= peg_head_pos_at_hole[2]
-            <= self.env.box_hole_radius
-        )
+        y_flag = -self.env.box_hole_radius <= peg_head_pos_at_hole[1] <= self.env.box_hole_radius
+        z_flag = -self.env.box_hole_radius <= peg_head_pos_at_hole[2] <= self.env.box_hole_radius
         peg_goal_x_dist = peg_head_pos_at_hole[0] - (-0.015)
         peg_goal_y_dist = abs(peg_head_pos_at_hole[1]) - self.env.box_hole_radius
         peg_goal_z_dist = abs(peg_head_pos_at_hole[2]) - self.env.box_hole_radius

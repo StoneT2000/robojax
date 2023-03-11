@@ -47,9 +47,7 @@ def update_critic(
     def critic_loss_fn(critic_params) -> Tuple[jnp.ndarray, Any]:
         q1, q2 = critic.apply_fn(critic_params, batch.env_obs, batch.action)
         critic_loss = ((q1 - target_q) ** 2 + (q2 - target_q) ** 2).mean()
-        return critic_loss, CriticUpdateAux(
-            critic_loss=critic_loss, q1=q1.mean(), q2=q2.mean()
-        )
+        return critic_loss, CriticUpdateAux(critic_loss=critic_loss, q1=q1.mean(), q2=q2.mean())
 
     grad_fn = jax.grad(critic_loss_fn, has_aux=True)
     grads, aux = grad_fn(critic.params)
@@ -64,9 +62,7 @@ class ActorUpdateAux:
     entropy: Array = None
 
 
-def update_actor(
-    key: PRNGKey, actor: Model, critic: Model, temp: Model, batch: TimeStep
-) -> Tuple[Model, ActorUpdateAux]:
+def update_actor(key: PRNGKey, actor: Model, critic: Model, temp: Model, batch: TimeStep) -> Tuple[Model, ActorUpdateAux]:
     def actor_loss_fn(actor_params) -> Tuple[jnp.ndarray, Any]:
         dist = actor.apply_fn(actor_params, batch.env_obs)
         actions = dist.sample(seed=key)
@@ -74,9 +70,7 @@ def update_actor(
         q1, q2 = critic(batch.env_obs, actions)
         q = jnp.minimum(q1, q2)
         actor_loss = (log_probs * temp() - q).mean()
-        return actor_loss, ActorUpdateAux(
-            actor_loss=actor_loss, entropy=-log_probs.mean()
-        )
+        return actor_loss, ActorUpdateAux(actor_loss=actor_loss, entropy=-log_probs.mean())
 
     grad_fn = jax.grad(actor_loss_fn, has_aux=True)
     grads, aux = grad_fn(actor.params)
@@ -84,9 +78,7 @@ def update_actor(
     return new_actor, aux
 
 
-def update_temp(
-    temp: Model, entropy: float, target_entropy: float
-) -> Tuple[Model, TempUpdateAux]:
+def update_temp(temp: Model, entropy: float, target_entropy: float) -> Tuple[Model, TempUpdateAux]:
     def temperature_loss_fn(temp_params):
         temperature = temp.apply_fn(temp_params)
         temp_loss = temperature * (entropy - target_entropy).mean()
@@ -102,8 +94,6 @@ def update_target(critic: Model, target_critic: Model, tau: float) -> Model:
     """
     update target_critic with polyak averaging
     """
-    new_target_params = jax.tree_map(
-        lambda p, tp: p * tau + tp * (1 - tau), critic.params, target_critic.params
-    )
+    new_target_params = jax.tree_map(lambda p, tp: p * tau + tp * (1 - tau), critic.params, target_critic.params)
 
     return target_critic.replace(params=new_target_params)

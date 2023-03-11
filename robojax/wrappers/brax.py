@@ -2,17 +2,13 @@
 Wrappers for Brax and Gym env. Code adapted from https://github.com/google/brax/blob/main/brax/envs/wrappers.py
 """
 
-from typing import ClassVar, Dict, Optional
+from typing import ClassVar, Optional
 
-import flax
 import gym
 import jax
 import jax.numpy as jnp
-import numpy as np
-from brax import jumpy as jp
 from brax.envs import env as brax_env
 from chex import PRNGKey
-from gym.vector import utils
 from gymnax.environments import spaces
 
 State = brax_env.State
@@ -25,9 +21,7 @@ class BraxGymWrapper(gym.Env):
     # `_reset` as signs of a deprecated gym Env API.
     _gym_disable_underscore_compat: ClassVar[bool] = True
 
-    def __init__(
-        self, env: brax_env.Env, backend: Optional[str] = None, auto_reset=True
-    ):
+    def __init__(self, env: brax_env.Env, backend: Optional[str] = None, auto_reset=True):
         self._env = env
         self.metadata = {
             "render.modes": ["human", "rgb_array"],
@@ -36,14 +30,10 @@ class BraxGymWrapper(gym.Env):
         self.backend = backend
 
         obs_high = jnp.inf * jnp.ones(self._env.observation_size, dtype="float32")
-        self._observation_space = spaces.Box(
-            -obs_high, obs_high, shape=obs_high.shape, dtype="float32"
-        )
+        self._observation_space = spaces.Box(-obs_high, obs_high, shape=obs_high.shape, dtype="float32")
 
         action_high = jnp.ones(self._env.action_size, dtype="float32")
-        self._action_space = spaces.Box(
-            -action_high, action_high, shape=action_high.shape, dtype="float32"
-        )
+        self._action_space = spaces.Box(-action_high, action_high, shape=action_high.shape, dtype="float32")
 
         def reset(key):
             state = self._env.reset(key)

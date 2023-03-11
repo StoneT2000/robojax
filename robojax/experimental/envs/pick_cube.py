@@ -1,7 +1,6 @@
 from collections import OrderedDict
 
 import numpy as np
-import sapien.core as sapien
 from mani_skill2.envs.pick_and_place.base_env import StationaryManipulationEnv
 from mani_skill2.utils.registration import register_env
 from mani_skill2.utils.sapien_utils import vectorize_pose
@@ -18,9 +17,7 @@ class PickCubeEnv(StationaryManipulationEnv):
         self,
         *args,
         obj_init_rot_z=True,
-        reward_config=dict(
-            static_reward=True, stage_scaler=2, grasp_reward=True, scale_reward=True
-        ),
+        reward_config=dict(static_reward=True, stage_scaler=2, grasp_reward=True, scale_reward=True),
         **kwargs,
     ):
         self.reward_config = reward_config

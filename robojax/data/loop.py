@@ -2,7 +2,6 @@
 Environment Loops
 """
 
-import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from functools import partial
@@ -68,9 +67,7 @@ class GymLoop(BaseEnvLoop):
             rollout function
     """
 
-    def __init__(
-        self, env: gym.Env, num_envs: int = 1, rollout_callback: Callable = None
-    ) -> None:
+    def __init__(self, env: gym.Env, num_envs: int = 1, rollout_callback: Callable = None) -> None:
         self.env = env
         self.num_envs = num_envs
         self.rollout_callback = rollout_callback
@@ -138,9 +135,7 @@ class GymLoop(BaseEnvLoop):
             true_next_observations = next_observations
             if "final_observation" in infos:
                 true_next_observations = next_observations.copy()
-                for idx, (terminated, truncated) in enumerate(
-                    zip(terminations, truncations)
-                ):
+                for idx, (terminated, truncated) in enumerate(zip(terminations, truncations)):
                     final_obs = infos["final_observation"][idx]
                     if final_obs is not None:
                         true_next_observations[idx] = final_obs
@@ -170,9 +165,7 @@ class GymLoop(BaseEnvLoop):
             for k, v in rb.items():
                 data[k].append(v)
             observations = next_observations
-            for idx, (terminated, truncated) in enumerate(
-                zip(terminations, truncations)
-            ):
+            for idx, (terminated, truncated) in enumerate(zip(terminations, truncations)):
                 # if episode is terminated or truncated short,
                 if terminated or truncated:
                     ep_returns[idx] = 0
@@ -336,9 +329,7 @@ class JaxLoop(BaseEnvLoop):
             ), rb
 
         step_init = (rng_key, env_obs, env_state, jnp.zeros((1,)), jnp.zeros((1,)))
-        (_, final_env_obs, final_env_state, _, _), rollout_data = jax.lax.scan(
-            step_fn, step_init, (), steps
-        )
+        (_, final_env_obs, final_env_state, _, _), rollout_data = jax.lax.scan(step_fn, step_init, (), steps)
 
         aux = RolloutAux(final_env_obs=final_env_obs, final_env_state=final_env_state)
         # add batch dimension so it plays nice with vmap in the rollout function

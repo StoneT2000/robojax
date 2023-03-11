@@ -19,13 +19,10 @@ class BufferSampler:
         self.buffer_keys = buffer_keys
 
     @partial(jax.jit, static_argnames=["self", "batch_size", "drop_last_batch"])
-    def sample_batch(
-        self, rng_key: PRNGKey, batch_size: int, drop_last_batch: bool = True
-    ):
+    def sample_batch(self, rng_key: PRNGKey, batch_size: int, drop_last_batch: bool = True):
         """
         Sample a batch of data without replacement
         """
-        pass
 
     @partial(jax.jit, static_argnames=["self", "batch_size"])
     def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
@@ -33,13 +30,9 @@ class BufferSampler:
         Sample a batch of data with replacement
         """
         rng_key, batch_ids_rng_key = jax.random.split(rng_key)
-        batch_ids = jax.random.randint(
-            batch_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.buffer_size
-        )
+        batch_ids = jax.random.randint(batch_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.buffer_size)
         rng_key, env_ids_rng_key = jax.random.split(rng_key)
-        env_ids = jax.random.randint(
-            env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.num_envs
-        )
+        env_ids = jax.random.randint(env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.num_envs)
 
         return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
 

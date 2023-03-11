@@ -1,17 +1,14 @@
 import os
 import time
 from collections import defaultdict
-from dis import disco
 from functools import partial
-from pathlib import Path
-from typing import Any, Callable, Tuple
+from typing import Callable
 
 import distrax
 import flax
 import jax
-import jax.numpy as jnp
 import numpy as np
-from chex import Array, PRNGKey
+from chex import PRNGKey
 from tqdm import tqdm
 
 from robojax.agents.base import BasePolicy
@@ -21,7 +18,6 @@ from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
 from robojax.data.buffer import GenericBuffer
 from robojax.data.loop import EnvAction
 from robojax.models import Model
-from robojax.models.model import Params
 from robojax.utils import tools
 
 # TODO: Create a algo state / training state with separaable non-jax component (e.g. replay buffer) for easy saving and continuing runs
@@ -91,9 +87,7 @@ class SAC(BasePolicy):
             a = dist.sample(seed=rng_key)
         return a
 
-    def _env_step(
-        self, rng_key: PRNGKey, env_obs, env_state, actor: DiagGaussianActor, seed=False
-    ):
+    def _env_step(self, rng_key: PRNGKey, env_obs, env_state, actor: DiagGaussianActor, seed=False):
         rng_key, act_rng_key, env_rng_key = jax.random.split(rng_key, 3)
         a = self._sample_action(act_rng_key, actor, env_obs, seed)
         if self.jax_env:
@@ -167,15 +161,7 @@ class SAC(BasePolicy):
             # perform a rollout (usually single step in all parallel envs)
             for local_step in range(self.cfg.steps_per_env):
                 rng_key, env_rng_key = jax.random.split(rng_key, 2)
-                (
-                    actions,
-                    next_env_obs,
-                    next_env_states,
-                    rewards,
-                    terminations,
-                    truncations,
-                    infos,
-                ) = self._env_step(
+                (actions, next_env_obs, next_env_states, rewards, terminations, truncations, infos,) = self._env_step(
                     env_rng_key,
                     env_obs,
                     env_states,
@@ -216,9 +202,7 @@ class SAC(BasePolicy):
                                     stats_dict[k].append(final_info["stats"][k])
 
                     self.logger.store(tag="train", append=False, **stats_dict)
-                    self.logger.log(
-                        self.total_env_steps + (local_step + 1) * self.cfg.num_envs
-                    )
+                    self.logger.log(self.total_env_steps + (local_step + 1) * self.cfg.num_envs)
                     self.logger.reset()
 
                 self.replay_buffer.store(
@@ -240,17 +224,9 @@ class SAC(BasePolicy):
                 update_target = self.step % self.cfg.target_update_freq == 0
                 for _ in range(self.cfg.grad_updates_per_step):
                     rng_key, update_rng_key, sample_key = jax.random.split(rng_key, 3)
-                    batch = self.replay_buffer.sample_random_batch(
-                        sample_key, self.cfg.batch_size
-                    )
+                    batch = self.replay_buffer.sample_random_batch(sample_key, self.cfg.batch_size)
                     batch = TimeStep(**batch)
-                    (
-                        new_actor,
-                        new_critic,
-                        new_target_critic,
-                        new_temp,
-                        aux,
-                    ) = self.update_parameters(
+                    (new_actor, new_critic, new_target_critic, new_temp, aux,) = self.update_parameters(
                         update_rng_key,
                         ac.actor,
                         ac.critic,
@@ -308,15 +284,8 @@ class SAC(BasePolicy):
                 self.logger.log(self.total_env_steps)
                 self.logger.reset()
 
-            if (
-                self.step % self.cfg.save_freq == 0
-                and self.step >= self.cfg.num_seed_steps // self.cfg.steps_per_env
-            ):
-                self.save(
-                    os.path.join(
-                        self.logger.model_path, f"ckpt_{self.total_env_steps}.jx"
-                    )
-                )
+            if self.step % self.cfg.save_freq == 0 and self.step >= self.cfg.num_seed_steps // self.cfg.steps_per_env:
+                self.save(os.path.join(self.logger.model_path, f"ckpt_{self.total_env_steps}.jx"))
 
     @property
     def total_env_steps(self):
@@ -354,13 +323,9 @@ class SAC(BasePolicy):
             new_target = loss.update_target(critic, target_critic, self.cfg.tau)
         if update_actor:
             rng_key, actor_update_rng_key = jax.random.split(rng_key, 2)
-            new_actor, actor_update_aux = loss.update_actor(
-                actor_update_rng_key, actor, critic, temp, batch
-            )
+            new_actor, actor_update_aux = loss.update_actor(actor_update_rng_key, actor, critic, temp, batch)
             if self.cfg.learnable_temp:
-                new_temp, temp_update_aux = loss.update_temp(
-                    temp, actor_update_aux.entropy, self.cfg.target_entropy
-                )
+                new_temp, temp_update_aux = loss.update_temp(temp, actor_update_aux.entropy, self.cfg.target_entropy)
         return (
             new_actor,
             new_critic,
@@ -375,9 +340,7 @@ class SAC(BasePolicy):
 
     def state_dict(self):
         # TODO add option to save buffer?
-        state_dict = dict(
-            ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict()
-        )
+        state_dict = dict(ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict())
         return state_dict
 
     def save(self, save_path: str):
