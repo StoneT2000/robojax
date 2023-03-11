@@ -2,21 +2,28 @@ from collections import OrderedDict
 
 import numpy as np
 import sapien.core as sapien
+from mani_skill2.envs.pick_and_place.base_env import StationaryManipulationEnv
+from mani_skill2.utils.registration import register_env
+from mani_skill2.utils.sapien_utils import vectorize_pose
 from sapien.core import Pose
 from transforms3d.euler import euler2quat
 
-from mani_skill2.utils.registration import register_env
-from mani_skill2.utils.sapien_utils import vectorize_pose
-
-from mani_skill2.envs.pick_and_place.base_env import StationaryManipulationEnv
 
 @register_env("PickCube-v1", max_episode_steps=200)
 class PickCubeEnv(StationaryManipulationEnv):
     goal_thresh = 0.025
     min_goal_dist = 0.05
 
-    def __init__(self, *args, obj_init_rot_z=True, reward_config=dict(static_reward=True, stage_scaler=2, grasp_reward=True, scale_reward=True), **kwargs):
-        self.reward_config=reward_config
+    def __init__(
+        self,
+        *args,
+        obj_init_rot_z=True,
+        reward_config=dict(
+            static_reward=True, stage_scaler=2, grasp_reward=True, scale_reward=True
+        ),
+        **kwargs,
+    ):
+        self.reward_config = reward_config
         self.obj_init_rot_z = obj_init_rot_z
         self.cube_half_size = np.array([0.02] * 3, np.float32)
         super().__init__(*args, **kwargs)
@@ -25,7 +32,7 @@ class PickCubeEnv(StationaryManipulationEnv):
 
         self.staged_reward_weights = [1, 1, 1]
         for i in range(3):
-            self.staged_reward_weights[i] = (1 + i * self.reward_config["stage_scaler"])
+            self.staged_reward_weights[i] = 1 + i * self.reward_config["stage_scaler"]
             self.max_reward += self.staged_reward_weights[i]
         self.max_reward += 2
 
@@ -89,15 +96,14 @@ class PickCubeEnv(StationaryManipulationEnv):
             is_robot_static=is_robot_static,
             success=is_obj_placed and is_robot_static,
         )
-    
+
     def compute_dense_reward(self, info, **kwargs):
         """
         stage_scaler multiplies stage i by (1 + stage_scaler * i)
-        
+
         max reward is 5 (on success)
         """
         reward = 0.0
-        
 
         if info["success"]:
             reward += self.max_reward
@@ -108,22 +114,21 @@ class PickCubeEnv(StationaryManipulationEnv):
             reward += reaching_reward * self.staged_reward_weights[0]
 
             is_grasped = self.agent.check_grasp(self.obj)
-            if self.reward_config['grasp_reward']:
+            if self.reward_config["grasp_reward"]:
                 reward += 1 if is_grasped else 0.0
 
             if is_grasped:
-                
                 obj_to_goal_dist = np.linalg.norm(self.goal_pos - self.obj.pose.p)
                 place_reward = 1 - np.tanh(5 * obj_to_goal_dist)
                 reward += place_reward * self.staged_reward_weights[1]
 
                 # static reward
-                if self.reward_config['static_reward']:
+                if self.reward_config["static_reward"]:
                     if self.check_obj_placed():
                         qvel = self.agent.robot.get_qvel()[:-2]
                         static_reward = 1 - np.tanh(5 * np.linalg.norm(qvel))
                         reward += static_reward * self.staged_reward_weights[2]
-        if self.reward_config['scale_reward']:
+        if self.reward_config["scale_reward"]:
             reward = reward / self.max_reward
         return reward
 

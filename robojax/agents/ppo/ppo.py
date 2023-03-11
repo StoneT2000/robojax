@@ -50,7 +50,9 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
     advantages = advantages[::-1]
     return jax.lax.stop_gradient(advantages)
 
+
 # TODO: Create a algo state / training state with separaable non-jax component (e.g. replay buffer) for easy saving and continuing runs
+
 
 class PPO(BasePolicy):
     def __init__(
@@ -80,7 +82,18 @@ class PPO(BasePolicy):
         if self.jax_env:
             self.loop: JaxLoop
 
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, terminated, truncated, info, aux: StepAux):
+            def rollout_callback(
+                action,
+                env_obs,
+                reward,
+                ep_ret,
+                ep_len,
+                next_env_obs,
+                terminated,
+                truncated,
+                info,
+                aux: StepAux,
+            ):
                 done = terminated | truncated
                 return TimeStep(
                     action=action,
@@ -104,7 +117,19 @@ class PPO(BasePolicy):
         else:
             # we expect env to be a vectorized env now
             self.loop: GymLoop
-            def rollout_callback(action, env_obs, reward, ep_ret, ep_len, next_env_obs, terminated, truncated, info, aux: StepAux):
+
+            def rollout_callback(
+                action,
+                env_obs,
+                reward,
+                ep_ret,
+                ep_len,
+                next_env_obs,
+                terminated,
+                truncated,
+                info,
+                aux: StepAux,
+            ):
                 batch_size = len(env_obs)
                 done = np.logical_or(terminated, truncated)
                 return dict(
@@ -138,6 +163,7 @@ class PPO(BasePolicy):
         """
 
         train_start_time = time.time()
+
         def apply_fn(rng_key, params, obs):
             actor, critic = params
             res = self.ac.step(rng_key, actor, critic, obs)
@@ -159,13 +185,12 @@ class PPO(BasePolicy):
             self.ac.actor = actor
             self.ac.critic = critic
 
-            buffer = aux["buffer"] # (T, num_envs)
+            buffer = aux["buffer"]  # (T, num_envs)
             ep_lens = np.asarray(buffer.ep_len)
             ep_rets = np.asarray(buffer.orig_ret)
             ep_rews = np.asarray(buffer.reward)
             episode_ends = np.asarray(buffer.done)
 
-            
             ### Logging ###
             if self.logger is not None:
                 if (
@@ -181,7 +206,10 @@ class PPO(BasePolicy):
                         steps_per_env=self.cfg.eval_steps,
                         eval_loop=self.eval_loop,
                         params=self.ac.actor,
-                        apply_fn=lambda rng_key, actor, obs: (self.ac.act(rng_key, actor, obs, deterministic=True), {})
+                        apply_fn=lambda rng_key, actor, obs: (
+                            self.ac.act(rng_key, actor, obs, deterministic=True),
+                            {},
+                        ),
                     )
                     self.logger.store(
                         tag="test",
@@ -241,14 +269,16 @@ class PPO(BasePolicy):
                             "test/ep_ret_avg",
                             "test/ep_len_avg",
                         ]
-                        filtered_stats = {k: stats[k] for k in filtered_stat_keys if k in stats}
+                        filtered_stats = {
+                            k: stats[k] for k in filtered_stat_keys if k in stats
+                        }
                         self.logger.pretty_print_table(filtered_stats)
                     else:
                         self.logger.pretty_print_table(stats)
                 self.logger.reset()
 
-
             self.step += 1
+
     def train_step(
         self,
         rng_key: PRNGKey,
@@ -283,7 +313,12 @@ class PPO(BasePolicy):
 
         if not self.cfg.reset_env:
             info: RolloutAux
-            self.last_env_states = (info.final_env_obs, info.final_env_state, info.final_ep_returns, info.final_ep_lengths)
+            self.last_env_states = (
+                info.final_env_obs,
+                info.final_env_state,
+                info.final_ep_returns,
+                info.final_ep_lengths,
+            )
 
         rollout_time = time.time() - rollout_s_time
         update_s_time = time.time()
@@ -343,8 +378,18 @@ class PPO(BasePolicy):
             num_envs=num_envs,
         )
 
-        def update_step_fn(data: Tuple[PRNGKey, Model, Model, bool, int, int, ActorAux], _):
-            rng_key, actor, critic, can_update_actor, actor_updates, critic_updates, prev_actor_loss_aux = data
+        def update_step_fn(
+            data: Tuple[PRNGKey, Model, Model, bool, int, int, ActorAux], _
+        ):
+            (
+                rng_key,
+                actor,
+                critic,
+                can_update_actor,
+                actor_updates,
+                critic_updates,
+                prev_actor_loss_aux,
+            ) = data
             rng_key, sample_rng_key = jax.random.split(rng_key)
             batch = TimeStep(**sampler.sample_random_batch(sample_rng_key, batch_size))
             info_c = None
@@ -368,11 +413,17 @@ class PPO(BasePolicy):
 
             def skip_update_actor_fn(actor):
                 return actor, prev_actor_loss_aux
-            
+
             if update_actor:
-                new_actor, actor_loss_aux = jax.lax.cond(can_update_actor, update_actor_fn, skip_update_actor_fn, actor)
+                new_actor, actor_loss_aux = jax.lax.cond(
+                    can_update_actor, update_actor_fn, skip_update_actor_fn, actor
+                )
                 actor_updates += 1 * can_update_actor
-                can_update_actor = jax.lax.cond(actor_loss_aux.approx_kl > self.cfg.target_kl * 1.5, lambda: False, lambda: True)
+                can_update_actor = jax.lax.cond(
+                    actor_loss_aux.approx_kl > self.cfg.target_kl * 1.5,
+                    lambda: False,
+                    lambda: True,
+                )
             else:
                 actor_loss_aux = prev_actor_loss_aux
             if update_critic:
@@ -390,18 +441,22 @@ class PPO(BasePolicy):
                 can_update_actor,
                 actor_updates,
                 critic_updates,
-                actor_loss_aux
+                actor_loss_aux,
             ), dict(actor_loss_aux=actor_loss_aux, critic_loss_aux=info_c)
 
         update_init = (rng_key, actor, critic, update_actor, 0, 0, ActorAux())
-        carry, update_aux = jax.lax.scan(update_step_fn, update_init, (), length=update_iters)
+        carry, update_aux = jax.lax.scan(
+            update_step_fn, update_init, (), length=update_iters
+        )
 
         _, actor, critic, _, actor_updates, critic_updates, _ = carry
 
         return (
             actor,
             critic,
-            dict(**update_aux, actor_updates=actor_updates, critic_updates=critic_updates),
+            dict(
+                **update_aux, actor_updates=actor_updates, critic_updates=critic_updates
+            ),
         )
 
     def collect_buffer(
@@ -423,7 +478,8 @@ class PPO(BasePolicy):
             env_rng_keys,
             params=(actor, critic),
             apply_fn=apply_fn,
-            steps_per_env=rollout_steps_per_env + 1,  # extra 1 for final value computation
+            steps_per_env=rollout_steps_per_env
+            + 1,  # extra 1 for final value computation
             init_env_states=init_env_states,
         )
         buffer: TimeStep
@@ -458,12 +514,16 @@ class PPO(BasePolicy):
             ep_len=buffer.ep_len[:-1],
         )
         return buffer, aux
+
     @property
     def total_env_steps(self):
         env_steps_per_epoch = self.cfg.num_envs * self.cfg.steps_per_epoch
         return self.step * env_steps_per_epoch
+
     def state_dict(self):
-        state_dict = dict(ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict())
+        state_dict = dict(
+            ac=self.ac.state_dict(), step=self.step, logger=self.logger.state_dict()
+        )
         return state_dict
 
     def load(self, data):
@@ -471,4 +531,3 @@ class PPO(BasePolicy):
         self.step = data["step"]
         self.logger.load(data["logger"])
         return self
-

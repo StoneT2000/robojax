@@ -14,6 +14,7 @@ class PPOConfig:
     """
     Configuration dataclass for PPO
     """
+
     update_iters: int
     """
     This defines the max number of gradient updates that are performed after every rollout.
@@ -55,7 +56,6 @@ class PPOConfig:
     be a more diverse collection of behaviors at different time points in the environment.
     """
 
-
     eval_freq: Optional[int] = 10
     """
     Every eval_freq training steps (composed of rollout and update) an evaluation is performed
@@ -77,6 +77,7 @@ class PPOConfig:
     """
     Every save_freq training steps the current training state is saved.
     """
+
 
 @struct.dataclass
 class TimeStep:

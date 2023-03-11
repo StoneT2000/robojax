@@ -21,7 +21,6 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def main(cfg):
-
     # Setup the experiment parameters
     env_cfg = cfg.env
     cfg.eval_env = {**env_cfg, **cfg.eval_env}
@@ -29,14 +28,20 @@ def main(cfg):
 
     video_path = osp.join(cfg.logger.workspace, cfg.logger.exp_name, "videos")
 
-    env, env_meta = make_env(env_id=env_cfg.env_id, jax_env=cfg.jax_env, max_episode_steps=env_cfg.max_episode_steps, num_envs=cfg.ppo.num_envs, seed=cfg.seed)
+    env, env_meta = make_env(
+        env_id=env_cfg.env_id,
+        jax_env=cfg.jax_env,
+        max_episode_steps=env_cfg.max_episode_steps,
+        num_envs=cfg.ppo.num_envs,
+        seed=cfg.seed,
+    )
     eval_env, _ = make_env(
         env_id=eval_env_cfg.env_id,
         jax_env=cfg.jax_env,
         max_episode_steps=eval_env_cfg.max_episode_steps,
         num_envs=cfg.ppo.num_eval_envs,
         seed=cfg.seed + 1000,
-        record_video_path=video_path
+        record_video_path=video_path,
     )
 
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
@@ -47,7 +52,7 @@ def main(cfg):
     # explorer=explore.Categorical()
     explorer = explore.Gaussian(act_dims=act_dims, log_std_scale=-0.5)
 
-    # 64,64 for cartpole comparison 
+    # 64,64 for cartpole comparison
     # actor = MLP([64, 64, act_dims], output_activation=None)
     # critic = MLP([64, 64, 1], output_activation=None)
     actor = MLP([256, 256, act_dims], output_activation=nn.tanh, final_ortho_scale=0.01)
@@ -80,14 +85,12 @@ def main(cfg):
     # model_path = "robojax_exps/LiftCube-v0_test5/models/best_train_ep_ret_avg_ckpt.jx"
     # algo.load_from_path(model_path)
 
-    algo.train(
-        rng_key=jax.random.PRNGKey(cfg.seed),
-        epochs=cfg.train.epochs,
-        verbose=1
-    )
+    algo.train(rng_key=jax.random.PRNGKey(cfg.seed), epochs=cfg.train.epochs, verbose=1)
     ac.save(model_path)
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_pickcube.yml"))
+    cfg = parse_cfg(
+        default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_pickcube.yml")
+    )
     main(cfg)

@@ -18,7 +18,7 @@ class SACConfig:
 
     num_seed_steps: int
     """
-    Number of steps to take to seed the initial replay buffer. Will generate num_seed_steps * num_envs frames of data.
+    Number of steps to take to seed the initial replay buffer. Will generate num_seed_steps of frames of data.
     """
     replay_buffer_capacity: int
     """
@@ -48,7 +48,7 @@ class SACConfig:
     """
     Number of gradient updates for each training step.
     """
-    
+
     tau: Optional[float] = 0.005
     discount: Optional[float] = 0.99
     backup_entropy: Optional[bool] = True
@@ -73,7 +73,6 @@ class SACConfig:
     """
     Frequency at which to update the target network
     """
-
 
     eval_freq: Optional[int] = 5000
     """

@@ -14,7 +14,14 @@ from robojax.utils.spaces import get_action_dim, get_obs_shape
 
 
 class BasePolicy:
-    def __init__(self, jax_env: bool, env=None, eval_env=None, num_envs: int = 1, logger_cfg: Any = dict()) -> None:
+    def __init__(
+        self,
+        jax_env: bool,
+        env=None,
+        eval_env=None,
+        num_envs: int = 1,
+        logger_cfg: Any = dict(),
+    ) -> None:
         """
         Base class for a policy
 
@@ -25,16 +32,20 @@ class BasePolicy:
         self.loop: BaseEnvLoop = None
         if jax_env:
             import gymnax.environments.environment
+
             # TODO see when gymnax upgrades to gymnasium
             self.env: gymnax.environments.environment.Environment = env
             self.env_step: Callable[
                 [PRNGKey, EnvState, EnvAction],
                 Tuple[EnvObs, EnvState, float, bool, bool, Any],
             ] = self.env.step
-            self.env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState, Any]] = self.env.reset
-            
+            self.env_reset: Callable[
+                [PRNGKey], Tuple[EnvObs, EnvState, Any]
+            ] = self.env.reset
 
-            self.loop = JaxLoop(env_reset=self.env.reset, env_step=self.env.step, num_envs=num_envs)
+            self.loop = JaxLoop(
+                env_reset=self.env.reset, env_step=self.env.step, num_envs=num_envs
+            )
             self.observation_space = self.env.observation_space()
             self.action_space = self.env.action_space()
         else:
@@ -130,7 +141,9 @@ class BasePolicy:
         # TODO use eval_buffer info['stats'] to log custom stats
         eval_ep_lens = np.asarray(eval_buffer["ep_len"])
         eval_ep_rets = np.asarray(eval_buffer["ep_ret"])
-        eval_episode_ends = np.logical_or(np.asarray(eval_buffer["truncated"]), np.asarray(eval_buffer["terminated"]))
+        eval_episode_ends = np.logical_or(
+            np.asarray(eval_buffer["truncated"]), np.asarray(eval_buffer["terminated"])
+        )
         eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
         eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
         return dict(eval_ep_rets=eval_ep_rets, eval_ep_lens=eval_ep_lens)

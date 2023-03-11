@@ -2,21 +2,28 @@ from collections import OrderedDict
 
 import numpy as np
 import sapien.core as sapien
-from sapien.core import Pose
-from transforms3d.euler import euler2quat
-
+from mani_skill2.envs.assembly.base_env import StationaryManipulationEnv
 from mani_skill2.utils.registration import register_env
 from mani_skill2.utils.sapien_utils import hex2rgba, look_at, vectorize_pose
-
-from mani_skill2.envs.assembly.base_env import StationaryManipulationEnv
+from sapien.core import Pose
+from transforms3d.euler import euler2quat
 
 
 @register_env("PegInsertionSide-v1", max_episode_steps=200)
 class PegInsertionSideEnv(StationaryManipulationEnv):
     _clearance = 0.003
 
-    def __init__(self, *args, robot="panda", robot_init_qpos_noise=0.02, reward_config=dict(stage_scaler=2, grasp_reward=True, scale_reward=True), **kwargs):
-        super().__init__(*args, robot=robot, robot_init_qpos_noise=robot_init_qpos_noise, **kwargs)
+    def __init__(
+        self,
+        *args,
+        robot="panda",
+        robot_init_qpos_noise=0.02,
+        reward_config=dict(stage_scaler=2, grasp_reward=True, scale_reward=True),
+        **kwargs
+    ):
+        super().__init__(
+            *args, robot=robot, robot_init_qpos_noise=robot_init_qpos_noise, **kwargs
+        )
         self.reward_config = reward_config
 
     def reset(self, reconfigure=True, **kwargs):
@@ -49,7 +56,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         mat.roughness = 0.5
         mat.specular = 0.5
 
-        for (half_size, pose) in zip(half_sizes, poses):
+        for half_size, pose in zip(half_sizes, poses):
             builder.add_box_collision(pose, half_size)
             builder.add_box_visual(pose, half_size, material=mat)
         return builder.build_static(name)
@@ -179,6 +186,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
     def evaluate(self, **kwargs) -> dict:
         success, peg_head_pos_at_hole = self.has_peg_inserted()
         return dict(success=success, peg_head_pos_at_hole=peg_head_pos_at_hole)
+
     def grasp_loss(self):
         tcp_pose_wrt_peg = self.peg.pose.inv() * self.tcp.pose
         tcp_rot_wrt_peg = tcp_pose_wrt_peg.to_transformation_matrix()[:3, :3]
@@ -192,6 +200,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
             grasp_rot_loss_fxn(gt_rot_2 - tcp_rot_wrt_peg),
         ) / (np.pi / 2)
         return grasp_rot_loss
+
     def compute_dense_reward(self, info, **kwargs):
         """
         Current default ms2 reward function is as follows
@@ -251,7 +260,9 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
                         - np.tanh(
                             0.5 * (peg_head_wrt_goal_yz_dist + peg_wrt_goal_yz_dist)
                             + 4.5
-                            * np.maximum(peg_head_wrt_goal_yz_dist, peg_wrt_goal_yz_dist)
+                            * np.maximum(
+                                peg_head_wrt_goal_yz_dist, peg_wrt_goal_yz_dist
+                            )
                         )
                     )
                     reward += pre_insertion_reward
@@ -262,12 +273,16 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
                         self.box_hole_pose.inv() * self.peg_head_pose
                     )
                     insertion_reward = 5 * (
-                        1 - np.tanh(5.0 * np.linalg.norm(peg_head_wrt_goal_inside_hole.p))
+                        1
+                        - np.tanh(5.0 * np.linalg.norm(peg_head_wrt_goal_inside_hole.p))
                     )
                     reward += insertion_reward
             else:
                 reward = reward - 10 * np.maximum(
-                    self.peg.pose.p[2] + self.peg_half_size[2] + 0.01 - self.tcp.pose.p[2],
+                    self.peg.pose.p[2]
+                    + self.peg_half_size[2]
+                    + 0.01
+                    - self.tcp.pose.p[2],
                     0.0,
                 )
                 reward = reward - 10 * np.linalg.norm(
@@ -276,6 +291,7 @@ class PegInsertionSideEnv(StationaryManipulationEnv):
         if self.reward_config["scale_reward"]:
             reward /= 25
         return reward
+
     def _register_cameras(self):
         cam_cfg = super()._register_cameras()
         cam_cfg.pose = look_at([0, -0.3, 0.2], [0, 0, 0.1])

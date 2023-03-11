@@ -21,7 +21,15 @@ class EnvMeta:
     act_space: spaces.Space
 
 
-def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optional[int] = 1, seed: Optional[int] = 0, record_video_path: str = None, env_kwargs = dict()):
+def make_env(
+    env_id: str,
+    jax_env: bool,
+    max_episode_steps: int,
+    num_envs: Optional[int] = 1,
+    seed: Optional[int] = 0,
+    record_video_path: str = None,
+    env_kwargs=dict(),
+):
     """
     Utility function to create a jax/non-jax based environment given an env_id
     """
@@ -52,34 +60,44 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
         act_space = env.action_space()
     else:
         wrappers = []
-        
+
         mani_skill2_env = False
         try:
             import mani_skill2.envs
-            import robojax.experimental.envs.pick_cube
-            import robojax.experimental.envs.peginsertion
             from mani_skill2.utils.registration import REGISTERED_ENVS
             from mani_skill2.utils.wrappers import RecordEpisode
-            gymnasium.register("LiftCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:LiftCubeEnv")
+
+            import robojax.experimental.envs.peginsertion
+            import robojax.experimental.envs.pick_cube
+
+            gymnasium.register(
+                "LiftCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:LiftCubeEnv"
+            )
             # gymnasium.register("PickCube-v1", "mani_skill2.envs.pick_and_place.pick_cube:PickCubeEnv")
-            gymnasium.register("PickCube-v1", "robojax.experimental.envs.pick_cube:PickCubeEnv")
-            gymnasium.register("PegInsertionSide-v1", "robojax.experimental.envs.peginsertion:PegInsertionSideEnv")
+            gymnasium.register(
+                "PickCube-v1", "robojax.experimental.envs.pick_cube:PickCubeEnv"
+            )
+            gymnasium.register(
+                "PegInsertionSide-v1",
+                "robojax.experimental.envs.peginsertion:PegInsertionSideEnv",
+            )
             if env_id in REGISTERED_ENVS:
                 mani_skill2_env = True
-                wrappers.append(lambda x : ms2wrappers.ManiSkill2Wrapper(x))
-                wrappers.append(lambda x : ms2wrappers.ContinuousTaskWrapper(x))
+                wrappers.append(lambda x: ms2wrappers.ManiSkill2Wrapper(x))
+                wrappers.append(lambda x: ms2wrappers.ContinuousTaskWrapper(x))
                 stats_wrapper = ms2wrappers.PickCubeStats
                 if "PickCube" in env_id:
                     stats_wrapper = ms2wrappers.PickCubeStats
                 elif "PegInsertionSide" in env_id:
                     stats_wrapper = ms2wrappers.PegInsertionSideStats
-                wrappers.append(lambda x : stats_wrapper(x))
-                    
+                wrappers.append(lambda x: stats_wrapper(x))
+
         except:
             print("Skipping ManiSkill2 import")
             pass
-        wrappers.append(lambda x : TimeLimit(x, max_episode_steps=max_episode_steps))
+        wrappers.append(lambda x: TimeLimit(x, max_episode_steps=max_episode_steps))
         if mani_skill2_env:
+
             def make_env(env_id, idx, record_video):
                 def _init():
                     env = gymnasium.make(env_id, disable_env_checker=True, **env_kwargs)
@@ -88,8 +106,11 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
                     for wrapper in wrappers:
                         env = wrapper(env)
                     return env
+
                 return _init
+
         else:
+
             def make_env(env_id, idx, record_video):
                 def _init():
                     env = gymnasium.make(env_id, disable_env_checker=True, **env_kwargs)
@@ -98,10 +119,17 @@ def make_env(env_id: str, jax_env: bool, max_episode_steps: int, num_envs: Optio
                     for wrapper in wrappers:
                         env = wrapper(env)
                     return env
+
                 return _init
+
         # create a vector env parallelized across CPUs with the given timelimit and auto-reset
         # env: VectorEnv = gymnasium.vector.make(env_id, num_envs=num_envs, wrappers=wrappers, disable_env_checker=True)
-        env: VectorEnv = AsyncVectorEnv([make_env(env_id, idx, record_video=record_video_path is not None) for idx in range(num_envs)])
+        env: VectorEnv = AsyncVectorEnv(
+            [
+                make_env(env_id, idx, record_video=record_video_path is not None)
+                for idx in range(num_envs)
+            ]
+        )
         obs_space = env.single_observation_space
         act_space = env.single_action_space
         env.reset(seed=seed)
