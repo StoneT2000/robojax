@@ -11,7 +11,6 @@ If you use robojax in your work, please cite this repository as so:
 ```
 @misc{robojax,
   author = {Tao, Stone},
-  doi = {10.5281/zenodo.7720711},
   month = {3},
   title = {{Robojax: Jax based Reinforcement Learning Algorithms and Tools}},
   url = {https://github.com/StoneT2000/robojax},
