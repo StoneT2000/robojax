@@ -6,6 +6,19 @@ A high-performance reinforcement learning library in jax specialized for robotic
 
 How is it specialized? It includes popular algorithms often used in robotic learning research like PPO and SAC, as well as eventually supporting architectures and workflows often used for visual / 3D RL like transformers, point nets, etc. It further will include more robotics specific approaches such as [Transporter Networks (Zeng et al., 2020)](https://transporternets.github.io/).
 
+If you use robojax in your work, please cite this repository as so:
+
+```
+@misc{robojax,
+  author = {Tao, Stone},
+  doi = {10.5281/zenodo.7720711},
+  month = {3},
+  title = {{Robojax: Jax based Reinforcement Learning Algorithms and Tools}},
+  url = {https://github.com/StoneT2000/robojax},
+  year = {2023}
+}
+```
+
 ## Setup
 
 It's highly recommended to use conda. Otherwise you can try and install all the packages yourself (at your own risk of not getting reproducible results)
