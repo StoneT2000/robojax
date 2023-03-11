@@ -3,7 +3,6 @@ Configurations and utility classes
 """
 
 import dataclasses
-from optparse import Option
 from typing import Optional
 
 import chex
@@ -22,10 +21,7 @@ class SACConfig:
     """
     replay_buffer_capacity: int
     """
-    Max number of env interactions per parallel env stored before the oldest entries begin to be removed. The actual number of interactions storeable is
-    replay_buffer_capacity * num_envs
-
-    num_seed_steps will fill out (num_seed_steps) / replay_buffer_capacity fraction of the replay buffer.
+    Max number of env interactions per parallel env stored before the oldest entries begin to be removed. The actual number of interactions storeable is replay_buffer_capacity * num_envs num_seed_steps will fill out (num_seed_steps) / replay_buffer_capacity fraction of the replay buffer.
     """
 
     batch_size: int
