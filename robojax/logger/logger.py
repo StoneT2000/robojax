@@ -243,20 +243,22 @@ class Logger:
         for tag in self.data.keys():
             data_dict = self.data[tag]
             for k, v in data_dict.items():
+                key_vals = dict()
                 if isinstance(v, list) or isinstance(v, np.ndarray):
-                    vals = np.array(v)
-                    vals_sum, n = vals.sum(), len(vals)
-                    avg = vals_sum / n
-                    sum_sq = np.sum((vals - avg) ** 2)
-                    std = np.sqrt(sum_sq / n)
-                    minv = np.min(vals)
-                    maxv = np.max(vals)
-                    key_vals = {
-                        f"{tag}/{k}_avg": avg,
-                        f"{tag}/{k}_std": std,
-                        f"{tag}/{k}_min": minv,
-                        f"{tag}/{k}_max": maxv,
-                    }
+                    if len(v) > 0:
+                        vals = np.array(v)
+                        vals_sum, n = vals.sum(), len(vals)
+                        avg = vals_sum / n
+                        sum_sq = np.sum((vals - avg) ** 2)
+                        std = np.sqrt(sum_sq / n)
+                        minv = np.min(vals)
+                        maxv = np.max(vals)
+                        key_vals = {
+                            f"{tag}/{k}_avg": avg,
+                            f"{tag}/{k}_std": std,
+                            f"{tag}/{k}_min": minv,
+                            f"{tag}/{k}_max": maxv,
+                        }
                 else:
                     key_vals = {f"{tag}/{k}": v}
                 for name, scalar in key_vals.items():

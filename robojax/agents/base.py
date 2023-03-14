@@ -81,13 +81,6 @@ class BasePolicy:
             logger_cfg["save_fn"] = self.save
         self.logger = Logger(**logger_cfg)
 
-    @property
-    def total_env_steps(self):
-        """
-        Total number of environment steps run so far
-        """
-        raise NotImplementedError()
-
     def state_dict(self):
         """
         Returns a state dict of this object
