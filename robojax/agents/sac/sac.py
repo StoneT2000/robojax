@@ -18,7 +18,6 @@ from robojax.agents.sac.config import SACConfig, TimeStep
 from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
 from robojax.data.buffer import GenericBuffer
 from robojax.data.loop import EnvAction
-from robojax.models import Model
 from robojax.utils import tools
 
 
@@ -43,6 +42,26 @@ class TrainStepMetrics:
     time: Any
 
 
+@struct.dataclass
+class SACTrainState:
+    # model states
+    ac: ActorCritic
+
+    # env states
+    env_obs: Array
+    env_states: Array
+    ep_lens: Array
+    ep_rets: Array
+    dones: Array
+
+    # rng
+    rng_key: PRNGKey
+
+    # monitoring
+    total_env_steps: int
+    training_steps: int
+
+
 class SAC(BasePolicy):
     def __init__(
         self,
@@ -61,9 +80,18 @@ class SAC(BasePolicy):
         else:
             self.cfg = cfg
 
-        self.total_env_steps = 0
-        self.training_steps = 0
-        self.ac: ActorCritic = ac
+        self.state: SACTrainState = SACTrainState(
+            ac=ac,
+            env_obs=None,
+            env_states=None,
+            ep_lens=None,
+            ep_rets=None,
+            dones=None,
+            total_env_steps=0,
+            training_steps=0,
+            rng_key=None,
+        )
+
         if seed_sampler is None:
             seed_sampler = lambda rng_key: self.env.action_space().sample(rng_key)
             # TODO add a nice error message if this guessed sampler doesn't work
@@ -84,7 +112,7 @@ class SAC(BasePolicy):
         buffer_config["next_env_obs"] = buffer_config["env_obs"]
 
         # note that we use GenericBuffer class, which is not backed by jax for storing
-        # interactions due to jax being slow for adding small amounts of data and moving data
+        # interactions due to relative slow overhead for adding small amounts of data and moving data
         # off the GPU
         self.replay_buffer = GenericBuffer(
             buffer_size=self.cfg.replay_buffer_capacity,
@@ -126,55 +154,63 @@ class SAC(BasePolicy):
             next_env_state = None
         return a, next_env_obs, next_env_state, reward, terminated, truncated, info
 
-    def train(self, steps: int, rng_key: PRNGKey, verbose=1):
+    def train(self, rng_key: PRNGKey, steps: int, verbose=1):
         """
         Args :
+            rng_key: PRNGKey,
+                Random key to seed the training with. It is only used if train() was never called before
             steps : int
                 Number of training steps to perform, where each step consists of interaactions and a policy update.
         """
         train_start_time = time.time()
-        ac = self.ac
 
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
-        if self.jax_env:
-            env_obs, env_states, _ = self.env_reset(reset_rng_key)
-        else:
-            env_obs, _ = self.env.reset()
-            env_states = None
 
-        ep_lens, ep_rets, dones = (
-            np.zeros(self.cfg.num_envs),
-            np.zeros(self.cfg.num_envs),
-            np.zeros(self.cfg.num_envs),
-        )
-        train_step_env_state = TrainStepEnvState(
-            ep_lens=ep_lens,
-            ep_rets=ep_rets,
-            dones=dones,
-            env_obs=env_obs,
-            env_states=env_states,
-            total_env_steps=self.total_env_steps,
-            training_steps=self.training_steps,
-        )
+        # if env_obs is None, then this is the first time calling train and we prepare the environment
+        if self.state.env_obs is None:
+            if self.jax_env:
+                env_obs, env_states, _ = self.env_reset(reset_rng_key)
+            else:
+                env_obs, _ = self.env.reset()
+                env_states = None
 
-        start_step = self.total_env_steps
+            ep_lens, ep_rets, dones = (
+                np.zeros(self.cfg.num_envs),
+                np.zeros(self.cfg.num_envs),
+                np.zeros(self.cfg.num_envs),
+            )
+            self.state = self.state.replace(
+                ep_lens=ep_lens, ep_rets=ep_rets, dones=dones, env_obs=env_obs, env_states=env_states, rng_key=rng_key
+            )
+
+        # train_step_env_state = TrainStepEnvState(
+        #     ep_lens=ep_lens,
+        #     ep_rets=ep_rets,
+        #     dones=dones,
+        #     env_obs=env_obs,
+        #     env_states=env_states,
+        #     total_env_steps=self.total_env_steps,
+        #     training_steps=self.training_steps,
+        # )
+
+        start_step = self.state.total_env_steps
         if verbose:
-            pbar = tqdm(total=steps + self.total_env_steps, initial=start_step)
+            pbar = tqdm(total=steps + self.state.total_env_steps, initial=start_step)
 
         env_rollout_size = self.cfg.steps_per_env * self.cfg.num_envs
 
-        while self.total_env_steps < steps:
+        while self.state.total_env_steps < steps:
             rng_key, train_rng_key = jax.random.split(rng_key, 2)
-            train_step_env_state, train_step_metrics = self.train_step(train_rng_key, train_step_env_state)
+            self.state, train_step_metrics = self.train_step(train_rng_key, self.state)
             # TODO: once we have a TrainState we don't need this
-            self.total_env_steps = train_step_env_state.total_env_steps
-            self.training_steps = train_step_env_state.training_steps
+            # self.total_env_steps = self.state.total_env_steps
+            # self.training_steps = self.state.training_steps
 
             # evaluate the current trained actor periodically
             if (
                 self.eval_loop is not None
-                and tools.reached_freq(self.total_env_steps, self.cfg.eval_freq, step_size=env_rollout_size)
-                and self.total_env_steps > self.cfg.num_seed_steps
+                and tools.reached_freq(self.state.total_env_steps, self.cfg.eval_freq, step_size=env_rollout_size)
+                and self.state.total_env_steps > self.cfg.num_seed_steps
             ):
                 rng_key, eval_rng_key = jax.random.split(rng_key, 2)
                 eval_results = self.evaluate(
@@ -182,8 +218,8 @@ class SAC(BasePolicy):
                     num_envs=self.cfg.num_eval_envs,
                     steps_per_env=self.cfg.eval_steps,
                     eval_loop=self.eval_loop,
-                    params=ac.actor,
-                    apply_fn=ac.act,
+                    params=self.state.ac.actor,
+                    apply_fn=self.state.ac.act,
                 )
                 self.logger.store(
                     tag="test",
@@ -191,7 +227,7 @@ class SAC(BasePolicy):
                     ep_len=eval_results["eval_ep_lens"],
                     append=False,
                 )
-                self.logger.log(self.total_env_steps)
+                self.logger.log(self.state.total_env_steps)
                 self.logger.reset()
 
             # log training metrics
@@ -204,24 +240,22 @@ class SAC(BasePolicy):
 
             # log time information
             total_time = time.time() - train_start_time
-            if tools.reached_freq(self.total_env_steps, self.cfg.log_freq):
+            if tools.reached_freq(self.state.total_env_steps, self.cfg.log_freq):
                 self.logger.store(
                     tag="time",
                     append=False,
                     total=total_time,
-                    SPS=self.total_env_steps / total_time,
-                    total_env_steps=self.total_env_steps,
+                    SPS=self.state.total_env_steps / total_time,
+                    total_env_steps=self.state.total_env_steps,
                 )
-            self.logger.log(self.total_env_steps)
+            self.logger.log(self.state.total_env_steps)
             self.logger.reset()
 
             # save checkpoints
-            if tools.reached_freq(self.total_env_steps, self.cfg.save_freq):
-                self.save(os.path.join(self.logger.model_path, f"ckpt_{self.total_env_steps}.jx"))
+            if tools.reached_freq(self.state.total_env_steps, self.cfg.save_freq):
+                self.save(os.path.join(self.logger.model_path, f"ckpt_{self.state.total_env_steps}.jx"))
 
-    def train_step(
-        self, rng_key: PRNGKey, train_step_env_state: TrainStepEnvState
-    ) -> Tuple[TrainStepEnvState, TrainStepMetrics]:
+    def train_step(self, rng_key: PRNGKey, state: SACTrainState) -> Tuple[SACTrainState, TrainStepMetrics]:
         """
         Perform a single training step
 
@@ -230,14 +264,16 @@ class SAC(BasePolicy):
 
         TODO: If a jax-env is used, this step is jitted
         """
-        ac = self.ac
+        # ac = self.ac
 
-        env_obs = train_step_env_state.env_obs
-        env_states = train_step_env_state.env_states
-        ep_lens = train_step_env_state.ep_lens
-        ep_rets = train_step_env_state.ep_rets
-        total_env_steps = train_step_env_state.total_env_steps
-        training_steps = train_step_env_state.training_steps
+        ac = state.ac
+
+        env_obs = state.env_obs
+        env_states = state.env_states
+        ep_lens = state.ep_lens
+        ep_rets = state.ep_rets
+        total_env_steps = state.total_env_steps
+        training_steps = state.training_steps
 
         train_custom_stats = defaultdict(list)
         train_metrics = dict()
@@ -246,6 +282,7 @@ class SAC(BasePolicy):
         time_metrics = dict()
 
         # perform a rollout
+        # TODO make this buffer collection jittable
         rollout_time_start = time.time()
         for _ in range(self.cfg.steps_per_env):
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
@@ -297,7 +334,7 @@ class SAC(BasePolicy):
         time_metrics["rollout_time"] = rollout_time
 
         # update policy
-        if self.total_env_steps >= self.cfg.num_seed_steps:
+        if self.state.total_env_steps >= self.cfg.num_seed_steps:
             update_time_start = time.time()
             update_actor = training_steps % self.cfg.actor_update_freq == 0
             update_target = training_steps % self.cfg.target_update_freq == 0
@@ -305,20 +342,13 @@ class SAC(BasePolicy):
                 rng_key, update_rng_key, sample_key = jax.random.split(rng_key, 3)
                 batch = self.replay_buffer.sample_random_batch(sample_key, self.cfg.batch_size)
                 batch = TimeStep(**batch)
-                (new_actor, new_critic, new_target_critic, new_temp, aux,) = self.update_parameters(
+                ac, aux = self.update_parameters(
                     update_rng_key,
-                    ac.actor,
-                    ac.critic,
-                    ac.target_critic,
-                    ac.temp,
+                    ac,
                     batch,
                     update_actor,
                     update_target,
                 )
-                ac.actor = new_actor
-                ac.critic = new_critic
-                ac.target_critic = new_target_critic
-                ac.temp = new_temp
             update_time = time.time() - update_time_start
             critic_update_aux: loss.CriticUpdateAux = aux["critic_update_aux"]
             actor_update_aux: loss.ActorUpdateAux = aux["actor_update_aux"]
@@ -335,7 +365,8 @@ class SAC(BasePolicy):
                     train_metrics["temp_loss"] = float(temp_update_aux.temp_loss)
             time_metrics["update_time"] = update_time
 
-        train_step_env_state = train_step_env_state.replace(
+        state = state.replace(
+            ac=ac,
             ep_lens=ep_lens,
             ep_rets=ep_rets,
             env_obs=env_obs,
@@ -345,27 +376,22 @@ class SAC(BasePolicy):
             dones=dones,
         )
 
-        return train_step_env_state, TrainStepMetrics(time=time_metrics, train=train_metrics, train_stats=train_custom_stats)
+        return state, TrainStepMetrics(time=time_metrics, train=train_metrics, train_stats=train_custom_stats)
 
     @partial(jax.jit, static_argnames=["self", "update_actor", "update_target"])
     def update_parameters(
         self,
         rng_key: PRNGKey,
-        actor: Model,
-        critic: Model,
-        target_critic: Model,
-        temp: Model,
+        ac: ActorCritic,
         batch: TimeStep,
         update_actor: bool,
         update_target: bool,
-    ):
+    ) -> Tuple[ActorCritic, Any]:
+        actor, critic, target_critic, temp = ac.actor, ac.critic, ac.target_critic, ac.temp
         rng_key, critic_update_rng_key = jax.random.split(rng_key, 2)
         new_critic, critic_update_aux = loss.update_critic(
             critic_update_rng_key,
-            actor,
-            critic,
-            target_critic,
-            temp,
+            ac,
             batch,
             self.cfg.discount,
             self.cfg.backup_entropy,
@@ -376,17 +402,15 @@ class SAC(BasePolicy):
         new_target = target_critic
 
         if update_target:
-            new_target = loss.update_target(critic, target_critic, self.cfg.tau)
+            new_target = loss.update_target(ac.critic, ac.target_critic, self.cfg.tau)
         if update_actor:
             rng_key, actor_update_rng_key = jax.random.split(rng_key, 2)
-            new_actor, actor_update_aux = loss.update_actor(actor_update_rng_key, actor, critic, temp, batch)
+            new_actor, actor_update_aux = loss.update_actor(actor_update_rng_key, ac, batch)
             if self.cfg.learnable_temp:
-                new_temp, temp_update_aux = loss.update_temp(temp, actor_update_aux.entropy, self.cfg.target_entropy)
+                new_temp, temp_update_aux = loss.update_temp(ac.temp, actor_update_aux.entropy, self.cfg.target_entropy)
+        ac = ac.replace(actor=new_actor, critic=new_critic, target_critic=new_target, temp=new_temp)
         return (
-            new_actor,
-            new_critic,
-            new_target,
-            new_temp,
+            ac,
             dict(
                 critic_update_aux=critic_update_aux,
                 actor_update_aux=actor_update_aux,
@@ -397,9 +421,9 @@ class SAC(BasePolicy):
     def state_dict(self):
         # TODO add option to save buffer?
         state_dict = dict(
-            ac=self.ac.state_dict(),
-            total_env_steps=self.total_env_steps,
-            training_steps=self.training_steps,
+            train_state=self.state,
+            # total_env_steps=self.total_env_steps,
+            # training_steps=self.training_steps,
             logger=self.logger.state_dict(),
         )
         return state_dict
@@ -410,8 +434,9 @@ class SAC(BasePolicy):
             f.write(flax.serialization.to_bytes(state_dict))
 
     def load(self, data):
-        self.ac = self.ac.load(data["ac"])
-        self.total_env_steps = data["total_env_steps"]
-        self.training_steps = data["training_steps"]
+        # self.ac = self.ac.load(data["ac"])
+        self.state = data["train_state"]
+        # self.total_env_steps = data["total_env_steps"]
+        # self.training_steps = data["training_steps"]
         self.logger.load(data["logger"])
         return self

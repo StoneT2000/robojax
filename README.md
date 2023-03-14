@@ -45,6 +45,20 @@ Each algorithm/agent comes equipped with a env loop and optionally a eval env lo
 
 During training they sample from the loop for some number of steps then update the policy and repeat.
 
+Creating an instance of a Agent e.g. `SAC` will initialize a starting train_state and set the configuration. All functionality is completely dependent on only the current train state and the stored configuration.
+
+`train`
+1. Reset environment, If `self.train_state` is None, initialize it. Train from there.
+2. Call `train_step` which returns a new `TrainState` and `TrainStepMetrics` structs.
+3. Optionally evaluate model on eval envs (optionally jittable), returning a `EvalMetrics` struct.
+4. Log `TrainStepMetrics` and `EvalMetrics`
+
+`train_step`
+1. Collect interaction data (optionally jittable)
+2. Update using the interaction data (and potentially older data e.g. in SAC) (jittable)
+
+
+
 <!-- Async sampling? -->
 
 ## What's done at thee wrapper level and what's done at the agent level?

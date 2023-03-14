@@ -12,7 +12,7 @@ eval_env:
 
 sac:
   num_seed_steps: 5_000
-  replay_buffer_capacity: 10_000
+  replay_buffer_capacity: 1_000_000
   batch_size: 256
   num_envs: 4
   steps_per_env: 4
