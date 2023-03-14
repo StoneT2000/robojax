@@ -21,20 +21,6 @@ from robojax.data.loop import EnvAction
 from robojax.utils import tools
 
 
-# TODO: Create a algo state / training state with separable non-jax component (e.g. replay buffer) for easy saving and continuing runs
-@struct.dataclass
-class TrainStepEnvState:
-    env_obs: Array
-    env_states: Array
-
-    total_env_steps: int
-    training_steps: int
-
-    ep_lens: Array
-    ep_rets: Array
-    dones: Array
-
-
 @struct.dataclass
 class TrainStepMetrics:
     train_stats: Any
@@ -351,6 +337,7 @@ class SAC(BasePolicy):
             critic_update_aux: loss.CriticUpdateAux = aux["critic_update_aux"]
             actor_update_aux: loss.ActorUpdateAux = aux["actor_update_aux"]
             temp_update_aux: loss.TempUpdateAux = aux["temp_update_aux"]
+
             train_metrics["critic_loss"] = float(critic_update_aux.critic_loss)
             train_metrics["q1"] = float(critic_update_aux.q1)
             train_metrics["q2"] = float(critic_update_aux.q2)
