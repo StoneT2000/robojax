@@ -21,7 +21,7 @@ from robojax.data.loop import EnvAction
 from robojax.utils import tools
 
 
-# TODO: Create a algo state / training state with separaable non-jax component (e.g. replay buffer) for easy saving and continuing runs
+# TODO: Create a algo state / training state with separable non-jax component (e.g. replay buffer) for easy saving and continuing runs
 @struct.dataclass
 class TrainStepEnvState:
     env_obs: Array
@@ -60,6 +60,7 @@ class SACTrainState:
     # monitoring
     total_env_steps: int
     training_steps: int
+    initialized: bool
 
 
 class SAC(BasePolicy):
@@ -90,6 +91,7 @@ class SAC(BasePolicy):
             total_env_steps=0,
             training_steps=0,
             rng_key=None,
+            initialized=False,
         )
 
         if seed_sampler is None:
@@ -158,7 +160,7 @@ class SAC(BasePolicy):
         """
         Args :
             rng_key: PRNGKey,
-                Random key to seed the training with. It is only used if train() was never called before
+                Random key to seed the training with. It is only used if train() was never called before, otherwise the code uses
             steps : int
                 Number of training steps to perform, where each step consists of interaactions and a policy update.
         """
@@ -167,7 +169,7 @@ class SAC(BasePolicy):
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
 
         # if env_obs is None, then this is the first time calling train and we prepare the environment
-        if self.state.env_obs is None:
+        if not self.state.initialized:
             if self.jax_env:
                 env_obs, env_states, _ = self.env_reset(reset_rng_key)
             else:
@@ -180,31 +182,26 @@ class SAC(BasePolicy):
                 np.zeros(self.cfg.num_envs),
             )
             self.state = self.state.replace(
-                ep_lens=ep_lens, ep_rets=ep_rets, dones=dones, env_obs=env_obs, env_states=env_states, rng_key=rng_key
+                ep_lens=ep_lens,
+                ep_rets=ep_rets,
+                dones=dones,
+                env_obs=env_obs,
+                env_states=env_states,
+                rng_key=rng_key,
+                initialized=True,
             )
 
-        # train_step_env_state = TrainStepEnvState(
-        #     ep_lens=ep_lens,
-        #     ep_rets=ep_rets,
-        #     dones=dones,
-        #     env_obs=env_obs,
-        #     env_states=env_states,
-        #     total_env_steps=self.total_env_steps,
-        #     training_steps=self.training_steps,
-        # )
-
         start_step = self.state.total_env_steps
+
         if verbose:
             pbar = tqdm(total=steps + self.state.total_env_steps, initial=start_step)
 
         env_rollout_size = self.cfg.steps_per_env * self.cfg.num_envs
 
         while self.state.total_env_steps < steps:
-            rng_key, train_rng_key = jax.random.split(rng_key, 2)
+            rng_key, train_rng_key = jax.random.split(self.state.rng_key, 2)
             self.state, train_step_metrics = self.train_step(train_rng_key, self.state)
-            # TODO: once we have a TrainState we don't need this
-            # self.total_env_steps = self.state.total_env_steps
-            # self.training_steps = self.state.training_steps
+            self.state.replace(rng_key=rng_key)
 
             # evaluate the current trained actor periodically
             if (
@@ -248,10 +245,12 @@ class SAC(BasePolicy):
                     SPS=self.state.total_env_steps / total_time,
                     total_env_steps=self.state.total_env_steps,
                 )
+
+            # log and export the metrics
             self.logger.log(self.state.total_env_steps)
             self.logger.reset()
 
-            # save checkpoints
+            # save checkpoints. Note that the logger auto saves upon metric improvements
             if tools.reached_freq(self.state.total_env_steps, self.cfg.save_freq):
                 self.save(os.path.join(self.logger.model_path, f"ckpt_{self.state.total_env_steps}.jx"))
 
@@ -264,7 +263,6 @@ class SAC(BasePolicy):
 
         TODO: If a jax-env is used, this step is jitted
         """
-        # ac = self.ac
 
         ac = state.ac
 
@@ -387,7 +385,6 @@ class SAC(BasePolicy):
         update_actor: bool,
         update_target: bool,
     ) -> Tuple[ActorCritic, Any]:
-        actor, critic, target_critic, temp = ac.actor, ac.critic, ac.target_critic, ac.temp
         rng_key, critic_update_rng_key = jax.random.split(rng_key, 2)
         new_critic, critic_update_aux = loss.update_critic(
             critic_update_rng_key,
@@ -397,9 +394,9 @@ class SAC(BasePolicy):
             self.cfg.backup_entropy,
         )
         # init dummy values
-        new_actor, actor_update_aux = actor, loss.ActorUpdateAux()
-        new_temp, temp_update_aux = temp, loss.TempUpdateAux(temp=temp())
-        new_target = target_critic
+        new_actor, actor_update_aux = ac.actor, loss.ActorUpdateAux()
+        new_temp, temp_update_aux = ac.temp, loss.TempUpdateAux(temp=ac.temp())
+        new_target = ac.target_critic
 
         if update_target:
             new_target = loss.update_target(ac.critic, ac.target_critic, self.cfg.tau)
@@ -422,8 +419,6 @@ class SAC(BasePolicy):
         # TODO add option to save buffer?
         state_dict = dict(
             train_state=self.state,
-            # total_env_steps=self.total_env_steps,
-            # training_steps=self.training_steps,
             logger=self.logger.state_dict(),
         )
         return state_dict
@@ -434,9 +429,6 @@ class SAC(BasePolicy):
             f.write(flax.serialization.to_bytes(state_dict))
 
     def load(self, data):
-        # self.ac = self.ac.load(data["ac"])
         self.state = data["train_state"]
-        # self.total_env_steps = data["total_env_steps"]
-        # self.training_steps = data["training_steps"]
         self.logger.load(data["logger"])
         return self
