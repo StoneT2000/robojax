@@ -72,7 +72,7 @@ class SACConfig:
     Frequency at which to update the target network
     """
 
-    eval_freq: Optional[int] = 5000
+    eval_freq: Optional[int] = 20_000
     """
     Every eval_freq interactions an evaluation is performed
     """
@@ -89,7 +89,7 @@ class SACConfig:
     """
     Every log_freq interactions metrics (e.g. critic loss) are logged
     """
-    save_freq: Optional[int] = 100_000
+    save_freq: Optional[int] = 20_000
     """
     Every save_freq interactions the current training state is saved.
     """

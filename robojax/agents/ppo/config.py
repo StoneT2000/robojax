@@ -20,14 +20,15 @@ class PPOConfig:
     This defines the max number of gradient updates that are performed after every rollout.
     """
 
-    steps_per_epoch: int
-    """
-    The number of interaction steps to perform in each parallel environment during a single rollout
-    """
-
     num_envs: int
     """
-    The number of parallel environments
+    Number of parallel envs used. Each training step `step num_envs * steps_per_env` interactions 
+    are collected in a rollout before updates are considered
+    """
+
+    steps_per_env: Optional[int] = 1
+    """
+    The number of interaction steps to perform in each parallel environment during a single rollout
     """
 
     batch_size: int
@@ -36,15 +37,39 @@ class PPOConfig:
     """
 
     normalize_advantage: Optional[bool] = True
-    gamma: Optional[float] = 0.99
+    """
+    Whether to apply normalization to advantage calculations. 
+    """
+
+    discount: Optional[float] = 0.99
+    """
+    The discount factor
+    """
+
     gae_lambda: Optional[float] = 0.97
+    """
+    The Generalized Advantage Estimation lambda parameter
+    """
+
     clip_ratio: Optional[float] = 0.2
+    """
+    The value to clip the log prob ratios (exp(log_p - log_p_old))
+    """
+
     ent_coef: Optional[float] = 0.0
-    pi_coef: Optional[float] = 1.0
-    vf_coef: Optional[float] = 1.0
+    """
+    Entropy coefficient. The entropy loss is -entropy * ent_coef and is added to the actor loss. Increase it to "encourage" more exploration
+    """
+
     dapg_lambda: Optional[float] = 0.1
     dapg_damping: Optional[float] = 0.99
+
     target_kl: Optional[float] = 0.01
+    """
+    This value * 1.5 is used as a threshold over the KL divergence of the updated policy compared to the original one used during a rollout.
+    If the KL div is over this threshold, then no more actor updates are made.
+    """
+
     reset_env: Optional[bool] = True
     """
     if False, when collecting interactions we will not reset env directly and carry over env states.
@@ -56,9 +81,9 @@ class PPOConfig:
     be a more diverse collection of behaviors at different time points in the environment.
     """
 
-    eval_freq: Optional[int] = 10
+    eval_freq: Optional[int] = 20_000
     """
-    Every eval_freq training steps (composed of rollout and update) an evaluation is performed
+    Every eval_freq interactions an evaluation is performed
     """
     eval_steps: Optional[int] = 1000
     """
@@ -71,9 +96,9 @@ class PPOConfig:
 
     log_freq: Optional[int] = 1
     """
-    Every log_freq training steps metrics (e.g. TODO) are logged
+    Every log_freq interactions metrics are logged
     """
-    save_freq: Optional[int] = 10
+    save_freq: Optional[int] = 20_000
     """
     Every save_freq training steps the current training state is saved.
     """

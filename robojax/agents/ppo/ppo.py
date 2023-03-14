@@ -371,7 +371,7 @@ class PPO(BasePolicy):
             buffer_size=buffer.action.shape[0],
             num_envs=num_envs,
         )
-
+        # TODO improve speed? by having a while loop for the actor updates and a scan for critic updates
         def update_step_fn(data: Tuple[PRNGKey, Model, Model, bool, int, int, ActorAux], _):
             (
                 rng_key,
