@@ -45,7 +45,13 @@ class SACTrainState:
 
     # monitoring
     total_env_steps: int
+    """
+    Total env steps sampled so far
+    """
     training_steps: int
+    """
+    Total training steps so far
+    """
     initialized: bool
 
 
@@ -146,9 +152,9 @@ class SAC(BasePolicy):
         """
         Args :
             rng_key: PRNGKey,
-                Random key to seed the training with. It is only used if train() was never called before, otherwise the code uses
+                Random key to seed the training with. It is only used if train() was never called before, otherwise the code uses self.state.rng_key
             steps : int
-                Number of training steps to perform, where each step consists of interaactions and a policy update.
+                Max number of environment samples before training is stopped.
         """
         train_start_time = time.time()
 
@@ -208,7 +214,6 @@ class SAC(BasePolicy):
                     tag="test",
                     ep_ret=eval_results["eval_ep_rets"],
                     ep_len=eval_results["eval_ep_lens"],
-                    append=False,
                 )
                 self.logger.log(self.state.total_env_steps)
                 self.logger.reset()
@@ -226,7 +231,6 @@ class SAC(BasePolicy):
             if tools.reached_freq(self.state.total_env_steps, self.cfg.log_freq):
                 self.logger.store(
                     tag="time",
-                    append=False,
                     total=total_time,
                     SPS=self.state.total_env_steps / total_time,
                     total_env_steps=self.state.total_env_steps,
@@ -372,6 +376,9 @@ class SAC(BasePolicy):
         update_actor: bool,
         update_target: bool,
     ) -> Tuple[ActorCritic, Any]:
+        """
+        Update actor critic parameters using the given batch
+        """
         rng_key, critic_update_rng_key = jax.random.split(rng_key, 2)
         new_critic, critic_update_aux = loss.update_critic(
             critic_update_rng_key,

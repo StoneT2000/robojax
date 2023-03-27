@@ -1,3 +1,7 @@
+"""
+Update / Loss Functions for SAC
+"""
+
 from typing import Any, Tuple
 
 import jax
@@ -25,10 +29,6 @@ class TempUpdateAux:
 
 def update_critic(
     key: PRNGKey,
-    # actor: Model,
-    # critic: Model,
-    # target_critic: Model,
-    # temp: Model,
     ac: ActorCritic,
     batch: TimeStep,
     discount: float,

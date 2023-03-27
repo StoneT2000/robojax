@@ -82,10 +82,10 @@ def main(cfg):
     # model_path = "robojax_exps/LiftCube-v0_test5/models/best_train_ep_ret_avg_ckpt.jx"
     # algo.load_from_path(model_path)
 
-    algo.train(rng_key=jax.random.PRNGKey(cfg.seed), epochs=cfg.train.epochs, verbose=1)
+    algo.train(rng_key=jax.random.PRNGKey(cfg.seed), steps=cfg.train.steps, verbose=1)
     ac.save(model_path)
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_pickcube.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_halfcheetah.yml"))
     main(cfg)

@@ -49,7 +49,7 @@ class SACConfig:
 
     tau: Optional[float] = 0.005
     discount: Optional[float] = 0.99
-    backup_entropy: Optional[bool] = True
+    backup_entropy: Optional[bool] = False
     target_entropy: Optional[float] = None
     """
     This defaults to `-act_dims / 2`

@@ -26,7 +26,7 @@ It's highly recommended to use conda. Otherwise you can try and install all the 
 conda env create -f environment.yml
 ```
 
-To install jax with cuda support, follow the instructions on their [README](https://github.com/google/jax).
+Jax must be separately installed. To install jax with cuda support, follow the instructions on their [README](https://github.com/google/jax).
 
 ## Organization
 
