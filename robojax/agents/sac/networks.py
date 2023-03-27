@@ -1,3 +1,6 @@
+"""
+Models for SAC
+"""
 import os
 from functools import partial
 from pathlib import Path
@@ -9,6 +12,7 @@ import jax
 import jax.numpy as jnp
 import optax
 from chex import Array, PRNGKey
+from flax import struct
 from tensorflow_probability.substrates import jax as tfp
 
 from robojax.models import MLP, Model
@@ -113,13 +117,16 @@ class Temperature(nn.Module):
         return jnp.exp(log_temp)
 
 
+@struct.dataclass
 class ActorCritic:
     actor: Model
     critic: Model
     target_critic: Model
+    temp: Model
 
-    def __init__(
-        self,
+    @classmethod
+    def create(
+        cls,
         rng_key: PRNGKey,
         sample_obs: Array,
         sample_acts: Array,
@@ -129,25 +136,27 @@ class ActorCritic:
         critic_optim: optax.GradientTransformation = optax.adam(3e-4),
         initial_temperature: float = 1.0,
         temperature_optim: optax.GradientTransformation = optax.adam(3e-4),
-    ) -> None:
+    ) -> "ActorCritic":
         rng_key, actor_rng_key, critic_rng_key, temp_rng_key = jax.random.split(rng_key, 4)
 
         if actor is None:
             actor = DiagGaussianActor(features=[256, 256], act_dims=sample_acts.shape[-1])
-        self.actor = Model.create(actor, actor_rng_key, sample_obs, actor_optim)
+        actor = Model.create(actor, actor_rng_key, sample_obs, actor_optim)
         if critic is None:
             critic = DoubleCritic(features=[256, 256], num_critics=2)
-        self.critic = Model.create(critic, critic_rng_key, [sample_obs, sample_acts], critic_optim)
+        critic = Model.create(critic, critic_rng_key, [sample_obs, sample_acts], critic_optim)
 
-        self.target_critic = Model.create(critic, critic_rng_key, [sample_obs, sample_acts])
+        target_critic = Model.create(critic, critic_rng_key, [sample_obs, sample_acts])
 
-        self.temp = Model.create(Temperature(initial_temperature), temp_rng_key, tx=temperature_optim)
+        temp = Model.create(Temperature(initial_temperature), temp_rng_key, tx=temperature_optim)
 
-    @partial(jax.jit, static_argnames=["self"])
+        return cls(actor=actor, critic=critic, target_critic=target_critic, temp=temp)
+
+    @partial(jax.jit)
     def act(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs):
         return actor(obs, deterministic=True), {}
 
-    @partial(jax.jit, static_argnames=["self"])
+    @partial(jax.jit)
     def sample(self, rng_key: PRNGKey, actor: DiagGaussianActor, obs):
         return actor(obs).sample(seed=rng_key), {}
 

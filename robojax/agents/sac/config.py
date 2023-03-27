@@ -19,9 +19,11 @@ class SACConfig:
     """
     Number of steps to take to seed the initial replay buffer. Will generate num_seed_steps of frames of data.
     """
+
     replay_buffer_capacity: int
     """
-    Max number of env interactions per parallel env stored before the oldest entries begin to be removed. The actual number of interactions storeable is replay_buffer_capacity * num_envs num_seed_steps will fill out (num_seed_steps) / replay_buffer_capacity fraction of the replay buffer.
+    Max number of env interactions stored before the oldest entries begin to be removed. Internally it keeps track of interactions from each parallel env
+    and samples them all afterwards, limiting the interactions stored per env to math.ceil(replay_buffer_capacity / num_envs).
     """
 
     batch_size: int
@@ -47,7 +49,7 @@ class SACConfig:
 
     tau: Optional[float] = 0.005
     discount: Optional[float] = 0.99
-    backup_entropy: Optional[bool] = True
+    backup_entropy: Optional[bool] = False
     target_entropy: Optional[float] = None
     """
     This defaults to `-act_dims / 2`
@@ -70,9 +72,9 @@ class SACConfig:
     Frequency at which to update the target network
     """
 
-    eval_freq: Optional[int] = 5000
+    eval_freq: Optional[int] = 20_000
     """
-    Every eval_freq training steps (composed of env step and update) an evaluation is performed
+    Every eval_freq interactions an evaluation is performed
     """
     eval_steps: Optional[int] = 1000
     """
@@ -85,14 +87,12 @@ class SACConfig:
 
     log_freq: Optional[int] = 1000
     """
-    Every log_freq training steps metrics (e.g. critic loss) are logged
+    Every log_freq interactions metrics (e.g. critic loss) are logged
     """
-    save_freq: Optional[int] = 100_000
+    save_freq: Optional[int] = 20_000
     """
-    Every save_freq training steps the current training state is saved.
+    Every save_freq interactions the current training state is saved.
     """
-
-    max_episode_length: Optional[int] = None
 
 
 @struct.dataclass

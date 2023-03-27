@@ -18,12 +18,6 @@ class BufferSampler:
         self.num_envs = num_envs
         self.buffer_keys = buffer_keys
 
-    @partial(jax.jit, static_argnames=["self", "batch_size", "drop_last_batch"])
-    def sample_batch(self, rng_key: PRNGKey, batch_size: int, drop_last_batch: bool = True):
-        """
-        Sample a batch of data without replacement
-        """
-
     @partial(jax.jit, static_argnames=["self", "batch_size"])
     def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
         """

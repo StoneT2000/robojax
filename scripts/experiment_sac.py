@@ -76,7 +76,7 @@ def main(cfg):
     actor = DiagGaussianActor(features=[256, 256, 256], act_dims=act_dims, state_dependent_std=True)
     critic = DoubleCritic(features=[256, 256, 256])
 
-    ac = ActorCritic(
+    ac = ActorCritic.create(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,
         critic=critic,
@@ -118,5 +118,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac_peginsertion_stao.yml"))
+    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac_halfcheetah.yml"))
     main(cfg)

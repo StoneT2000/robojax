@@ -181,26 +181,12 @@ class Logger:
             print(colorize(msg, color, bold=bold), file=file)
         sys.stdout.flush()
 
-    def store(self, tag="default", append=True, **kwargs):
+    def store(self, tag="default", **kwargs):
         """
-        Stores scalar values into logger by tag and key to then be logged
-
-        Parameters
-        ----------
-        append : bool
-            If true, will append the value to a list of previously logged values under the same tag and key. If false, will
-            replace what was stored previously. For the same tag and key, append should the same.
-
-            When false, values are not aggregated across processes
+        Stores scalar values or arrays into logger by tag and key to then be logged
         """
         for k, v in kwargs.items():
-            if append:
-                if k in self.data[tag]:
-                    self.data[tag][k].append(v)
-                else:
-                    self.data[tag][k] = [v]
-            else:
-                self.data[tag][k] = v
+            self.data[tag][k] = v
 
     def get_data(self, tag=None):
         if tag is None:
@@ -243,20 +229,22 @@ class Logger:
         for tag in self.data.keys():
             data_dict = self.data[tag]
             for k, v in data_dict.items():
+                key_vals = dict()
                 if isinstance(v, list) or isinstance(v, np.ndarray):
-                    vals = np.array(v)
-                    vals_sum, n = vals.sum(), len(vals)
-                    avg = vals_sum / n
-                    sum_sq = np.sum((vals - avg) ** 2)
-                    std = np.sqrt(sum_sq / n)
-                    minv = np.min(vals)
-                    maxv = np.max(vals)
-                    key_vals = {
-                        f"{tag}/{k}_avg": avg,
-                        f"{tag}/{k}_std": std,
-                        f"{tag}/{k}_min": minv,
-                        f"{tag}/{k}_max": maxv,
-                    }
+                    if len(v) > 0:
+                        vals = np.array(v)
+                        vals_sum, n = vals.sum(), len(vals)
+                        avg = vals_sum / n
+                        sum_sq = np.sum((vals - avg) ** 2)
+                        std = np.sqrt(sum_sq / n)
+                        minv = np.min(vals)
+                        maxv = np.max(vals)
+                        key_vals = {
+                            f"{tag}/{k}_avg": avg,
+                            f"{tag}/{k}_std": std,
+                            f"{tag}/{k}_min": minv,
+                            f"{tag}/{k}_max": maxv,
+                        }
                 else:
                     key_vals = {f"{tag}/{k}": v}
                 for name, scalar in key_vals.items():

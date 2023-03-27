@@ -2,11 +2,9 @@
 Adapted from SB3
 """
 
+import math
 from abc import ABC
-from functools import partial
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 from chex import PRNGKey
 
@@ -14,22 +12,22 @@ from chex import PRNGKey
 class BaseBuffer(ABC):
     """
     Base class that represent a buffer (rollout or replay)
-    :param buffer_size: Max number of element in the buffer
-    :param n_envs: Number of parallel environments
+    :param buffer_size: Max number of elements in the buffer
+    :param num_envs: Number of parallel environments
     """
 
     def __init__(
         self,
         buffer_size: int,
         device="cpu",
-        n_envs: int = 1,
+        num_envs: int = 1,
     ):
         super(BaseBuffer, self).__init__()
         self.buffer_size = buffer_size
-
+        self.buffer_size_per_env = math.ceil(self.buffer_size / num_envs)
         self.ptr = 0
         self.full = False
-        self.n_envs = n_envs
+        self.num_envs = num_envs
 
     def store(self, *args, **kwargs) -> None:
         """
@@ -42,7 +40,7 @@ class BaseBuffer(ABC):
         :return: The current size of the buffer
         """
         if self.full:
-            return self.buffer_size
+            return self.buffer_size_per_env
         return self.ptr
 
     def reset(self) -> None:
@@ -64,20 +62,20 @@ class GenericBuffer(BaseBuffer):
     Args :
 
         buffer_size : int
-            The size of the replay buffer for each parallel env. In total this can store at capacity of buffer_size * n_envs interactions.
+            The size of the replay buffer. In total this can store at capacity of about buffer_size interactions, with buffer_size / num_envs interactions buffer size per env.
     """
 
-    def __init__(self, buffer_size: int, device="cpu", n_envs: int = 1, config=dict()):
+    def __init__(self, buffer_size: int, device="cpu", num_envs: int = 1, config=dict()):
         super().__init__(
             buffer_size=buffer_size,
             device=device,
-            n_envs=n_envs,
+            num_envs=num_envs,
         )
         self.is_dict = dict()
         self.config = config
         self.buffers = dict()
 
-        self.ptr, self.path_start_idx, self.max_size = 0, [0] * n_envs, self.buffer_size
+        self.ptr, self.path_start_idx, self.max_size = 0, [0] * num_envs, self.buffer_size_per_env
 
         self.batch_idx = None
         self.batch_inds = None
@@ -102,11 +100,11 @@ class GenericBuffer(BaseBuffer):
                 self.buffers[k] = dict()
                 for part_key in shape.keys():
                     self.buffers[k][part_key] = np.zeros(
-                        (self.buffer_size, self.n_envs) + shape[part_key],
+                        (self.buffer_size_per_env, self.num_envs) + shape[part_key],
                         dtype=dtype[part_key],
                     )
             else:
-                self.buffers[k] = np.zeros((self.buffer_size, self.n_envs) + shape, dtype=dtype)
+                self.buffers[k] = np.zeros((self.buffer_size_per_env, self.num_envs) + shape, dtype=dtype)
 
     def store(self, **kwargs):
         """
@@ -124,7 +122,7 @@ class GenericBuffer(BaseBuffer):
                 d = d.reshape(self.buffers[k][self.ptr].shape)
                 self.buffers[k][self.ptr] = d
         self.ptr += 1
-        if self.ptr == self.buffer_size:
+        if self.ptr == self.buffer_size_per_env:
             # wrap pointer around to start replacing items
             self.full = True
             self.ptr = 0
@@ -148,40 +146,40 @@ class GenericBuffer(BaseBuffer):
     def _prepared_for_sampling(self, batch_size, drop_last_batch=True):
         if self.batch_idx == None:
             return False
-        if drop_last_batch and self.batch_idx + batch_size > self.buffer_size * self.n_envs:
+        if drop_last_batch and self.batch_idx + batch_size > self.buffer_size_per_env * self.num_envs:
             return False
-        if self.batch_idx > self.buffer_size * self.n_envs:
+        if self.batch_idx > self.buffer_size_per_env * self.num_envs:
             return False
         return True
 
-    @partial(jax.jit, static_argnames=["self", "batch_size"])
-    def sample_batch(self, key: PRNGKey, batch_size: int, drop_last_batch=True):
-        """
-        Sample a Batch of data without replacement
-        """
-        if not self._prepared_for_sampling(batch_size, drop_last_batch):
-            self.batch_idx = 0
-            if self.full:
-                inds = jnp.arange(0, self.buffer_size).repeat(self.n_envs)
-            else:
-                inds = jnp.arange(0, self.ptr).repeat(self.n_envs)
-            env_inds = jnp.tile(jnp.arange(self.n_envs), len(inds) // self.n_envs)
-            inds = jnp.vstack([inds, env_inds]).T
-            inds = jax.random.shuffle(key=key, x=inds)
-            # np.random.shuffle(inds)
-            self.batch_inds = inds[:, 0]
-            self.batch_env_inds = inds[:, 1]
-        batch_ids = self.batch_inds[self.batch_idx : self.batch_idx + batch_size]
-        env_ids = self.batch_env_inds[self.batch_idx : self.batch_idx + batch_size]
-        self.batch_idx = self.batch_idx + batch_size
-        return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
+    # TODO - currently broken,needs a BufferState
+    # @partial(jax.jit, static_argnames=["self", "batch_size"])
+    # def sample_batch(self, key: PRNGKey, batch_size: int, drop_last_batch=True):
+    #     """
+    #     Sample a Batch of data without replacement
+    #     """
+    #     if not self._prepared_for_sampling(batch_size, drop_last_batch):
+    #         self.batch_idx = 0
+    #         if self.full:
+    #             inds = jnp.arange(0, self.buffer_size_per_env).repeat(self.num_envs)
+    #         else:
+    #             inds = jnp.arange(0, self.ptr).repeat(self.num_envs)
+    #         env_inds = jnp.tile(jnp.arange(self.num_envs), len(inds) // self.num_envs)
+    #         inds = jnp.vstack([inds, env_inds]).T
+    #         inds = jax.random.shuffle(key=key, x=inds)
+    #         self.batch_inds = inds[:, 0]
+    #         self.batch_env_inds = inds[:, 1]
+    #     batch_ids = self.batch_inds[self.batch_idx : self.batch_idx + batch_size]
+    #     env_ids = self.batch_env_inds[self.batch_idx : self.batch_idx + batch_size]
+    #     self.batch_idx = self.batch_idx + batch_size
+    #     return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
 
     def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
         """
         Sample a batch of data with replacement
         """
         batch_ids = np.random.randint(self.size(), size=batch_size)
-        env_ids = np.random.randint(self.n_envs, size=batch_size)
+        env_ids = np.random.randint(self.num_envs, size=batch_size)
         # np.random.randint
         return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
 
@@ -190,14 +188,14 @@ class GenericBuffer(BaseBuffer):
     #     """
     #     Sample a batch of data with replacement
     #     """
-    #     # TODO provide faster routine for replay buffers where n_envs = 1?
+    #     # TODO provide faster routine for replay buffers where num_envs = 1?
     #     rng_key, batch_ids_rng_key = jax.random.split(rng_key)
     #     batch_ids = jax.random.randint(
     #         batch_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.buffer_size
     #     )
     #     rng_key, env_ids_rng_key = jax.random.split(rng_key)
     #     env_ids = jax.random.randint(
-    #         env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.n_envs
+    #         env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.num_envs
     #     )
     # bugged, buffers is cached and so no new data is actually retrieved
     #     return self._get_batch_by_ids(

@@ -6,6 +6,7 @@ import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
+from flax import struct
 
 from robojax.agents.base import BasePolicy
 from robojax.agents.ppo.config import PPOConfig, TimeStep
@@ -14,26 +15,27 @@ from robojax.agents.ppo.networks import ActorCritic, StepAux
 from robojax.data.loop import GymLoop, JaxLoop, RolloutAux
 from robojax.data.sampler import BufferSampler
 from robojax.models.model import Model
+from robojax.utils import tools
 
 PRNGKey = chex.PRNGKey
 
 
-@partial(jax.jit, static_argnames=["gamma", "gae_lambda"])
+@partial(jax.jit, static_argnames=["discount", "gae_lambda"])
 @partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
-def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
+def gae_advantages(rewards, dones, values, discount: float, gae_lambda: float):
     N = len(rewards)
     # values is of shape (N+1,)
     advantages = jnp.zeros((N + 1))
     not_dones = ~dones
 
-    value_diffs = gamma * values[1:] * not_dones - values[:-1]
+    value_diffs = discount * values[1:] * not_dones - values[:-1]
 
     # in value_diffs we zero out whenever an episode was finished.
     # steps t where done = True, then values[1:][t] is zeroed (next_value at step t) as it is the value for the next episode
     deltas = rewards + value_diffs
 
     def body_fun(gae, t):
-        gae = deltas[t] + gamma * gae_lambda * not_dones[t] * gae
+        gae = deltas[t] + discount * gae_lambda * not_dones[t] * gae
         return gae, gae
 
     indices = jnp.arange(N)[::-1]  # N - 1, N - 2, ..., 0
@@ -48,6 +50,11 @@ def gae_advantages(rewards, dones, values, gamma: float, gae_lambda: float):
 
 
 # TODO: Create a algo state / training state with separaable non-jax component (e.g. replay buffer) for easy saving and continuing runs
+
+
+@struct.dataclass
+class PPOTrainState:
+    ac: ActorCritic
 
 
 class PPO(BasePolicy):
@@ -145,17 +152,14 @@ class PPO(BasePolicy):
     def train(
         self,
         rng_key: PRNGKey,
-        epochs: int,
+        steps: int,
         verbose: int = 1,
     ):
         """
 
         Args :
-            epochs : int
-                Number of epochs to train. Each epoch consists of one rollout and one update phase.
-
-                `self.cfg.steps_per_epoch * self.cfg.num_envs` interactions are sampled in one rollout.
-
+            steps : int
+                Max number of environment samples before training is stopped.
         """
 
         train_start_time = time.time()
@@ -165,13 +169,16 @@ class PPO(BasePolicy):
             res = self.ac.step(rng_key, actor, critic, obs)
             return res
 
-        env_steps_per_epoch = self.cfg.num_envs * self.cfg.steps_per_epoch
-        for t in range(epochs):
+        env_rollout_size = self.cfg.num_envs * self.cfg.steps_per_env
+        # for t in range(epochs):
+        total_env_steps = 0
+        training_steps = 0
+        while total_env_steps < steps:
             rng_key, train_rng_key = jax.random.split(rng_key)
             actor, critic, aux = self.train_step(
                 rng_key=train_rng_key,
-                update_iters=self.cfg.update_iters,
-                rollout_steps_per_env=self.cfg.steps_per_epoch,
+                update_iters=self.cfg.grad_updates_per_step,
+                rollout_steps_per_env=self.cfg.steps_per_env,
                 num_envs=self.cfg.num_envs,
                 actor=self.ac.actor,
                 critic=self.ac.critic,
@@ -180,6 +187,8 @@ class PPO(BasePolicy):
             )
             self.ac.actor = actor
             self.ac.critic = critic
+            total_env_steps += env_rollout_size
+            training_steps += 1
 
             buffer = aux["buffer"]  # (T, num_envs)
             ep_lens = np.asarray(buffer.ep_len)
@@ -189,11 +198,8 @@ class PPO(BasePolicy):
 
             ### Logging ###
             if self.logger is not None:
-                if (
-                    self.eval_loop is not None
-                    and self.step % self.cfg.eval_freq == 0
-                    and self.step > 0
-                    and self.cfg.eval_freq > 0
+                if self.eval_loop is not None and tools.reached_freq(
+                    self.total_env_steps, self.cfg.eval_freq, step_size=env_rollout_size
                 ):
                     rng_key, eval_rng_key = jax.random.split(rng_key, 2)
                     eval_results = self.evaluate(
@@ -211,9 +217,8 @@ class PPO(BasePolicy):
                         tag="test",
                         ep_ret=eval_results["eval_ep_rets"],
                         ep_len=eval_results["eval_ep_lens"],
-                        append=False,
                     )
-                    self.logger.log(self.total_env_steps)
+                    self.logger.log(total_env_steps)
                     self.logger.reset()
                 actor_updates = aux["update_aux"]["actor_updates"].item()
                 actor_loss_aux: ActorAux = aux["update_aux"]["actor_loss_aux"]
@@ -222,15 +227,13 @@ class PPO(BasePolicy):
                 if episode_ends.any():
                     self.logger.store(
                         tag="train",
-                        append=False,
                         ep_ret=ep_rets[episode_ends].flatten(),
                         ep_len=ep_lens[episode_ends].flatten(),
                     )
                 self.logger.store(
                     tag="train",
-                    append=False,
                     ep_rew=ep_rews.flatten(),
-                    fps=env_steps_per_epoch / aux["rollout_time"],
+                    fps=env_rollout_size / aux["rollout_time"],
                     env_steps=self.total_env_steps,
                     # note we slice after moving to numpy arrays for slight performance boost
                     # as slicing jax arrays creates a call to compile a new dynamic_slice
@@ -244,31 +247,13 @@ class PPO(BasePolicy):
 
                 self.logger.store(
                     tag="time",
-                    append=False,
                     rollout=aux["rollout_time"],
                     update=aux["update_time"],
                     total=total_time,
-                    sps=self.total_env_steps / total_time,
-                    epoch=t,
+                    sps=total_env_steps / total_time,
+                    epoch=training_steps,
                 )
-                stats = self.logger.log(self.total_env_steps)
-                if verbose > 0:
-                    if verbose >= 1:
-                        filtered_stat_keys = [
-                            "train/ep_len_avg",
-                            "train/ep_ret_avg",
-                            "time/rollout",
-                            "time/update",
-                            "time/total",
-                            "time/sps",
-                            "time/epoch",
-                            "test/ep_ret_avg",
-                            "test/ep_len_avg",
-                        ]
-                        filtered_stats = {k: stats[k] for k in filtered_stat_keys if k in stats}
-                        self.logger.pretty_print_table(filtered_stats)
-                    else:
-                        self.logger.pretty_print_table(stats)
+                self.logger.log(total_env_steps)
                 self.logger.reset()
 
             self.step += 1
@@ -371,7 +356,7 @@ class PPO(BasePolicy):
             buffer_size=buffer.action.shape[0],
             num_envs=num_envs,
         )
-
+        # TODO improve speed? by having a while loop for the actor updates and a scan for critic updates
         def update_step_fn(data: Tuple[PRNGKey, Model, Model, bool, int, int, ActorAux], _):
             (
                 rng_key,
@@ -478,7 +463,7 @@ class PPO(BasePolicy):
             buffer.reward[:-1],
             buffer.done[:-1],
             buffer.value,
-            self.cfg.gamma,
+            self.cfg.discount,
             self.cfg.gae_lambda,
         )
         returns = advantages + buffer.value[-1, :]
@@ -502,7 +487,7 @@ class PPO(BasePolicy):
 
     @property
     def total_env_steps(self):
-        env_steps_per_epoch = self.cfg.num_envs * self.cfg.steps_per_epoch
+        env_steps_per_epoch = self.cfg.num_envs * self.cfg.steps_per_env
         return self.step * env_steps_per_epoch
 
     def state_dict(self):
