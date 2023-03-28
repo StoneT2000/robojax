@@ -62,8 +62,12 @@ def make_env(
 
         mani_skill2_env = False
         try:
+            import mani_skill2.envs  # NOQA
             from mani_skill2.utils.registration import REGISTERED_ENVS
             from mani_skill2.utils.wrappers import RecordEpisode
+
+            import robojax.experimental.envs.peginsertion  # NOQA
+            import robojax.experimental.envs.pick_cube  # NOQA
 
             gymnasium.register("LiftCube-v0", "mani_skill2.envs.pick_and_place.pick_cube:LiftCubeEnv")
             # gymnasium.register("PickCube-v1", "mani_skill2.envs.pick_and_place.pick_cube:PickCubeEnv")
