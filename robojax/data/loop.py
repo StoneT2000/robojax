@@ -162,6 +162,10 @@ class GymLoop(BaseEnvLoop):
                     terminated=terminations,
                     truncated=truncations,
                 )
+            if "final_info" in infos:
+                for info, keep in zip(infos["final_info"], infos["_final_info"]):
+                    if keep:
+                        data["info"].append(info)
             for k, v in rb.items():
                 data[k].append(v)
             observations = next_observations
@@ -172,7 +176,8 @@ class GymLoop(BaseEnvLoop):
                     ep_lengths[idx] = 0
         # stack data
         for k in data:
-            data[k] = jnp.stack(data[k])
+            data[k] = np.stack(data[k])
+
         aux = RolloutAux(
             final_env_obs=true_next_observations,
             final_env_state=None,
