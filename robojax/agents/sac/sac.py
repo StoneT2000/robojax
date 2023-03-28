@@ -219,16 +219,15 @@ class SAC(BasePolicy):
                 self.logger.reset()
 
             # log training metrics
-            self.logger.store(tag="train", **train_step_metrics.train, append=False)
-            self.logger.store(tag="train_stats", **train_step_metrics.train_stats, append=False)
-            self.logger.store(tag="time", **train_step_metrics.time, append=False)
 
             if verbose:
                 pbar.update(n=env_rollout_size)
-
+            self.logger.store(tag="train", **train_step_metrics.train)
+            self.logger.store(tag="train_stats", **train_step_metrics.train_stats)
             # log time information
             total_time = time.time() - train_start_time
             if tools.reached_freq(self.state.total_env_steps, self.cfg.log_freq):
+                self.logger.store(tag="time", **train_step_metrics.time)
                 self.logger.store(
                     tag="time",
                     total=total_time,
