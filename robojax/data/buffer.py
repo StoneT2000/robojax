@@ -178,6 +178,7 @@ class GenericBuffer(BaseBuffer):
         """
         Sample a batch of data with replacement
         """
+        # TODO use rng_key
         batch_ids = np.random.randint(self.size(), size=batch_size)
         env_ids = np.random.randint(self.num_envs, size=batch_size)
         # np.random.randint
