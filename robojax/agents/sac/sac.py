@@ -1,4 +1,5 @@
 import os
+import pickle
 import time
 from collections import defaultdict
 from functools import partial
@@ -410,18 +411,39 @@ class SAC(BasePolicy):
 
     def state_dict(self):
         # TODO add option to save buffer?
+        ac = flax.serialization.to_bytes(self.state.ac)
         state_dict = dict(
-            train_state=self.state,
+            train_state=self.state.replace(ac=ac),
             logger=self.logger.state_dict(),
         )
+        if self.cfg.save_buffer_in_checkpoints:
+            state_dict["replay_buffer"] = self.replay_buffer
         return state_dict
 
     def save(self, save_path: str):
+
+        stime = time.time()
         state_dict = self.state_dict()
         with open(save_path, "wb") as f:
-            f.write(flax.serialization.to_bytes(state_dict))
+            pickle.dump(state_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+            # TODO replace pickle with something more efficient for replay buffers?
+        print(f"Saving Checkpoint {save_path}.", "Time:", time.time() - stime)
+
+    def load_from_path(self, load_path: str):
+        with open(load_path, "rb") as f:
+            state_dict = pickle.load(f)
+        print(f"Loading Checkpoint {load_path}", state_dict["logger"])
+        self.load(state_dict)
 
     def load(self, data):
-        self.state = data["train_state"]
+        ac = flax.serialization.from_bytes(self.state.ac, data["train_state"].ac)
+        # use serialized ac model
+        self.state: SACTrainState = data["train_state"].replace(ac=ac)
+        # set initialized to False so previous env data is reset if it's not a jax env with env states we can start from
+        if not self.jax_env:
+            self.state = self.state.replace(initialized=False)
         self.logger.load(data["logger"])
-        return self
+        if "replay_buffer" in data:
+            replay_buffer: GenericBuffer = data["replay_buffer"]
+            print(f"Loading replay buffer which contains {replay_buffer.size() * replay_buffer.num_envs} interactions")
+            self.replay_buffer = replay_buffer

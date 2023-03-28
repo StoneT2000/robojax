@@ -4,7 +4,9 @@ Adapted from SB3
 
 import math
 from abc import ABC
+from functools import partial
 
+import jax
 import numpy as np
 from chex import PRNGKey
 
@@ -77,9 +79,6 @@ class GenericBuffer(BaseBuffer):
 
         self.ptr, self.path_start_idx, self.max_size = 0, [0] * num_envs, self.buffer_size_per_env
 
-        self.batch_idx = None
-        self.batch_inds = None
-        self.batch_env_inds = None
         self.prepare_for_collection()
 
     def reset(self) -> None:
@@ -143,37 +142,6 @@ class GenericBuffer(BaseBuffer):
                 batch_data[k] = data[batch_ids, env_ids]
         return batch_data
 
-    def _prepared_for_sampling(self, batch_size, drop_last_batch=True):
-        if self.batch_idx == None:
-            return False
-        if drop_last_batch and self.batch_idx + batch_size > self.buffer_size_per_env * self.num_envs:
-            return False
-        if self.batch_idx > self.buffer_size_per_env * self.num_envs:
-            return False
-        return True
-
-    # TODO - currently broken,needs a BufferState
-    # @partial(jax.jit, static_argnames=["self", "batch_size"])
-    # def sample_batch(self, key: PRNGKey, batch_size: int, drop_last_batch=True):
-    #     """
-    #     Sample a Batch of data without replacement
-    #     """
-    #     if not self._prepared_for_sampling(batch_size, drop_last_batch):
-    #         self.batch_idx = 0
-    #         if self.full:
-    #             inds = jnp.arange(0, self.buffer_size_per_env).repeat(self.num_envs)
-    #         else:
-    #             inds = jnp.arange(0, self.ptr).repeat(self.num_envs)
-    #         env_inds = jnp.tile(jnp.arange(self.num_envs), len(inds) // self.num_envs)
-    #         inds = jnp.vstack([inds, env_inds]).T
-    #         inds = jax.random.shuffle(key=key, x=inds)
-    #         self.batch_inds = inds[:, 0]
-    #         self.batch_env_inds = inds[:, 1]
-    #     batch_ids = self.batch_inds[self.batch_idx : self.batch_idx + batch_size]
-    #     env_ids = self.batch_env_inds[self.batch_idx : self.batch_idx + batch_size]
-    #     self.batch_idx = self.batch_idx + batch_size
-    #     return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
-
     def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
         """
         Sample a batch of data with replacement
@@ -181,24 +149,15 @@ class GenericBuffer(BaseBuffer):
         # TODO use rng_key
         batch_ids = np.random.randint(self.size(), size=batch_size)
         env_ids = np.random.randint(self.num_envs, size=batch_size)
+        # batch_ids, env_ids = sample_random_batch_env_ids(rng_key, batch_size, self.size(), self.num_envs)
         # np.random.randint
         return self._get_batch_by_ids(buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids)
 
-    # @partial(jax.jit, static_argnames=["self", "batch_size"])
-    # def sample_random_batch(self, rng_key: PRNGKey, batch_size: int):
-    #     """
-    #     Sample a batch of data with replacement
-    #     """
-    #     # TODO provide faster routine for replay buffers where num_envs = 1?
-    #     rng_key, batch_ids_rng_key = jax.random.split(rng_key)
-    #     batch_ids = jax.random.randint(
-    #         batch_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.buffer_size
-    #     )
-    #     rng_key, env_ids_rng_key = jax.random.split(rng_key)
-    #     env_ids = jax.random.randint(
-    #         env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.num_envs
-    #     )
-    # bugged, buffers is cached and so no new data is actually retrieved
-    #     return self._get_batch_by_ids(
-    #         buffers=self.buffers, batch_ids=batch_ids, env_ids=env_ids
-    #     )
+
+# Unused: is generally slower than numpy
+@partial(jax.jit, static_argnames=["batch_size", "buffer_size", "num_envs"])
+def sample_random_batch_env_ids(rng_key: PRNGKey, batch_size: int, buffer_size: int, num_envs: int):
+    rng_key, batch_rng, env_rng = jax.random.split(rng_key, 3)
+    batch_ids = jax.random.randint(batch_rng, shape=(batch_size,), minval=0, maxval=buffer_size)
+    env_ids = jax.random.randint(env_rng, shape=(batch_size,), minval=0, maxval=num_envs)
+    return batch_ids, env_ids

@@ -50,7 +50,7 @@ class Logger:
         tensorboard=True,
         workspace: str = "default_workspace",
         exp_name: str = "default_exp",
-        clear_out: bool = True,
+        clear_out: bool = False,
         project_name: str = None,
         wandb_cfg=None,
         cfg: Union[Dict, OmegaConf] = {},
@@ -82,7 +82,7 @@ class Logger:
             Used by wandb only. Defines the project name
 
         clear_out : bool
-            If true, clears out all previous logging information for this experiment. Otherwise appends data only
+            If true, clears out all previous data for this experiment. Otherwise will use the same folders
 
         best_stats_cfg : dict
             maps stat name to 1 -> higher is better, -1 -> lower is better
@@ -93,6 +93,8 @@ class Logger:
 
         cfg : Dict | OmegaConf
             A dict or OmegaConf object containing all configuration details for this experiment
+
+            If wandb_id is given, it will try and continue that wandb experiment.
         """
         self.wandb = wandb
         if wandb_cfg is None:
@@ -122,7 +124,7 @@ class Logger:
         if self.wandb:
             if project_name is None:
                 project_name = workspace
-            if not clear_out:
+            if "wandb_id" in cfg:
                 wandb_id = cfg["wandb_id"]
                 wb.init(
                     project=project_name,

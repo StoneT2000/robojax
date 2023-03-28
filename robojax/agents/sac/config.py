@@ -94,6 +94,12 @@ class SACConfig:
     Every save_freq interactions the current training state is saved.
     """
 
+    save_buffer_in_checkpoints: Optional[bool] = False
+    """
+    Whether to save the replay buffer into the checkpoints. If False, then replay buffers are not stored.
+    If True, replay buffers are stored and when loading from checkpoints they are loaded as well.
+    """
+
 
 @struct.dataclass
 class TimeStep:
