@@ -193,7 +193,7 @@ class SAC(BasePolicy):
         while self.state.total_env_steps < steps:
             rng_key, train_rng_key = jax.random.split(self.state.rng_key, 2)
             self.state, train_step_metrics = self.train_step(train_rng_key, self.state)
-            self.state.replace(rng_key=rng_key)
+            self.state = self.state.replace(rng_key=rng_key)
 
             # evaluate the current trained actor periodically
             if (
@@ -327,6 +327,7 @@ class SAC(BasePolicy):
             update_target = training_steps % self.cfg.target_update_freq == 0
             for _ in range(self.cfg.grad_updates_per_step):
                 rng_key, update_rng_key, sample_key = jax.random.split(rng_key, 3)
+                print(rng_key)
                 batch = self.replay_buffer.sample_random_batch(sample_key, self.cfg.batch_size)
                 batch = TimeStep(**batch)
                 ac, aux = self.update_parameters(
