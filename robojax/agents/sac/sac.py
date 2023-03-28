@@ -216,6 +216,7 @@ class SAC(BasePolicy):
                     ep_ret=eval_results["eval_ep_rets"],
                     ep_len=eval_results["eval_ep_lens"],
                 )
+                self.logger.store(tag="test_stats", **eval_results["stats"])
                 self.logger.log(self.state.total_env_steps)
                 self.logger.reset()
 

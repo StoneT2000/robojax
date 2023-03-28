@@ -1,4 +1,5 @@
 import time
+from collections import defaultdict
 from typing import Any, Callable, Tuple
 
 import flax
@@ -133,4 +134,10 @@ class BasePolicy:
         eval_episode_ends = np.logical_or(np.asarray(eval_buffer["truncated"]), np.asarray(eval_buffer["terminated"]))
         eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
         eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
-        return dict(eval_ep_rets=eval_ep_rets, eval_ep_lens=eval_ep_lens)
+        stats_list = []
+        for info in eval_buffer["info"]:
+            if "stats" in info:
+                stats_list.append(info["stats"])
+        stats = defaultdict(list)
+        {stats[key].append(sub[key]) for sub in stats_list for key in sub}
+        return dict(eval_ep_rets=eval_ep_rets, eval_ep_lens=eval_ep_lens, stats=stats)
