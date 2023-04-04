@@ -100,6 +100,7 @@ class Logger:
         if wandb_cfg is None:
             wandb_cfg = {}
         self.tensorboard = tensorboard
+        self.tb_writer = None
 
         self.start_step = 0
         self.last_log_step = 0
@@ -117,10 +118,7 @@ class Logger:
         Path(self.model_path).mkdir(parents=True, exist_ok=True)
         Path(self.video_path).mkdir(parents=True, exist_ok=True)
         # set up external loggers
-        if self.tensorboard:
-            from torch.utils.tensorboard import SummaryWriter
 
-            self.tb_writer = SummaryWriter(log_dir=self.log_path)
         if self.wandb:
             if project_name is None:
                 project_name = workspace
@@ -144,6 +142,12 @@ class Logger:
         self.best_stats = {}
         self.best_stats_cfg = best_stats_cfg
         self.save_fn = save_fn
+
+    def init_tb(self):
+        if self.tensorboard and self.tb_writer is None:
+            from torch.utils.tensorboard import SummaryWriter
+
+            self.tb_writer = SummaryWriter(log_dir=self.log_path)
 
     def close(self):
         """
@@ -228,6 +232,8 @@ class Logger:
                 RuntimeWarning,
             )
         self.last_log_step = step
+
+        self.init_tb()
         for tag in self.data.keys():
             data_dict = self.data[tag]
             for k, v in data_dict.items():

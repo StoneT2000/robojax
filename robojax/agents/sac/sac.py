@@ -191,7 +191,7 @@ class SAC(BasePolicy):
 
         env_rollout_size = self.cfg.steps_per_env * self.cfg.num_envs
 
-        while self.state.total_env_steps < steps:
+        while self.state.total_env_steps < start_step + steps:
             rng_key, train_rng_key = jax.random.split(self.state.rng_key, 2)
             self.state, train_step_metrics = self.train_step(train_rng_key, self.state)
             self.state = self.state.replace(rng_key=rng_key)
