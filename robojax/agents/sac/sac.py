@@ -243,7 +243,10 @@ class SAC(BasePolicy):
 
             # save checkpoints. Note that the logger auto saves upon metric improvements
             if tools.reached_freq(self.state.total_env_steps, self.cfg.save_freq):
-                self.save(os.path.join(self.logger.model_path, f"ckpt_{self.state.total_env_steps}.jx"))
+                self.save(
+                    os.path.join(self.logger.model_path, f"ckpt_{self.state.total_env_steps}.jx"),
+                    with_buffer=self.cfg.save_buffer_in_checkpoints,
+                )
 
     def train_step(self, rng_key: PRNGKey, state: SACTrainState) -> Tuple[SACTrainState, TrainStepMetrics]:
         """
@@ -410,21 +413,21 @@ class SAC(BasePolicy):
             ),
         )
 
-    def state_dict(self):
+    def state_dict(self, with_buffer=False):
         # TODO add option to save buffer?
         ac = flax.serialization.to_bytes(self.state.ac)
         state_dict = dict(
             train_state=self.state.replace(ac=ac),
             logger=self.logger.state_dict(),
         )
-        if self.cfg.save_buffer_in_checkpoints:
+        if with_buffer:
             state_dict["replay_buffer"] = self.replay_buffer
         return state_dict
 
-    def save(self, save_path: str):
+    def save(self, save_path: str, with_buffer=False):
 
         stime = time.time()
-        state_dict = self.state_dict()
+        state_dict = self.state_dict(with_buffer=with_buffer)
         with open(save_path, "wb") as f:
             pickle.dump(state_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
             # TODO replace pickle with something more efficient for replay buffers?
