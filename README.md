@@ -28,6 +28,13 @@ conda env create -f environment.yml
 
 Jax must be separately installed. To install jax with cuda support, follow the instructions on their [README](https://github.com/google/jax).
 
+## Docker
+
+```
+cd docker
+docker build -t stonet2000/robojax . 
+```
+
 ## Organization
 
 The following modules are usually shared between RL algorithms

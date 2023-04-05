@@ -49,7 +49,6 @@ dependencies:
     - tensorboard
     - wandb
     - omegaconf
-    - ml-collections
 
     # Visuals
     - pyglet>=1.4.0

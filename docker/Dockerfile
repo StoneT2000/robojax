@@ -1,5 +1,9 @@
 # Adapted from https://github.com/haosulab/ManiSkill2/blob/main/docker/Dockerfile
 
+# bring in the micromamba image so we can copy files from it
+FROM mambaorg/micromamba:1.4.1 as micromamba
+
+# the actual base image
 FROM nvidia/cudagl:11.3.1-devel-ubuntu20.04
 ENV NVIDIA_DRIVER_CAPABILITIES all
 
@@ -26,20 +30,56 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     xvfb \
     && rm -rf /var/lib/apt/lists/*
 
-# Install (mini) conda
-RUN curl -o ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
-    chmod +x ~/miniconda.sh && \
-    ~/miniconda.sh -b -p /opt/conda && \
-    rm ~/miniconda.sh && \
-    /opt/conda/bin/conda init && \
-    /opt/conda/bin/conda install -y python=3.8 && \
-    /opt/conda/bin/conda clean -ya
-
-ENV PATH /opt/conda/bin:$PATH
-SHELL ["/bin/bash", "-c"]
-
 # https://github.com/haosulab/ManiSkill/issues/9
 COPY nvidia_icd.json /usr/share/vulkan/icd.d/nvidia_icd.json
 COPY nvidia_layers.json /etc/vulkan/implicit_layer.d/nvidia_layers.json
 
+USER root
+
+# if your image defaults to a non-root user, then you may want to make the
+# next 3 ARG commands match the values in your image. You can get the values
+# by running: docker run --rm -it my/image id -a
+ARG MAMBA_USER=mamba
+ARG MAMBA_USER_ID=1000
+ARG MAMBA_USER_GID=1000
+ENV MAMBA_USER=$MAMBA_USER
+ENV MAMBA_ROOT_PREFIX="/opt/conda"
+ENV MAMBA_EXE="/bin/micromamba"
+
+COPY --from=micromamba "$MAMBA_EXE" "$MAMBA_EXE"
+COPY --from=micromamba /usr/local/bin/_activate_current_env.sh /usr/local/bin/_activate_current_env.sh
+COPY --from=micromamba /usr/local/bin/_dockerfile_shell.sh /usr/local/bin/_dockerfile_shell.sh
+COPY --from=micromamba /usr/local/bin/_entrypoint.sh /usr/local/bin/_entrypoint.sh
+COPY --from=micromamba /usr/local/bin/_activate_current_env.sh /usr/local/bin/_activate_current_env.sh
+COPY --from=micromamba /usr/local/bin/_dockerfile_initialize_user_accounts.sh /usr/local/bin/_dockerfile_initialize_user_accounts.sh
+COPY --from=micromamba /usr/local/bin/_dockerfile_setup_root_prefix.sh /usr/local/bin/_dockerfile_setup_root_prefix.sh
+
+RUN /usr/local/bin/_dockerfile_initialize_user_accounts.sh && \
+    /usr/local/bin/_dockerfile_setup_root_prefix.sh
+
+
+USER $MAMBA_USER
+
+SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
+
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
+
+# You can modify the CMD statement as needed....
+CMD ["/bin/bash"]
+
+# Optional: you can now populate a conda environment:
+RUN micromamba install --yes --name base --channel conda-forge \
+      jq python=3.8 setuptools= && \
+    micromamba clean --all --yes
+
+ARG MAMBA_DOCKERFILE_ACTIVATE=1  # (otherwise python will not be found)
+RUN pip install setuptools==65.5.0
 RUN pip install mani-skill2==0.4.2 && pip cache purge
+
+USER root
+
+RUN mkdir /work
+WORKDIR /work
+RUN git clone https://github.com/stonet2000/robojax
+RUN pip install -e robojax
+RUN micromamba update -n base -f robojax/environment.yml
