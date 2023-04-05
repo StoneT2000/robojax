@@ -80,6 +80,8 @@ USER root
 
 RUN mkdir /work
 WORKDIR /work
+
 RUN git clone https://github.com/stonet2000/robojax
 RUN pip install -e robojax
 RUN micromamba update -n base -f robojax/environment.yml
+RUN pip install -r robojax/requirements.txt
