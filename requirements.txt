@@ -1,0 +1,26 @@
+chex
+flax
+distrax
+optax
+
+# Simulators
+mujoco-py<2.2,>=2.1
+gymnax
+brax
+
+# Video generation
+moviepy
+
+# Exp tracking
+tensorboard
+wandb
+omegaconf
+
+# Visuals
+pyglet>=1.4.0
+
+# More RL
+# stable-baselines3
+
+pylint
+autopep8

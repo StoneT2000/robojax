@@ -54,7 +54,7 @@ dependencies:
     - pyglet>=1.4.0
 
     # More RL
-    - stable-baselines3
+    # - stable-baselines3
 
     - pylint
     - autopep8
