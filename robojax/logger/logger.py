@@ -145,7 +145,7 @@ class Logger:
 
     def init_tb(self):
         if self.tensorboard and self.tb_writer is None:
-            from torch.utils.tensorboard import SummaryWriter
+            from tensorboardX import SummaryWriter
 
             self.tb_writer = SummaryWriter(log_dir=self.log_path)
 
