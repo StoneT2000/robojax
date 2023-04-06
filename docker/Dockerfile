@@ -83,5 +83,8 @@ WORKDIR /work
 
 RUN git clone https://github.com/stonet2000/robojax
 RUN pip install -e robojax
-RUN micromamba update -n base -f robojax/environment.yml
+RUN micromamba install -n base -f robojax/environment.yml
 RUN pip install -r robojax/requirements.txt
+
+# commment out below if you want to use the CPU version of jax
+RUN pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
