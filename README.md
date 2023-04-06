@@ -20,7 +20,7 @@ If you use robojax in your work, please cite this repository as so:
 
 ## Setup
 
-It's highly recommended to use conda. Otherwise you can try and install all the packages yourself (at your own risk of not getting reproducible results)
+It's highly recommended to use mamba/conda. Otherwise you can try and install all the packages yourself (at your own risk of not getting reproducible results)
 
 ```
 conda env create -f environment.yml
