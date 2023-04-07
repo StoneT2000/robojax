@@ -43,7 +43,7 @@ def main(cfg):
             jax_env=cfg.jax_env,
             max_episode_steps=eval_env_cfg.max_episode_steps,
             num_envs=cfg.sac.num_eval_envs,
-            seed=cfg.seed + 1000,
+            seed=cfg.seed + 1000000,
             record_video_path=video_path,
             env_kwargs=OmegaConf.to_container(eval_env_cfg.env_kwargs),
         )

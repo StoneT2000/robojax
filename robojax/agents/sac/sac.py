@@ -49,6 +49,10 @@ class SACTrainState:
     Total training steps so far
     """
     initialized: bool
+    """
+    When False, will automatically reset the loop state. This is usually false when starting training. When resuming training
+    it will try to proceed from the previous loop state
+    """
 
 
 class SAC(BasePolicy):
@@ -100,7 +104,7 @@ class SAC(BasePolicy):
 
         # note that we use GenericBuffer class, which is not backed by jax for storing
         # interactions due to relative slow overhead for adding small amounts of data and moving data
-        # off the GPU
+        # off the GPU as well as there being a lot of data to work off of
         self.replay_buffer = GenericBuffer(
             buffer_size=self.cfg.replay_buffer_capacity,
             num_envs=self.cfg.num_envs,
@@ -266,7 +270,6 @@ class SAC(BasePolicy):
             truncations = data.truncated
             dones = terminations | truncations
             masks = ((~dones) | (truncations)).astype(float)
-            # import ipdb;ipdb.set_trace()
             if dones.any():
                 # note for continuous task wrapped envs where there is no early done, all envs finish at the same time unless
                 # they are staggered. So masks is never false.
@@ -278,6 +281,7 @@ class SAC(BasePolicy):
                         if "stats" in final_info:
                             for k in final_info["stats"]:
                                 train_custom_stats[k].append(final_info["stats"][k])
+            # TODO make batch version where multiple timesteps are stored at once
             self.replay_buffer.store(
                 env_obs=data.env_obs, reward=data.reward, action=data.action, mask=masks, next_env_obs=data.next_env_obs
             )
@@ -377,7 +381,6 @@ class SAC(BasePolicy):
         )
 
     def state_dict(self, with_buffer=False):
-        # TODO add option to save buffer?
         ac = flax.serialization.to_bytes(self.state.ac)
         state_dict = dict(
             train_state=self.state.replace(ac=ac),
