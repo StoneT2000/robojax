@@ -1,0 +1,60 @@
+name: robojax_brax
+channels:
+  - conda-forge
+  - pytorch
+  - huggingface
+dependencies:
+  # basics
+  - python=3.8
+  - numpy
+  - matplotlib
+  - dill
+  - pandas
+  - seaborn
+  - scipy
+  - jupyterlab
+  - pip
+  - ipdb
+  - cython
+  - scikit-learn
+  - tqdm
+  - yaml
+  - ipywidgets
+  - black
+  - isort
+
+  # RL related
+  - gymnasium
+
+  # Vision
+  - opencv
+  - transforms3d
+
+  - pip:
+    - -e ../
+    - brax
+
+    # Jax ecosystem
+    - chex
+    - flax
+    - distrax
+    - optax
+
+    # Simulators
+    - mujoco-py<2.2,>=2.1
+    - gymnax
+    - brax
+
+    # Video generation
+    - moviepy
+
+    # Exp tracking
+    - tensorboard
+    - wandb
+    - omegaconf
+
+    # Visuals
+    - pyglet>=1.4.0
+
+    - pylint
+    - autopep8

@@ -138,6 +138,7 @@ class Logger:
         self.save_config(cfg)
 
         self.data = defaultdict(dict)
+        self.data_log_summary = defaultdict(dict)
         self.stats = {}
         self.best_stats = {}
         self.best_stats_cfg = best_stats_cfg
@@ -187,12 +188,15 @@ class Logger:
             print(colorize(msg, color, bold=bold), file=file)
         sys.stdout.flush()
 
-    def store(self, tag="default", **kwargs):
+    def store(self, tag="default", log_summary=False, **kwargs):
         """
         Stores scalar values or arrays into logger by tag and key to then be logged
+
+        if log_summary is True, logs std, min, and max
         """
         for k, v in kwargs.items():
             self.data[tag][k] = v
+            self.data_log_summary[tag][k] = log_summary
 
     def get_data(self, tag=None):
         if tag is None:
@@ -243,16 +247,18 @@ class Logger:
                         vals = np.array(v)
                         vals_sum, n = vals.sum(), len(vals)
                         avg = vals_sum / n
-                        sum_sq = np.sum((vals - avg) ** 2)
-                        std = np.sqrt(sum_sq / n)
-                        minv = np.min(vals)
-                        maxv = np.max(vals)
-                        key_vals = {
-                            f"{tag}/{k}_avg": avg,
-                            f"{tag}/{k}_std": std,
-                            f"{tag}/{k}_min": minv,
-                            f"{tag}/{k}_max": maxv,
-                        }
+                        key_vals = {f"{tag}/{k}_avg": avg}
+                        if self.data_log_summary[tag][k]:
+                            sum_sq = np.sum((vals - avg) ** 2)
+                            std = np.sqrt(sum_sq / n)
+                            minv = np.min(vals)
+                            maxv = np.max(vals)
+                            key_vals = {
+                                **key_vals,
+                                f"{tag}/{k}_std": std,
+                                f"{tag}/{k}_min": minv,
+                                f"{tag}/{k}_max": maxv,
+                            }
                 else:
                     key_vals = {f"{tag}/{k}": v}
                 for name, scalar in key_vals.items():

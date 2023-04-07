@@ -1,4 +1,5 @@
 import os.path as osp
+import sys
 import warnings
 
 import jax
@@ -46,6 +47,7 @@ def main(cfg):
             record_video_path=video_path,
             env_kwargs=OmegaConf.to_container(eval_env_cfg.env_kwargs),
         )
+
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
 
     # for SAC, we need a function to randomly sample actions, we write one for jax based and non jax based envs
@@ -92,24 +94,14 @@ def main(cfg):
         env=env,
         eval_env=eval_env,
         num_envs=cfg.sac.num_envs,
+        num_eval_envs=cfg.sac.num_eval_envs,
         jax_env=cfg.jax_env,
         ac=ac,
         seed_sampler=seed_sampler,
         logger_cfg=dict(cfg=cfg, **cfg.logger),
         cfg=sac_cfg,
     )
-    # algo.load_from_path("robojax_exps/maniskill2/PegInsertionSide/v4_s0/models/best_train_ep_ret_avg_ckpt.jx")
-    # res = algo.evaluate(
-    #     jax.random.PRNGKey(0),
-    #     cfg.sac.num_eval_envs,
-    #     1000,
-    #     eval_loop=algo.eval_loop,
-    #     params=ac.actor,
-    #     apply_fn=algo.ac.act,
-    # )
-    # print(res)
-    # print((res['eval_ep_lens'] < 200).mean())
-    # exit()
+
     # train our algorithm with an initial seed
     algo.train(
         steps=cfg.train.steps,
@@ -118,5 +110,5 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/sac_halfcheetah.yml"))
+    cfg = parse_cfg(default_cfg_path=sys.argv[1])
     main(cfg)

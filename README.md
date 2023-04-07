@@ -28,6 +28,10 @@ conda env create -f environment.yml
 
 Jax must be separately installed. To install jax with cuda support, follow the instructions on their [README](https://github.com/google/jax).
 
+```
+pip install --upgrade "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+```
+
 ## Docker
 
 ```

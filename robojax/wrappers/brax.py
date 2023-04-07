@@ -4,7 +4,7 @@ Wrappers for Brax and Gym env. Code adapted from https://github.com/google/brax/
 
 from typing import ClassVar, Optional
 
-import gym
+import gymnasium as gym
 import jax
 import jax.numpy as jnp
 from brax.envs import env as brax_env
@@ -21,11 +21,12 @@ class BraxGymWrapper(gym.Env):
     # `_reset` as signs of a deprecated gym Env API.
     _gym_disable_underscore_compat: ClassVar[bool] = True
 
-    def __init__(self, env: brax_env.Env, backend: Optional[str] = None, auto_reset=True):
+    def __init__(self, env: brax_env.Env, backend: Optional[str] = None, max_episode_steps: int = -1, auto_reset=True):
         self._env = env
+        self.auto_reset = auto_reset
+        self.max_episode_steps = max_episode_steps
         self.metadata = {
             "render.modes": ["human", "rgb_array"],
-            "video.frames_per_second": 1 / self._env.sys.config.dt,
         }
         self.backend = backend
 
@@ -37,7 +38,7 @@ class BraxGymWrapper(gym.Env):
 
         def reset(key):
             state = self._env.reset(key)
-            return state, state.obs
+            return state.obs, state
 
         self._reset = jax.jit(reset, backend=self.backend)
 
@@ -62,12 +63,35 @@ class BraxGymWrapper(gym.Env):
         return self._observation_space
 
     def reset(self, rng_reset_key: PRNGKey):
-        state, obs = self._reset(rng_reset_key)
-        return obs, state
+        obs, state = self._reset(rng_reset_key)
+        state: brax_env.State
+        state.info["first_pipeline_state"] = state.pipeline_state
+        state.info["first_obs"] = state.obs
+        state.info["steps"] = 0
+        return obs, state, {}
 
-    def step(self, rng_key, state, action):
+    def step(self, rng_key, state: brax_env.State, action):
+        # rng_key is not used as env is deterministic
+        state = state.replace(done=0)
         state, obs, reward, done, info = self._step(state, action)
-        return obs, state, reward, done != 0.0, info
+        steps = state.info["steps"] + 1
+        truncated = jnp.where(steps >= self.max_episode_steps, True, False)
+        terminated = done != 0.0
+
+        done = terminated | truncated
+
+        info["final_observation"] = obs
+        info["_final_observation"] = done
+
+        pipeline_state = jax.tree_map(
+            lambda x, y: jnp.where(done, x, y), state.info["first_pipeline_state"], state.pipeline_state
+        )
+        obs = jnp.where(done, state.info["first_obs"], obs)
+        steps = jnp.where(done, 0, steps)
+        state.info["steps"] = steps
+        state = state.replace(pipeline_state=pipeline_state, obs=obs)
+
+        return obs, state, reward, terminated, truncated, info
 
     def render(self, state: State, mode="human"):
         # pylint:disable=g-import-not-at-top
