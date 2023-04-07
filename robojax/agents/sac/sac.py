@@ -148,10 +148,7 @@ class SAC(BasePolicy):
 
         # if env_obs is None, then this is the first time calling train and we prepare the environment
         if not self.state.initialized:
-            if self.jax_env:
-                env_obs, env_states, _ = self.env_reset(reset_rng_key)
-            else:
-                loop_state = self.loop.reset_loop(reset_rng_key)
+            loop_state = self.loop.reset_loop(reset_rng_key)
             self.state = self.state.replace(
                 loop_state=loop_state,
                 rng_key=rng_key,
