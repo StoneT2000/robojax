@@ -21,6 +21,7 @@ class BasePolicy:
         env=None,
         eval_env=None,
         num_envs: int = 1,
+        num_eval_envs: int = 1,
         logger_cfg: Any = dict(),
     ) -> None:
         """
@@ -67,7 +68,7 @@ class BasePolicy:
                     reset_env=True,
                 )
             else:
-                self.eval_loop = GymLoop(eval_env)
+                self.eval_loop = GymLoop(eval_env, num_eval_envs)
 
         # auto generate an experiment name based on the environment name and current time
         if "exp_name" not in logger_cfg:
@@ -124,6 +125,7 @@ class BasePolicy:
         rng_key, *eval_rng_keys = jax.random.split(rng_key, num_envs + 1)
         eval_buffer, _ = eval_loop.rollout(
             rng_keys=jnp.stack(eval_rng_keys),
+            loop_state=None,  # set to None means this eval_loop will generate its own loop state
             params=params,
             apply_fn=apply_fn,
             steps_per_env=steps_per_env,
@@ -135,7 +137,7 @@ class BasePolicy:
         eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
         eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
         stats_list = []
-        for info in eval_buffer["info"]:
+        for info in eval_buffer["final_info"]:
             if "stats" in info:
                 stats_list.append(info["stats"])
         stats = defaultdict(list)

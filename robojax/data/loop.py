@@ -52,9 +52,10 @@ class RolloutAux:
 
 class BaseEnvLoop(ABC):
     rollout_callback: Callable
+    num_envs: int
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, num_envs: int) -> None:
+        self.num_envs = num_envs
 
     @abstractmethod
     def rollout(
@@ -64,11 +65,11 @@ class BaseEnvLoop(ABC):
         params: Any,
         apply_fn: Callable,
         steps_per_env: int,
-    ) -> None:
+    ) -> Tuple[Any, EnvLoopState]:
         raise NotImplementedError("Rollout not defined")
 
     @abstractmethod
-    def reset_loop(self, rng_key: PRNGKey) -> Tuple[EnvObs, EnvState, Any]:
+    def reset_loop(self, rng_key: PRNGKey) -> EnvLoopState:
         """
         reset the looper and give a new obsveration and states (if available). This is simply a wrapper that auto vmaps the reset function, preventing
         not jitted functions need to vmap the reset themselves or generate many RNG keys which can be slow.
@@ -90,26 +91,32 @@ class GymLoop(BaseEnvLoop):
         self.env = env
         self.num_envs = num_envs
         self.rollout_callback = rollout_callback
-        super().__init__()
+        super().__init__(num_envs=num_envs)
 
     def reset_loop(self, rng_key: PRNGKey):
         obs, _ = self.env.reset()
-        return obs, None, {}
+        return EnvLoopState(
+            env_state=None,
+            env_obs=obs,
+            ep_ret=np.zeros((self.num_envs,), dtype=float),
+            ep_len=np.zeros((self.num_envs,), dtype=int),
+        )
 
     def rollout(
         self,
         rng_keys: List[PRNGKey],
+        loop_state: Union[EnvLoopState, None],
         params: Any,
         apply_fn: Callable,
         steps_per_env: int,
-        init_env_states: Tuple[EnvObs, EnvState, np.ndarray, np.ndarray] = None,
     ):
         """
         Rollout across N parallelized non-jitted, non-state parameterized, environments with an actor function apply_fn and
-        return the rollout buffer as well as final environment observations and states if available.
+        return the rollout buffer as well the next loop state. The rollout buffer can be customized using the rollout_callback function
+        and will also always contain a list of all the final infos.
 
         Args :
-            rng_key : initial PRNGKey to use for any randomness
+            rng_keys : initial PRNGKeys to use for any randomness. Will only use the last one in list
 
             params : any function parameters passed to apply_fn
 
@@ -118,21 +125,20 @@ class GymLoop(BaseEnvLoop):
 
             steps : number of steps to rollout
 
-            init_env_states : Initial environment observations, states, returns, and lengths to step forward from. If None, this calls the given self.env_reset function
+            loop_state : Initial environment observations, states, returns, and lengths to step forward from. If None, this calls the given self.env_reset function
                 to obtain the initial environment observation and state. If not None, it will not call env.reset first.
         """
-        num_envs = len(rng_keys)
         rng_key = rng_keys[-1]
-        if init_env_states is None:
+        if loop_state is None:
             observations, _ = self.env.reset()
             ep_returns, ep_lengths = (
-                np.zeros(num_envs, dtype=float),
-                np.zeros(num_envs, dtype=int),
+                np.zeros(self.num_envs, dtype=float),
+                np.zeros(self.num_envs, dtype=int),
             )
         else:
-            observations = init_env_states[0]
-            ep_returns = init_env_states[2]
-            ep_lengths = init_env_states[3]
+            observations = loop_state.env_obs
+            ep_returns = loop_state.ep_ret
+            ep_lengths = loop_state.ep_len
 
         data = defaultdict(list)
         for t in range(steps_per_env):
@@ -147,8 +153,8 @@ class GymLoop(BaseEnvLoop):
                 truncations,
                 infos,
             ) = self.env.step(actions)
-            ep_lengths += 1
-            ep_returns += rewards
+            ep_lengths = ep_lengths + 1
+            ep_returns = ep_returns + rewards
 
             # determine true next observations s_{t+1} if some episodes truncated and not s_0 for terminated or truncated episodes
             true_next_observations = next_observations
@@ -175,6 +181,7 @@ class GymLoop(BaseEnvLoop):
             else:
                 rb = dict(
                     env_obs=observations,
+                    next_env_obs=true_next_observations,
                     action=actions,
                     reward=rewards,
                     ep_ret=ep_returns.copy(),
@@ -185,7 +192,7 @@ class GymLoop(BaseEnvLoop):
             if "final_info" in infos:
                 for info, keep in zip(infos["final_info"], infos["_final_info"]):
                     if keep:
-                        data["info"].append(info)
+                        data["final_info"].append(info)
             for k, v in rb.items():
                 data[k].append(v)
             observations = next_observations
@@ -198,13 +205,8 @@ class GymLoop(BaseEnvLoop):
         for k in data:
             data[k] = np.stack(data[k])
 
-        aux = RolloutAux(
-            final_env_obs=true_next_observations,
-            final_env_state=None,
-            final_ep_returns=ep_returns,
-            final_ep_lengths=ep_lengths,
-        )
-        return data, aux
+        loop_state = EnvLoopState(env_obs=true_next_observations, env_state=None, ep_ret=ep_returns, ep_len=ep_lengths)
+        return data, loop_state
 
 
 class JaxLoop(BaseEnvLoop):
@@ -249,14 +251,19 @@ class JaxLoop(BaseEnvLoop):
         self.rollout_callback = rollout_callback
         self.reset_env = reset_env
         self.num_envs = num_envs
-        super().__init__()
+        super().__init__(num_envs=num_envs)
 
     @partial(jax.jit, static_argnames=["self"])
     def reset_loop(self, rng_key: PRNGKey):
         rng_keys = jax.random.split(rng_key, self.num_envs + 1)
         rng_key = rng_keys[0]
         obs, states, _ = jax.jit(jax.vmap(self.env_reset))(rng_keys[1:])
-        return obs, states, {}
+        return EnvLoopState(
+            env_obs=obs,
+            env_state=states,
+            ep_ret=jnp.zeros((self.num_envs,), dtype=float),
+            ep_len=jnp.zeros((self.num_envs,), dtype=int),
+        )
 
     @partial(jax.jit, static_argnames=["self", "steps", "apply_fn"])
     def _rollout_single_env(
@@ -320,24 +327,14 @@ class JaxLoop(BaseEnvLoop):
             def episode_mid_update(ep_ret, ep_len, env_state, env_obs):
                 return ep_ret + reward, ep_len + 1, env_state, env_obs
 
-            new_ep_return, new_ep_len, next_env_state, next_env_obs = jax.lax.cond(
-                done,
-                episode_end_update,
-                episode_mid_update,
-                ep_ret,
-                ep_len,
-                next_env_state,
-                next_env_obs,
-            )
-
             if self.rollout_callback is not None:
                 rb = self.rollout_callback(
                     action=action,
                     env_obs=env_obs,
                     reward=reward,
-                    ep_ret=new_ep_return,
-                    ep_len=new_ep_len,
-                    next_env_obs=next_env_obs,
+                    ep_ret=ep_ret + reward,
+                    ep_len=ep_len + 1,
+                    next_env_obs=next_env_obs,  # TODO if env is auto resetting (todo later), this won't be right, access the next_env_obs via info
                     terminated=terminated,
                     truncated=truncated,
                     info=info,
@@ -355,6 +352,16 @@ class JaxLoop(BaseEnvLoop):
                     terminated=terminated,
                     truncated=truncated,
                 )
+
+            new_ep_return, new_ep_len, next_env_state, next_env_obs = jax.lax.cond(
+                done,
+                episode_end_update,
+                episode_mid_update,
+                ep_ret,
+                ep_len,
+                next_env_state,
+                next_env_obs,
+            )
             return (
                 rng_key,
                 next_env_obs,

@@ -36,7 +36,7 @@ class BraxGymWrapper(gym.Env):
 
         def reset(key):
             state = self._env.reset(key)
-            return state, state.obs
+            return state.obs, state
 
         self._reset = jax.jit(reset, backend=self.backend)
 
@@ -61,7 +61,7 @@ class BraxGymWrapper(gym.Env):
         return self._observation_space
 
     def reset(self, rng_reset_key: PRNGKey):
-        state, obs = self._reset(rng_reset_key)
+        obs, state = self._reset(rng_reset_key)
         return obs, state, {}
 
     def step(self, rng_key, state, action):
