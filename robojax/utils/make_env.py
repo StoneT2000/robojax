@@ -49,9 +49,9 @@ def make_env(
         if is_gymnax_env:
             env, env_params = gymnax.make(env_id)
         elif is_brax_env:
-            env = envs.create(env_id, auto_reset=True)
+            env = envs.create(env_id, episode_length=None, auto_reset=False)
             # TODO make brax gym gymnasium compatible
-            env = BraxGymWrapper(env)
+            env = BraxGymWrapper(env, max_episode_steps=max_episode_steps, auto_reset=True)
         # TODO add time limit wrapper of sorts
         sample_obs = env.reset(jax.random.PRNGKey(0))[0]
         sample_acts = env.action_space().sample(jax.random.PRNGKey(0))

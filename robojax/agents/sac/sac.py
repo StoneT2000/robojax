@@ -19,7 +19,7 @@ from robojax.agents.sac import loss
 from robojax.agents.sac.config import SACConfig, TimeStep
 from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
 from robojax.data.buffer import GenericBuffer
-from robojax.data.loop import EnvAction, EnvLoopState
+from robojax.data.loop import DefaultTimeStep, EnvAction, EnvLoopState
 from robojax.utils import tools
 
 
@@ -251,39 +251,46 @@ class SAC(BasePolicy):
                 ac.actor,
                 seed=total_env_steps <= self.cfg.num_seed_steps,
             )
-            final_infos = data[
-                "final_info"
-            ]  # in gym loop this is just a list. in jax loop it should be a pytree with leaf shape (B, ) and a corresponding mask
-            del data["final_info"]
-            data = jax.tree_map(lambda x: np.array(x)[0], data)
-            terminations = data["terminated"]
-            truncations = data["truncated"]
+            if not self.jax_env:
+                final_infos = data[
+                    "final_info"
+                ]  # in gym loop this is just a list. in jax loop it should be a pytree with leaf shape (B, ) and a corresponding mask
+                del data["final_info"]
+                data = DefaultTimeStep(**data)
+            else:
+                final_infos = None  # TODO handle final infos in jax envs
+
+            # move data to numpy
+            data: DefaultTimeStep = jax.tree_map(lambda x: np.array(x)[0], data)
+            terminations = data.terminated
+            truncations = data.truncated
             dones = terminations | truncations
             masks = ((~dones) | (truncations)).astype(float)
+            # import ipdb;ipdb.set_trace()
             if dones.any():
                 # note for continuous task wrapped envs where there is no early done, all envs finish at the same time unless
                 # they are staggered. So masks is never false.
                 # if you want to always value bootstrap set masks to true.
-                for i, d in enumerate(dones):
-                    if d:
-                        train_metrics["ep_ret"].append(data["ep_ret"][i])
-                        train_metrics["ep_len"].append(data["ep_len"][i])
+                train_metrics["ep_ret"].append(data.ep_ret[dones])
+                train_metrics["ep_len"].append(data.ep_len[dones])
                 if not self.jax_env:  # TODO fix for jax envs
                     for final_info in final_infos:
                         if "stats" in final_info:
                             for k in final_info["stats"]:
                                 train_custom_stats[k].append(final_info["stats"][k])
             self.replay_buffer.store(
-                env_obs=data["env_obs"],
-                reward=data["reward"],
-                action=data["action"],
-                mask=masks,
-                next_env_obs=data["next_env_obs"],
+                env_obs=data.env_obs, reward=data.reward, action=data.action, mask=masks, next_env_obs=data.next_env_obs
             )
             loop_state = next_loop_state
 
+        # log time metrics
         rollout_time = time.time() - rollout_time_start
         time_metrics["rollout_time"] = rollout_time
+        time_metrics["rollout_fps"] = self.cfg.num_envs * self.cfg.steps_per_env / rollout_time
+
+        for k in train_metrics:
+            if len(train_metrics[k]) > 0:
+                train_metrics[k] = np.stack(train_metrics[k]).flatten()
 
         # update policy
         if self.state.total_env_steps >= self.cfg.num_seed_steps:

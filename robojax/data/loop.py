@@ -65,7 +65,7 @@ class BaseEnvLoop(ABC):
         params: Any,
         apply_fn: Callable,
         steps_per_env: int,
-    ) -> Tuple[Any, EnvLoopState]:
+    ) -> Tuple[DefaultTimeStep, EnvLoopState]:
         raise NotImplementedError("Rollout not defined")
 
     @abstractmethod
@@ -243,12 +243,10 @@ class JaxLoop(BaseEnvLoop):
         ],
         num_envs: int = 1,
         rollout_callback: Callable = None,
-        reset_env: bool = True,
     ) -> None:
         self.env_reset = env_reset
         self.env_step = env_step
         self.rollout_callback = rollout_callback
-        self.reset_env = reset_env
         self.num_envs = num_envs
         super().__init__(num_envs=num_envs)
 
@@ -299,7 +297,7 @@ class JaxLoop(BaseEnvLoop):
                 loop_state.ep_len,
             )
         else:
-            env_obs, env_state = self.env_reset(reset_rng_key)
+            env_obs, env_state, _ = self.env_reset(reset_rng_key)
             ep_return, ep_length = jnp.zeros((1,), dtype=float), jnp.zeros((1,), dtype=int)
 
         def step_fn(data: Tuple[EnvObs, EnvState, float, int], _):
@@ -315,57 +313,42 @@ class JaxLoop(BaseEnvLoop):
                 info,
             ) = self.env_step(rng_step, env_state, action)
             done = terminated | truncated
-            # done = jax.lax.cond((ep_len == max_episode_length - 1)[0], lambda x: True, lambda x: x, done)
-
-            # auto reset # TODO remove and handle in brax wrapper!
-            def episode_end_update(ep_ret, ep_len, env_state, env_obs):
-                if self.reset_env:
-                    env_obs, env_state = self.env_reset(rng_reset)
-                return ep_ret * 0, ep_len * 0, env_state, env_obs
-
-            def episode_mid_update(ep_ret, ep_len, env_state, env_obs):
-                return ep_ret + reward, ep_len + 1, env_state, env_obs
-
+            new_ep_ret, new_ep_len = ep_ret + reward, ep_len + 1
+            true_next_env_obs = next_env_obs
+            if "final_observation" in info:
+                true_next_env_obs = info["final_observation"]
             if self.rollout_callback is not None:
                 rb = self.rollout_callback(
                     action=action,
                     env_obs=env_obs,
                     reward=reward,
-                    ep_ret=ep_ret + reward,
-                    ep_len=ep_len + 1,
-                    next_env_obs=next_env_obs,  # TODO if env is auto resetting (todo later), this won't be right, access the next_env_obs via info
+                    ep_ret=new_ep_ret,
+                    ep_len=new_ep_len,
+                    next_env_obs=true_next_env_obs,  # TODO if env is auto resetting (todo later), this won't be right, access the next_env_obs via info
                     terminated=terminated,
                     truncated=truncated,
                     info=info,
                     aux=aux,
                 )
             else:
-                # rb = [env_obs, action, reward, next_env_obs, done]
                 rb = DefaultTimeStep(
                     env_obs=env_obs,
                     action=action,
                     reward=reward,
-                    ep_ret=new_ep_return,
+                    ep_ret=new_ep_ret,
                     ep_len=new_ep_len,
-                    next_env_obs=next_env_obs,
+                    next_env_obs=true_next_env_obs,
                     terminated=terminated,
                     truncated=truncated,
                 )
+            new_ep_ret = new_ep_ret * (~done)
+            new_ep_len = new_ep_len * (~done)
 
-            new_ep_return, new_ep_len, next_env_state, next_env_obs = jax.lax.cond(
-                done,
-                episode_end_update,
-                episode_mid_update,
-                ep_ret,
-                ep_len,
-                next_env_state,
-                next_env_obs,
-            )
             return (
                 rng_key,
                 next_env_obs,
                 next_env_state,
-                new_ep_return,
+                new_ep_ret,
                 new_ep_len,
             ), rb
 

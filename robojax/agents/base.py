@@ -8,7 +8,15 @@ import jax.numpy as jnp
 import numpy as np
 from chex import PRNGKey
 
-from robojax.data.loop import BaseEnvLoop, EnvAction, EnvObs, EnvState, GymLoop, JaxLoop
+from robojax.data.loop import (
+    BaseEnvLoop,
+    DefaultTimeStep,
+    EnvAction,
+    EnvObs,
+    EnvState,
+    GymLoop,
+    JaxLoop,
+)
 from robojax.logger.logger import Logger
 from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
@@ -65,7 +73,6 @@ class BasePolicy:
                 self.eval_loop = JaxLoop(
                     eval_env.reset,
                     eval_env.step,
-                    reset_env=True,
                 )
             else:
                 self.eval_loop = GymLoop(eval_env, num_eval_envs)
@@ -131,15 +138,20 @@ class BasePolicy:
             steps_per_env=steps_per_env,
         )
         # TODO use eval_buffer info['stats'] to log custom stats
-        eval_ep_lens = np.asarray(eval_buffer["ep_len"])
-        eval_ep_rets = np.asarray(eval_buffer["ep_ret"])
-        eval_episode_ends = np.logical_or(np.asarray(eval_buffer["truncated"]), np.asarray(eval_buffer["terminated"]))
-        eval_ep_rets = eval_ep_rets[eval_episode_ends].flatten()
-        eval_ep_lens = eval_ep_lens[eval_episode_ends].flatten()
+        if not self.jax_env:
+            final_infos = eval_buffer["final_info"]
+            del eval_buffer["final_info"]
+            eval_buffer = DefaultTimeStep(**eval_buffer)
+        eval_buffer: DefaultTimeStep = jax.tree_map(lambda x: np.array(x), eval_buffer)
+        eval_episode_ends = eval_buffer.truncated | eval_buffer.terminated
+        eval_ep_rets = eval_buffer.ep_ret[eval_episode_ends].flatten()
+        eval_ep_lens = eval_buffer.ep_len[eval_episode_ends].flatten()
         stats_list = []
-        for info in eval_buffer["final_info"]:
-            if "stats" in info:
-                stats_list.append(info["stats"])
+        if not self.jax_env:
+            # TODO handle final info metrics
+            for info in final_infos:
+                if "stats" in info:
+                    stats_list.append(info["stats"])
         stats = defaultdict(list)
         {stats[key].append(sub[key]) for sub in stats_list for key in sub}
         return dict(eval_ep_rets=eval_ep_rets, eval_ep_lens=eval_ep_lens, stats=stats)

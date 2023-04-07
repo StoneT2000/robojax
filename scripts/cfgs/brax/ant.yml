@@ -6,24 +6,24 @@ algo: sac
 # Environment configuration
 env:
   env_id: "ant"
-  max_episode_steps: 1000
+  max_episode_steps: 256
 eval_env:
   max_episode_steps: 1000
 
 sac:
-  num_seed_steps: 5_000
+  num_seed_steps: 8_192
   replay_buffer_capacity: 1_000_000
-  batch_size: 256
-  num_envs: 2
+  batch_size: 512
+  num_envs: 128
   steps_per_env: 1
-  grad_updates_per_step: 16
+  grad_updates_per_step: 32
 
-  eval_freq: 100_000
+  eval_freq: 128_000
   eval_steps: 1_000
-  num_eval_envs: 4
+  num_eval_envs: 64
 
   log_freq: 1_000
-  save_freq: 100_000
+  save_freq: 128_000
 
   learnable_temp: True
   initial_temperature: 1.0
