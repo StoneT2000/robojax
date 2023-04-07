@@ -1,0 +1,45 @@
+jax_env: True
+
+seed: 0
+algo: sac
+
+# Environment configuration
+env:
+  env_id: "walker2d"
+  max_episode_steps: 256
+eval_env:
+  max_episode_steps: 1000
+
+sac:
+  num_seed_steps: 8_192
+  replay_buffer_capacity: 1_000_000
+  batch_size: 512
+  num_envs: 128
+  steps_per_env: 1
+  grad_updates_per_step: 32
+
+  eval_freq: 128_000
+  eval_steps: 1_000
+  num_eval_envs: 64
+
+  log_freq: 1_000
+  save_freq: 128_000
+
+  learnable_temp: True
+  initial_temperature: 1.0
+  
+model:
+  actor_lr: 3e-4
+  critic_lr: 3e-4
+
+train: 
+  steps: 1_000_000
+
+logger:
+  tensorboard: True
+  wandb: False
+
+  workspace: "robojax_exps"
+  project_name: "robojax"
+  wandb_cfg:
+    group: "benchmark"
