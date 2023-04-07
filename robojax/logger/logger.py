@@ -138,7 +138,7 @@ class Logger:
         self.save_config(cfg)
 
         self.data = defaultdict(dict)
-        self.data_log_summary = defaultdict(dict())
+        self.data_log_summary = defaultdict(dict)
         self.stats = {}
         self.best_stats = {}
         self.best_stats_cfg = best_stats_cfg
