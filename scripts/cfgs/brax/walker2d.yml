@@ -6,7 +6,7 @@ algo: sac
 # Environment configuration
 env:
   env_id: "walker2d"
-  max_episode_steps: 256
+  max_episode_steps: 1000
 eval_env:
   max_episode_steps: 1000
 
