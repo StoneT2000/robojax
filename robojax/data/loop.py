@@ -145,7 +145,6 @@ class GymLoop(BaseEnvLoop):
             rng_key, rng_fn_key = jax.random.split(rng_key)
             actions, aux = apply_fn(rng_fn_key, params, observations)
             actions = tools.any_to_numpy(actions)
-
             (
                 next_observations,
                 rewards,
@@ -205,7 +204,7 @@ class GymLoop(BaseEnvLoop):
         for k in data:
             data[k] = np.stack(data[k])
 
-        loop_state = EnvLoopState(env_obs=true_next_observations, env_state=None, ep_ret=ep_returns, ep_len=ep_lengths)
+        loop_state = EnvLoopState(env_obs=next_observations, env_state=None, ep_ret=ep_returns, ep_len=ep_lengths)
         return data, loop_state
 
 

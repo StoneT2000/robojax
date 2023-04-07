@@ -35,14 +35,7 @@ class SACTrainState:
     # model states
     ac: ActorCritic
 
-    # env states
     loop_state: EnvLoopState
-    # env_obs: Array
-    # env_states: Array
-    # ep_lens: Array
-    # ep_rets: Array
-    # dones: Array
-
     # rng
     rng_key: PRNGKey
 
@@ -79,12 +72,7 @@ class SAC(BasePolicy):
 
         self.state: SACTrainState = SACTrainState(
             ac=ac,
-            # env_obs=None,
-            # env_states=None,
-            # ep_lens=None,
-            # ep_rets=None,
             loop_state=EnvLoopState(env_obs=None, env_state=None, ep_len=None, ep_ret=None),
-            # dones=None,
             total_env_steps=0,
             training_steps=0,
             rng_key=None,
@@ -124,9 +112,7 @@ class SAC(BasePolicy):
 
         # Jax env specific code to improve speed
         if self.jax_env:
-            # self._env_step = jax.vmap(jax.jit(self._env_step, static_argnames=["seed"]))
-            # self.env_reset = jax.vmap(self.env_reset)
-            pass
+            self._env_step = jax.jit(self._env_step, static_argnames=["seed"])
 
     @partial(jax.jit, static_argnames=["self", "seed"])
     def _sample_action(self, rng_key, actor: DiagGaussianActor, env_obs, seed=False):
@@ -140,28 +126,13 @@ class SAC(BasePolicy):
     def _env_step(self, rng_key: PRNGKey, loop_state: EnvLoopState, actor: DiagGaussianActor, seed=False):
         if self.jax_env:
             rng_key, *env_rng_keys = jax.random.split(rng_key, self.cfg.num_envs + 1)
-
-            fnc = lambda k, a, o: self._sample_action(k, a, o)
-            data, loop_state = self.loop.rollout(jnp.stack(env_rng_keys), loop_state, actor, fnc, 1)
-            import ipdb
-
-            ipdb.set_trace()
-            # (
-            #     next_env_obs,
-            #     next_env_state,
-            #     reward,
-            #     terminated,
-            #     truncated,
-            #     info,
-            # ) = self.env_step(env_rng_key, env_state, a)
+            data, loop_state = self.loop.rollout(
+                jnp.stack(env_rng_keys), loop_state, actor, partial(self._sample_action, seed=seed), 1
+            )
         else:
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
-            # a, _ = self._sample_action(act_rng_key, actor, loop_state.env_obs, seed)
-            # a = tools.any_to_numpy(a)
             data, loop_state = self.loop.rollout([env_rng_key], loop_state, actor, partial(self._sample_action, seed=seed), 1)
-            # next_env_obs, reward, terminated, truncated, info = self.env.step(a)
-        # a = data['action'][0]
-        return loop_state, data  # reward, terminated, truncated, info
+        return loop_state, data
 
     def train(self, rng_key: PRNGKey, steps: int, verbose=1):
         """
@@ -175,10 +146,13 @@ class SAC(BasePolicy):
 
         rng_key, reset_rng_key = jax.random.split(rng_key, 2)
 
-        # if not initialized (meaning no loop state is available usually when its the first call) we prepare the environment
+        # if env_obs is None, then this is the first time calling train and we prepare the environment
         if not self.state.initialized:
-            loop_state = self.loop.reset_loop(reset_rng_key)
-            self.state: SACTrainState = self.state.replace(
+            if self.jax_env:
+                env_obs, env_states, _ = self.env_reset(reset_rng_key)
+            else:
+                loop_state = self.loop.reset_loop(reset_rng_key)
+            self.state = self.state.replace(
                 loop_state=loop_state,
                 rng_key=rng_key,
                 initialized=True,
@@ -194,7 +168,7 @@ class SAC(BasePolicy):
         while self.state.total_env_steps < start_step + steps:
             rng_key, train_rng_key = jax.random.split(self.state.rng_key, 2)
             self.state, train_step_metrics = self.train_step(train_rng_key, self.state)
-            self.state: SACTrainState = self.state.replace(rng_key=rng_key)
+            self.state = self.state.replace(rng_key=rng_key)
 
             # evaluate the current trained actor periodically
             if (
@@ -259,7 +233,6 @@ class SAC(BasePolicy):
         """
 
         ac = state.ac
-
         loop_state = state.loop_state
         total_env_steps = state.total_env_steps
         training_steps = state.training_steps
@@ -275,20 +248,34 @@ class SAC(BasePolicy):
         rollout_time_start = time.time()
         for _ in range(self.cfg.steps_per_env):
             rng_key, env_rng_key = jax.random.split(rng_key, 2)
-            (next_loop_state, data,) = self._env_step(
+            (next_loop_state, data) = self._env_step(
                 env_rng_key,
                 loop_state,
                 ac.actor,
                 seed=total_env_steps <= self.cfg.num_seed_steps,
             )
-            # move transition data to numpy
-            final_infos = data["final_info"]  # in gym loop this is just a list. in jax loop we will make it a list somehow?
+            final_infos = data[
+                "final_info"
+            ]  # in gym loop this is just a list. in jax loop it should be a pytree with leaf shape (B, ) and a corresponding mask
             del data["final_info"]
             data = jax.tree_map(lambda x: np.array(x)[0], data)
             terminations = data["terminated"]
             truncations = data["truncated"]
             dones = terminations | truncations
             masks = ((~dones) | (truncations)).astype(float)
+            if dones.any():
+                # note for continuous task wrapped envs where there is no early done, all envs finish at the same time unless
+                # they are staggered. So masks is never false.
+                # if you want to always value bootstrap set masks to true.
+                for i, d in enumerate(dones):
+                    if d:
+                        train_metrics["ep_ret"].append(data["ep_ret"][i])
+                        train_metrics["ep_len"].append(data["ep_len"][i])
+                if not self.jax_env:  # TODO fix for jax envs
+                    for final_info in final_infos:
+                        if "stats" in final_info:
+                            for k in final_info["stats"]:
+                                train_custom_stats[k].append(final_info["stats"][k])
             self.replay_buffer.store(
                 env_obs=data["env_obs"],
                 reward=data["reward"],
@@ -296,33 +283,10 @@ class SAC(BasePolicy):
                 mask=masks,
                 next_env_obs=data["next_env_obs"],
             )
-
-            if dones.any():
-                # note for continuous task wrapped envs where there is no early done, all envs finish at the same time unless
-                # they are staggered. So masks is never false.
-                # if you want to always value bootstrap set masks to true.
-                train_metrics["ep_ret"].append(data["ep_ret"][dones])
-                train_metrics["ep_len"].append(data["ep_len"][dones])
-
-                if not self.jax_env:
-                    # TODO allow custom stats with nested dict, otherwise this can be very slow for many envs
-                    for final_info in final_infos:
-                        if "stats" in final_info:
-                            for k in final_info["stats"]:
-                                train_custom_stats[k].append(final_info["stats"][k])
-
             loop_state = next_loop_state
 
-        # note to record rollout time we explicitly jump out of jit. Remove this and the code can be written to be completely jittable
-        # but the performance benefits of that are usually minimal.
         rollout_time = time.time() - rollout_time_start
         time_metrics["rollout_time"] = rollout_time
-        time_metrics["rollout_fps"] = self.cfg.steps_per_env * self.loop.num_envs / rollout_time
-
-        # stack train_metrics
-        for k in train_metrics:
-            if len(train_metrics[k]) > 0:
-                train_metrics[k] = np.stack(train_metrics[k]).flatten()
 
         # update policy
         if self.state.total_env_steps >= self.cfg.num_seed_steps:
