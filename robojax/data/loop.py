@@ -302,7 +302,7 @@ class JaxLoop(BaseEnvLoop):
 
         def step_fn(data: Tuple[EnvObs, EnvState, float, int], _):
             rng_key, env_obs, env_state, ep_ret, ep_len = data
-            rng_key, rng_reset, rng_step, rng_fn = jax.random.split(rng_key, 4)
+            rng_key, rng_step, rng_fn = jax.random.split(rng_key, 3)
             action, aux = apply_fn(rng_fn, params, env_obs)
             (
                 next_env_obs,
