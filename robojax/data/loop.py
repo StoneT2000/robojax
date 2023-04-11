@@ -35,19 +35,11 @@ class DefaultTimeStep:
 
 @struct.dataclass
 class EnvLoopState:
-    env_state: EnvState
-    env_obs: EnvObs
-    ep_ret: float
-    ep_len: int
+    env_state: EnvState = None
+    env_obs: EnvObs = None
+    ep_ret: float = None
+    ep_len: int = None
     # TODO add info?
-
-
-@struct.dataclass
-class RolloutAux:
-    final_env_obs: EnvObs
-    final_env_state: EnvState
-    final_ep_returns: Array
-    final_ep_lengths: Array
 
 
 class BaseEnvLoop(ABC):

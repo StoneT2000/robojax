@@ -57,6 +57,7 @@ class StepAux:
     log_p: Array
 
 
+@struct.dataclass
 class ActorCritic:
     """
     ActorCritic model. Manages the actor and critic models
@@ -65,29 +66,27 @@ class ActorCritic:
     actor: Model
     critic: Model
 
-    def __init__(
-        self,
+    @classmethod
+    def create(
+        cls,
         rng_key: PRNGKey,
         actor: nn.Module,
         critic: nn.Module,
         explorer: nn.Module,
         sample_obs,
-        act_dims,
+        sample_acts,
         actor_optim: optax.GradientTransformation = optax.adam(3e-4),
         critic_optim: optax.GradientTransformation = optax.adam(3e-4),
-    ) -> None:
-        actor_module = Actor(actor=actor, explorer=explorer)
-        rng_key, actor_rng_key = jax.random.split(rng_key)
-        rng_key, critic_rng_key = jax.random.split(rng_key)
-        self.actor = Model.create(
-            model=actor_module,
-            key=actor_rng_key,
-            sample_input=sample_obs,
-            tx=actor_optim,
-        )
-        self.critic = Model.create(model=critic, key=critic_rng_key, sample_input=sample_obs, tx=critic_optim)
+    ) -> "ActorCritic":
+        rng_key, actor_rng_key, critic_rng_key, temp_rng_key = jax.random.split(rng_key, 4)
 
-    @partial(jax.jit, static_argnames=["self"])
+        actor = Actor(actor=actor, explorer=explorer)
+        actor = Model.create(model=actor, key=actor_rng_key, sample_input=sample_obs, tx=actor_optim)
+
+        critic = Model.create(model=critic, key=critic_rng_key, sample_input=sample_obs, tx=critic_optim)
+        return cls(actor=actor, critic=critic)
+
+    @partial(jax.jit)
     def step(self, rng_key: PRNGKey, actor: Model, critic: Model, obs) -> Tuple[Array, StepAux]:
         dist, _ = actor(obs)
         dist: distrax.Distribution
@@ -97,7 +96,7 @@ class ActorCritic:
         v = jnp.squeeze(v, -1)
         return a, StepAux(value=v, log_p=log_p)
 
-    @partial(jax.jit, static_argnames=["self", "deterministic"])
+    @partial(jax.jit, static_argnames=["deterministic"])
     def act(self, rng_key: PRNGKey, actor: Actor, obs, deterministic=False):
         if deterministic:
             _, a = actor(obs)
