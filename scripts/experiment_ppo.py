@@ -53,8 +53,10 @@ def main(cfg):
     # 64,64 for cartpole comparison
     # actor = MLP([64, 64, act_dims], output_activation=None)
     # critic = MLP([64, 64, 1], output_activation=None)
-    actor = MLP([256, 256, act_dims], output_activation=nn.tanh, final_ortho_scale=0.01)
-    critic = MLP([256, 256, 1], output_activation=None, final_ortho_scale=1)
+    # 32, 32, 32, 32 for brax
+    # 256, 256, 256, 256, 256 for brax
+    actor = MLP([32, 32, 32, 32, act_dims], output_activation=nn.tanh, final_ortho_scale=0.01)
+    critic = MLP([256, 256, 256, 256, 256, 1], output_activation=None, final_ortho_scale=1)
 
     ac = ActorCritic.create(
         jax.random.PRNGKey(cfg.seed),
