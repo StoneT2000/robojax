@@ -2,9 +2,62 @@
 Samplers for data collected from environment loops
 """
 from functools import partial
+from typing import Any
 
 import jax
 from chex import PRNGKey
+from flax import struct
+
+
+@struct.dataclass
+class BufferSampler2:
+    # buffer_keys: struct.field(pytree_node=False)
+    buffer: Any
+    buffer_size: int  # once sampled beyond this size, data is shuffled
+    curr_idx: int  # current index to sample from
+    rng_key: PRNGKey
+
+    @classmethod
+    def create(
+        cls,
+        buffer,
+        # buffer_keys,
+        buffer_size: int,
+        rng_key: PRNGKey,
+    ):
+        return cls(
+            buffer=buffer,
+            # buffer_keys=buffer_keys,
+            buffer_size=buffer_size,
+            curr_idx=0,
+            rng_key=rng_key,
+        )
+
+    @partial(jax.jit, static_argnames=["batch_size"])
+    def sample(self, batch_size: int):
+        curr_idx = self.curr_idx
+        rng_key, permute_key = jax.random.split(self.rng_key)
+
+        def convert_data(x):
+            x = jax.random.permutation(permute_key, x)
+            return x
+
+        buffer = jax.lax.cond(
+            curr_idx == 0, lambda y: jax.tree_util.tree_map(lambda x: convert_data(x), y), lambda y: y, self.buffer
+        )
+
+        batch = jax.tree_util.tree_map(lambda x: x[curr_idx : curr_idx + batch_size], buffer)
+
+        curr_idx = curr_idx + batch_size
+        curr_idx = jax.numpy.where(curr_idx + batch_size < self.buffer_size, curr_idx, 0)
+        return (
+            self.replace(
+                buffer=buffer,
+                curr_idx=curr_idx,
+                rng_key=rng_key,
+            ),
+            batch,
+        )
 
 
 class BufferSampler:
@@ -25,17 +78,14 @@ class BufferSampler:
         """
         rng_key, batch_ids_rng_key = jax.random.split(rng_key)
         batch_ids = jax.random.randint(batch_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.buffer_size)
-        rng_key, env_ids_rng_key = jax.random.split(rng_key)
-        env_ids = jax.random.randint(env_ids_rng_key, shape=(batch_size,), minval=0, maxval=self.num_envs)
-
-        return self._get_batch_by_ids(batch_ids=batch_ids, env_ids=env_ids)
+        return self._get_batch_by_ids(batch_ids)
 
     @partial(jax.jit, static_argnames=["self"])
-    def _get_batch_by_ids(self, batch_ids, env_ids):
+    def _get_batch_by_ids(self, ids):
         """
         retrieve batch of data via batch ids and env ids
         """
         data = {}
         for k in self.buffer_keys:
-            data[k] = getattr(self.buffer, k)[batch_ids, env_ids]
+            data[k] = getattr(self.buffer, k)[ids]
         return data

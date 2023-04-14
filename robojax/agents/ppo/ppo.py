@@ -347,6 +347,7 @@ class PPO(BasePolicy):
     ) -> Tuple[ActorCritic, UpdateAux]:
         """Update the actor and critic parameters"""
         # TODO this is problematic if we pass entire buffer in if observations are very large
+        buffer = jax.tree_util.tree_map(lambda x: x.reshape((-1,) + x.shape[2:]), buffer)  # (num_envs * steps_per_env, ...)
         sampler = BufferSampler(
             ["action", "env_obs", "log_p", "ep_ret", "adv"],
             buffer,
@@ -365,7 +366,9 @@ class PPO(BasePolicy):
                 prev_actor_aux,
                 prev_critic_aux,
             ) = data
+
             rng_key, sample_rng_key = jax.random.split(rng_key)
+            # jax.debug.print("sample_rng_key: {}",sample_rng_key)
             batch = TimeStep(**sampler.sample_random_batch(sample_rng_key, self.cfg.batch_size))
             critic_aux = prev_critic_aux
             actor_aux = prev_actor_aux

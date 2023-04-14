@@ -33,3 +33,17 @@ CleanRL global_step is the number of interactions sampled. RoboJax logs results 
 ```
 python scripts/experiment_ppo.py env.env_id="CartPole-v1" env.max_episode_steps=500 eval_env.max_episode_steps=500
 ```
+
+
+### Comparing with brax ppo
+
+| Brax PPO      | RoboJax | Description |
+| ----------- | ----------- | -------- |
+| ` env_step_per_training_step = batch_size * unroll_length * num_minibatches * action_repeat` (computed) | `ppo.steps_per_env * ppo.num_envs` | Total number of interaction steps before policy update |
+| `num_envs` | `ppo.num_envs` | Number of parallel environments |
+| `batch_size * unroll_length`| `batch_size` | Size of sampled batch of data from replay buffer during policy updaates |
+| `num_minibatches * num_updates_per_batch` | `grad_updates_per_step` | number of gradient steps
+
+collects data in shape (batch_size * num_minibatches, unroll_length)
+
+during sgd step (which has num_minibatches steps), this is reshaped to (num_minibatches, -1) + unroll_length? then scanover num_minibatches and mini batch step of size 2048 each.

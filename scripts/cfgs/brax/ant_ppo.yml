@@ -11,19 +11,20 @@ eval_env:
   max_episode_steps: 1000
 
 ppo:
-  batch_size: 2048
+  batch_size: 10240
   num_envs: 4096
-  steps_per_env: 32
+  steps_per_env: 80
   grad_updates_per_step: 128
   reset_env: False # Important to set to False to leverage massive parallelization properly
 
-  target_kl: 1
+  target_kl: 100
   discount: 0.97
+  gae_lambda: 0.95
   ent_coef: 1e-2
 
   eval_freq: 5_000_000
   eval_steps: 1_000
-  num_eval_envs: 64
+  num_eval_envs: 128
 
   log_freq: 1_000
   save_freq: -1
