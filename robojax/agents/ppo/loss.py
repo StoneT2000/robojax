@@ -68,7 +68,7 @@ def critic_loss_fn(critic_apply_fn: Callable, batch: TimeStep):
         obs, ep_ret = batch.env_obs, batch.ep_ret
         v = critic_apply_fn(critic_params, obs)
         v = jnp.squeeze(v, -1)
-        critic_loss = jnp.mean(jnp.square(v - ep_ret), axis=0)
+        critic_loss = jnp.mean(jnp.square(v - ep_ret), axis=0) * 0.5 * 0.5
         return critic_loss, CriticAux(critic_loss=critic_loss)
 
     return loss_fn

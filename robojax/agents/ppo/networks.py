@@ -87,12 +87,12 @@ class ActorCritic:
         return cls(actor=actor, critic=critic)
 
     @partial(jax.jit)
-    def step(self, rng_key: PRNGKey, actor: Model, critic: Model, obs) -> Tuple[Array, StepAux]:
-        dist, _ = actor(obs)
+    def step(self, rng_key: PRNGKey, ac: "ActorCritic", obs) -> Tuple[Array, StepAux]:
+        dist, _ = ac.actor(obs)
         dist: distrax.Distribution
         a = dist.sample(seed=rng_key)
         log_p = dist.log_prob(a)
-        v = critic(obs)
+        v = ac.critic(obs)
         v = jnp.squeeze(v, -1)
         return a, StepAux(value=v, log_p=log_p)
 

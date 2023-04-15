@@ -1,6 +1,6 @@
 import time
 from functools import partial
-from typing import Any, Callable, Tuple
+from typing import Any, Tuple
 
 import chex
 import flax
@@ -146,7 +146,7 @@ class PPO(BasePolicy):
             self.loop.rollout_callback = rollout_callback
             self.collect_buffer = jax.jit(
                 self.collect_buffer,
-                static_argnames=["steps_per_env", "num_envs", "apply_fn"],
+                static_argnames=["steps_per_env", "num_envs"],
             )
         else:
             # we expect env to be a vectorized env now
@@ -212,14 +212,10 @@ class PPO(BasePolicy):
 
         env_rollout_size = self.cfg.steps_per_env * self.cfg.num_envs
 
-        def apply_fn(rng_key, ac: ActorCritic, obs):
-            res = ac.step(rng_key, ac.actor, ac.critic, obs)
-            return res
-
         while self.state.total_env_steps < start_step + steps:
             rng_key, train_rng_key = jax.random.split(self.state.rng_key)
             # TODO where should apply_fn go?
-            state, train_step_metrics = self.train_step(train_rng_key, self.state, self.cfg, apply_fn)
+            state, train_step_metrics = self.train_step(train_rng_key, self.state, self.cfg)
             self.state: PPOTrainState = state.replace(rng_key=rng_key)
 
             # evaluate the current trained actor periodically
@@ -271,7 +267,6 @@ class PPO(BasePolicy):
         rng_key: PRNGKey,
         state: PPOTrainState,
         cfg: PPOConfig,
-        apply_fn,
     ) -> Tuple[PPOTrainState, TrainStepMetrics]:
         rng_key, buffer_rng_key = jax.random.split(rng_key)
         rollout_s_time = time.time()
@@ -291,7 +286,6 @@ class PPO(BasePolicy):
             steps_per_env=cfg.steps_per_env,
             num_envs=cfg.num_envs,
             ac=state.ac,
-            apply_fn=apply_fn,
         )
 
         rollout_time = time.time() - rollout_s_time
@@ -433,7 +427,6 @@ class PPO(BasePolicy):
         steps_per_env: int,
         num_envs: int,
         ac: ActorCritic,
-        apply_fn: Callable,
     ):
         # buffer collection is not jitted if env is not jittable
 
@@ -442,11 +435,16 @@ class PPO(BasePolicy):
         # TODO make it so you only ever pass in one env rng key in, figure out batch dimension from loop state instead
         # for performance boost as splitting keys outside of jit is slow
         rng_key, *env_rng_keys = jax.random.split(rng_key, num_envs + 1)
+
+        def apply_fn(rng_key, ac: ActorCritic, obs):
+            res = ac.step(rng_key, ac, obs)
+            return res
+
         buffer, loop_state = self.loop.rollout(
             env_rng_keys,
             loop_state=loop_state,
             params=ac,
-            apply_fn=apply_fn,
+            apply_fn=ac.step,
             steps_per_env=steps_per_env + 1,  # extra 1 for final value computation
         )
         buffer: TimeStep
