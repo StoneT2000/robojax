@@ -10,14 +10,14 @@ from chex import Array, PRNGKey
 from gymnax.environments import spaces
 from gymnax.environments.environment import Environment, EnvParams, EnvState
 
-# @struct.dataclass
-# class EnvState:
-#     state: GymnaxEnvState
-#     info: Dict[str, Any] = struct.field(default_factory=dict)
-
 
 class GymnaxWrapper(gym.Env):
-    """A wrapper that converts a Gymnax Env to one that follows Gym API with state"""
+    """
+    A wrapper that converts a Gymnax Env to one that follows Gym API with state
+
+    Note that Gymnax envs auto reset themselves. They call their own reset function every step and return the new obs and state
+    so there are no terminal observations
+    """
 
     def __init__(
         self,
@@ -40,14 +40,22 @@ class GymnaxWrapper(gym.Env):
         self._action_space = env.action_space(env_params)
 
         def reset(key):
-            obs, state = self._env.reset(key)
-            return obs, state  # EnvState(state=state, info=dict())
+            obs, state = self._env.reset(key, params=env_params)
+            return obs, state
 
         self._reset = jax.jit(reset, backend=self.backend)
 
         def step(rng_key: PRNGKey, state: EnvState, action: Array):
-            obs, state, reward, done, info = self._env.step(rng_key, state, action)
-            return (obs, state, reward, done, info)
+            """Performs step transitions in the environment."""
+            key, key_reset = jax.random.split(rng_key)
+            obs_st, state_st, reward, done, info = self._env.step_env(key, state, action, env_params)
+            obs_re, state_re = self._env.reset_env(key_reset, env_params)
+            # Auto-reset environment based on termination
+            state = jax.tree_map(lambda x, y: jax.lax.select(done, x, y), state_re, state_st)
+            obs = jax.lax.select(done, obs_re, obs_st)
+            info["final_observation"] = obs_st  # this is always the current episodes next observation
+            info["_final_observation"] = done  # mask for which observation is current episodes next observation
+            return obs, state, reward, done, info
 
         self._step = jax.jit(step, backend=self.backend)
 
@@ -69,13 +77,12 @@ class GymnaxWrapper(gym.Env):
         return obs, state, {}
 
     def step(self, rng_key: PRNGKey, state: EnvState, action: Array):
+
         obs, state, reward, done, info = self._step(rng_key, state, action)
         # steps = state.info["steps"] + 1
         truncated = False  # shouldn't always be false but at the moment gymnax does not support proper gymnasium api
         # truncated = jnp.where(steps >= self.max_episode_steps, True, False)
         terminated = done != 0.0
-
-        done = terminated | truncated
 
         # info["final_observation"] = obs
         # info["_final_observation"] = done
@@ -88,8 +95,7 @@ class GymnaxWrapper(gym.Env):
         # state.info["steps"] = steps
         # state = state.replace(state=gymnax_state, obs=obs)
 
-        # reward[0] as gymnax returns a batched reward for some reason
-        return obs, state, reward[0], terminated, truncated, info
+        return obs, state, reward, terminated, truncated, info
 
     def render(self, state: EnvState, mode="human"):
         # TODO
