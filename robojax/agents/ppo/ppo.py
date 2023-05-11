@@ -111,7 +111,6 @@ class PPO(BasePolicy):
         self.state: PPOTrainState = PPOTrainState(
             ac=ac, rng_key=None, loop_state=EnvLoopState(), total_env_steps=0, training_steps=0, initialized=False
         )
-        # self.ac: ActorCritic = ac
 
         # for jax or gym envs, define a custom rollout callback which collects the data we need for our replay buffer
         if self.jax_env:
@@ -452,6 +451,8 @@ class PPO(BasePolicy):
         if not self.jax_env:
             # if not a jax based env, then buffer is a python dictionary and we
             # convert it
+            if "final_info" in buffer:
+                del buffer["final_info"]  # TODO handle later
             buffer = TimeStep(**buffer)
         # rest of the code here is jitted and / or vmapped
         advantages = gae_advantages(

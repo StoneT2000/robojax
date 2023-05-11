@@ -10,39 +10,31 @@ env:
 eval_env:
   max_episode_steps: 1000
 
-# Algorithm configurations
 ppo:
-  num_envs: 1
   batch_size: 64
-  grad_updates_per_step: 320
+  num_envs: 1
   steps_per_env: 2048
+  grad_updates_per_step: 320 # 10 epochs
+  reset_env: False
+
+  target_kl: 999
   discount: 0.99
   gae_lambda: 0.95
-  ent_coef: 0
-  reset_env: True
+  ent_coef: 1e-2
 
-  eval_freq: 100_000
-  eval_steps: 1000
+  eval_freq: 1_000_000
+  eval_steps: 1_000
   num_eval_envs: 4
 
-  log_freq: 1000
-  save_freq: 100_000
-
-# Model configs
+  log_freq: 1_000
+  save_freq: -1
+  
 model:
   actor_lr: 3e-4
   critic_lr: 3e-4
 
-# Training time parameters
 train:
-  steps: 1_000_000
-
-# Evaluation settings
-eval:
-  num_eval_envs: 8
-  steps_per_env: 1000 # one episode each
-  eval_freq: 20
-
+  steps: 10_000_000
 
 logger:
   tensorboard: True

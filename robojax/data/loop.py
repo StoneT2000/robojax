@@ -149,7 +149,7 @@ class GymLoop(BaseEnvLoop):
 
             # determine true next observations s_{t+1} if some episodes truncated and not s_0 for terminated or truncated episodes
             true_next_observations = next_observations
-            if "final_observation" in infos:
+            if "final_observation" in infos:  # TODO with wrapper to replace with next_observation key
                 true_next_observations = next_observations.copy()
                 for idx, (terminated, truncated) in enumerate(zip(terminations, truncations)):
                     final_obs = infos["final_observation"][idx]
@@ -187,11 +187,9 @@ class GymLoop(BaseEnvLoop):
             for k, v in rb.items():
                 data[k].append(v)
             observations = next_observations
-            for idx, (terminated, truncated) in enumerate(zip(terminations, truncations)):
-                # if episode is terminated or truncated short,
-                if terminated or truncated:
-                    ep_returns[idx] = 0
-                    ep_lengths[idx] = 0
+            dones = terminations | truncations
+            ep_returns[dones] = 0
+            ep_lengths[dones] = 0
         # stack data
         for k in data:
             data[k] = np.stack(data[k])
