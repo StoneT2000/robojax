@@ -30,7 +30,7 @@ class BasePolicy:
         eval_env=None,
         num_envs: int = 1,
         num_eval_envs: int = 1,
-        logger_cfg: Any = dict(),
+        logger_cfg: Any = None,
     ) -> None:
         """
         Base class for a policy
@@ -78,17 +78,18 @@ class BasePolicy:
                 self.eval_loop = GymLoop(eval_env, num_eval_envs)
 
         # auto generate an experiment name based on the environment name and current time
-        if "exp_name" not in logger_cfg:
-            exp_name = f"{round(time.time_ns() / 1000)}"
-            if hasattr(env, "name"):
-                exp_name = f"{env.name}/{exp_name}"
-            logger_cfg["exp_name"] = exp_name
+        if logger_cfg is not None:
+            if "exp_name" not in logger_cfg:
+                exp_name = f"{round(time.time_ns() / 1000)}"
+                if hasattr(env, "name"):
+                    exp_name = f"{env.name}/{exp_name}"
+                logger_cfg["exp_name"] = exp_name
 
-        if "best_stats_cfg" not in logger_cfg:
-            logger_cfg["best_stats_cfg"] = {"test/ep_ret_avg": 1, "train/ep_ret_avg": 1}
-        if "save_fn" not in logger_cfg:
-            logger_cfg["save_fn"] = self.save
-        self.logger = Logger(**logger_cfg)
+            if "best_stats_cfg" not in logger_cfg:
+                logger_cfg["best_stats_cfg"] = {"test/ep_ret_avg": 1, "train/ep_ret_avg": 1}
+            if "save_fn" not in logger_cfg:
+                logger_cfg["save_fn"] = self.save
+            self.logger = Logger(**logger_cfg)
 
     def state_dict(self):
         """

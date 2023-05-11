@@ -239,6 +239,21 @@ class JaxLoop(BaseEnvLoop):
         self.env_reset = env_reset
         self.env_step = env_step
         self.rollout_callback = rollout_callback
+
+        def default_rollout_cb(action, env_obs, reward, ep_ret, ep_len, next_env_obs, terminated, truncated, info, aux):
+            return DefaultTimeStep(
+                env_obs=env_obs,
+                action=action,
+                reward=reward,
+                ep_ret=ep_ret,
+                ep_len=ep_len,
+                next_env_obs=next_env_obs,
+                terminated=terminated,
+                truncated=truncated,
+            )
+
+        if self.rollout_callback is None:
+            self.rollout_callback = default_rollout_cb
         self.num_envs = num_envs
         super().__init__(num_envs=num_envs)
 
@@ -280,22 +295,17 @@ class JaxLoop(BaseEnvLoop):
                 to obtain the initial environment observation and state
 
         """
-        rng_key, reset_rng_key = jax.random.split(rng_key)
-        if loop_state is not None:
-            env_obs, env_state, ep_return, ep_length = (
-                loop_state.env_obs,
-                loop_state.env_state,
-                loop_state.ep_ret,
-                loop_state.ep_len,
-            )
-        else:
+        if loop_state is None:
+            # if no loop state given, reset this singular env
+            rng_key, reset_rng_key = jax.random.split(rng_key)
             env_obs, env_state, _ = self.env_reset(reset_rng_key)
-            ep_return, ep_length = jnp.zeros((1,), dtype=float), jnp.zeros((1,), dtype=int)
+            ep_ret, ep_len = jnp.zeros((1,), dtype=float), jnp.zeros((1,), dtype=int)
+            loop_state = EnvLoopState(env_state=env_state, env_obs=env_obs, ep_ret=ep_ret, ep_len=ep_len)
 
-        def step_fn(data: Tuple[EnvObs, EnvState, float, int], _):
-            rng_key, env_obs, env_state, ep_ret, ep_len = data
+        def step_fn(data: Tuple[PRNGKey, EnvLoopState], _):
+            rng_key, loop_state = data
             rng_key, rng_step, rng_fn = jax.random.split(rng_key, 3)
-            action, aux = apply_fn(rng_fn, params, env_obs)
+            action, aux = apply_fn(rng_fn, params, loop_state.env_obs)
             (
                 next_env_obs,
                 next_env_state,
@@ -303,61 +313,47 @@ class JaxLoop(BaseEnvLoop):
                 terminated,
                 truncated,
                 info,
-            ) = self.env_step(rng_step, env_state, action)
+            ) = self.env_step(rng_step, loop_state.env_state, action)
             done = terminated | truncated
-            new_ep_ret, new_ep_len = ep_ret + reward, ep_len + 1
+            next_ep_ret, next_ep_len = loop_state.ep_ret + reward, loop_state.ep_len + 1
             true_next_env_obs = next_env_obs
             if "final_observation" in info:
+                # In Jax final_observation should always exist so just use it
                 true_next_env_obs = info["final_observation"]
-            if self.rollout_callback is not None:
-                rb = self.rollout_callback(
-                    action=action,
-                    env_obs=env_obs,
-                    reward=reward,
-                    ep_ret=new_ep_ret,
-                    ep_len=new_ep_len,
-                    next_env_obs=true_next_env_obs,  # TODO if env is auto resetting (todo later), this won't be right, access the next_env_obs via info
-                    terminated=terminated,
-                    truncated=truncated,
-                    info=info,
-                    aux=aux,
-                )
-            else:
-                rb = DefaultTimeStep(
-                    env_obs=env_obs,
-                    action=action,
-                    reward=reward,
-                    ep_ret=new_ep_ret,
-                    ep_len=new_ep_len,
-                    next_env_obs=true_next_env_obs,
-                    terminated=terminated,
-                    truncated=truncated,
-                )
-            new_ep_ret = new_ep_ret * (~done)
-            new_ep_len = new_ep_len * (~done)
+            rb = self.rollout_callback(
+                action=action,
+                env_obs=loop_state.env_obs,
+                reward=reward,
+                ep_ret=next_ep_ret,
+                ep_len=next_ep_len,
+                next_env_obs=true_next_env_obs,
+                terminated=terminated,
+                truncated=truncated,
+                info=info,
+                aux=aux,
+            )
+            next_ep_ret = next_ep_ret * (~done)
+            next_ep_len = next_ep_len * (~done)
 
             return (
                 rng_key,
-                next_env_obs,
-                next_env_state,
-                new_ep_ret,
-                new_ep_len,
+                EnvLoopState(env_obs=next_env_obs, env_state=next_env_state, ep_ret=next_ep_ret, ep_len=next_ep_len),
             ), rb
 
-        step_init = (rng_key, env_obs, env_state, ep_return, ep_length)
-        (_, final_env_obs, final_env_state, final_ep_returns, final_ep_lengths), rollout_data = jax.lax.scan(
-            step_fn, step_init, (), steps
-        )
-
-        aux = EnvLoopState(
-            env_obs=final_env_obs,
-            env_state=final_env_state,
-            ep_ret=final_ep_returns,
-            ep_len=final_ep_lengths,
-        )
+        step_init = (rng_key, loop_state)
+        (_, loop_state), rollout_data = jax.lax.scan(step_fn, step_init, (), steps)
+        # rollout_data - (steps, D)
+        # loop_state - (D)
+        # aux = EnvLoopState(
+        #     env_obs=final_env_obs,
+        #     env_state=final_env_state,
+        #     ep_ret=final_ep_returns,
+        #     ep_len=final_ep_lengths,
+        # )
         # add batch dimension so it plays nice with vmap in the rollout function
-        aux = jax.tree_util.tree_map(lambda x: jnp.expand_dims(x, 0), aux)
-        return rollout_data, aux
+        # aux = jax.tree_util.tree_map(lambda x: jnp.expand_dims(x, 0), aux)
+
+        return rollout_data, loop_state
 
     @partial(
         jax.jit,
@@ -403,17 +399,14 @@ class JaxLoop(BaseEnvLoop):
         generally quite minimal overhead over the long term.
 
         """
-        batch_rollout = jax.vmap(
-            self._rollout_single_env,
-            in_axes=(0, 0, None, None, None),
-            out_axes=(1),
-        )
-        data, aux = batch_rollout(
+        batch_rollout = jax.vmap(self._rollout_single_env, in_axes=(0, 0, None, None, None))
+        rollout_data, loop_state = batch_rollout(
             jnp.stack(rng_keys),
             loop_state,
             params,
             apply_fn,
             steps_per_env,
         )
-        aux = jax.tree_util.tree_map(lambda x: x[0], aux)  # remove batch dimension
-        return data, aux
+        # rollout_data - (num_envs, steps, D)
+        # loop_state - (num_envs, D)
+        return rollout_data, loop_state

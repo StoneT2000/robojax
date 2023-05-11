@@ -417,3 +417,13 @@ class SAC(BasePolicy):
             replay_buffer: GenericBuffer = data["replay_buffer"]
             print(f"Loading replay buffer which contains {replay_buffer.size() * replay_buffer.num_envs} interactions")
             self.replay_buffer = replay_buffer
+
+    def load_policy_from_path(self, load_path: str):
+        with open(load_path, "rb") as f:
+            state_dict = pickle.load(f)
+        print(f"Loading Checkpoint {load_path}")
+        return self.load_policy(state_dict)
+
+    def load_policy(self, data) -> ActorCritic:
+        ac = flax.serialization.from_bytes(self.state.ac, data["train_state"].ac)
+        return ac
