@@ -60,19 +60,17 @@ class SAC(BasePolicy):
         self,
         jax_env: bool,
         ac: ActorCritic,
-        num_envs,
         env,
         seed_sampler: Callable[[PRNGKey], EnvAction] = None,
         eval_env=None,
-        num_eval_envs=1,
         logger_cfg=dict(),
         cfg: SACConfig = {},
     ):
-        super().__init__(jax_env, env, eval_env, num_envs, num_eval_envs, logger_cfg)
         if isinstance(cfg, dict):
             self.cfg = SACConfig(**cfg)
         else:
             self.cfg = cfg
+        super().__init__(jax_env, env, eval_env, cfg.num_envs, cfg.num_eval_envs, logger_cfg)
 
         self.state: SACTrainState = SACTrainState(
             ac=ac,

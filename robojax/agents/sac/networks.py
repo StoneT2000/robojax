@@ -4,7 +4,7 @@ Models for SAC
 import os
 from functools import partial
 from pathlib import Path
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Callable, Optional, Tuple
 
 import flax
 import flax.linen as nn
@@ -15,7 +15,7 @@ from chex import Array, PRNGKey
 from flax import struct
 from tensorflow_probability.substrates import jax as tfp
 
-from robojax.models import MLP, Model
+from robojax.models import Model
 from robojax.models.model import Params
 
 tfd = tfp.distributions
@@ -23,20 +23,18 @@ tfb = tfp.bijectors
 
 
 class Critic(nn.Module):
-    # TODO make a decorator that injects these network parameters based on some config
-    features: Sequence[int]
-    activation: Callable[[Array], Array] = nn.relu
+    feature_extractor: nn.Module
 
     @nn.compact
     def __call__(self, obs: Array, acts: Array) -> Array:
         x = jnp.concatenate([obs, acts], -1)
-        critic = MLP((*self.features, 1), self.activation)(x)
-        return jnp.squeeze(critic, -1)
+        features = self.feature_extractor(x)
+        value = nn.Dense(1)(features)
+        return jnp.squeeze(value, -1)
 
 
 class DoubleCritic(nn.Module):
-    features: Sequence[int]
-    activation: Callable[[Array], Array] = nn.relu
+    feature_extractor: nn.Module
     num_critics: int = 2
 
     @nn.compact
@@ -44,12 +42,12 @@ class DoubleCritic(nn.Module):
         VmapCritic = nn.vmap(
             Critic,
             variable_axes={"params": 0},
-            split_rngs={"params": True},
+            split_rngs={"params": True},  # ensures each Critic has randomized parameters
             in_axes=None,
             out_axes=0,
             axis_size=self.num_critics,
         )
-        qs = VmapCritic(self.features, self.activation)(obs, acts)
+        qs = VmapCritic(self.feature_extractor)(obs, acts)
         return qs
 
 
@@ -58,9 +56,8 @@ def default_init(scale: Optional[float] = jnp.sqrt(2)):
 
 
 class DiagGaussianActor(nn.Module):
-    features: Sequence[int]
+    feature_extractor: nn.Module
     act_dims: int
-    activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
     output_activation: Callable[[jnp.ndarray], jnp.ndarray] = nn.relu
 
     tanh_squash_distribution: bool = True
@@ -74,14 +71,14 @@ class DiagGaussianActor(nn.Module):
             self.log_std = nn.Dense(self.act_dims, kernel_init=default_init(1))
         else:
             self.log_std = self.param("log_std", nn.initializers.zeros, (self.act_dims,))
-        self.mlp = MLP(self.features, self.activation, self.output_activation)
+        # self.mlp = MLP(self.features, self.activation, self.output_activation)
 
         # scale of orthgonal initialization is recommended to be (high - low) / 2.
-        # We always assume envs are normalized so 1 is correct
+        # We always assume envs use normalized actions [-1, 1] so we init with 1
         self.action_head = nn.Dense(self.act_dims, kernel_init=default_init(1))
 
     def __call__(self, x, deterministic=False):
-        x = self.mlp(x)
+        x = self.feature_extractor(x)
         a = self.action_head(x)
         if not self.tanh_squash_distribution:
             a = nn.tanh(a)

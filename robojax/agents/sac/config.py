@@ -2,14 +2,14 @@
 Configurations and utility classes
 """
 
-import dataclasses
+from dataclasses import dataclass
 from typing import Optional
 
 import chex
 from flax import struct
 
 
-@dataclasses.dataclass
+@dataclass
 class SACConfig:
     """
     Configuration dataclass for SAC

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional
 
 import gymnasium
 import gymnasium.vector
@@ -8,16 +8,38 @@ from chex import Array
 from gymnasium import spaces
 from gymnasium.vector import AsyncVectorEnv, VectorEnv
 from gymnasium.wrappers import RecordVideo, TimeLimit
+from omegaconf import OmegaConf
 
 import robojax.wrappers.maniskill2 as ms2wrappers
+
+
+@dataclass
+class EnvConfig:
+    env_id: str
+    jax_env: bool
+    max_episode_steps: int
+    num_envs: int
+    env_kwargs: Dict
 
 
 @dataclass
 class EnvMeta:
     sample_obs: Array
     sample_acts: Array
-    obs_space: spaces.Space  # Technically not always the right typing
+    obs_space: spaces.Space
     act_space: spaces.Space
+
+
+def make_env_from_cfg(cfg: EnvConfig, seed: int = None, video_path: str = None):
+    return make_env(
+        env_id=cfg.env_id,
+        jax_env=cfg.jax_env,
+        max_episode_steps=cfg.max_episode_steps,
+        num_envs=cfg.num_envs,
+        seed=seed,
+        record_video_path=video_path,
+        env_kwargs=OmegaConf.to_container(cfg.env_kwargs),
+    )
 
 
 def make_env(

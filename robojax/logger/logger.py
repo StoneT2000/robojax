@@ -39,6 +39,18 @@ def colorize(string, color, bold=False, highlight=False):
     return "\x1b[%sm%s\x1b[0m" % (";".join(attr), string)
 
 
+from dataclasses import dataclass
+
+
+@dataclass
+class LoggerConfig:
+    tensorboard: bool
+    wandb: bool
+    workspace: str
+    project_name: str
+    wandb_cfg: Dict
+
+
 class Logger:
     """
     Logging tool
