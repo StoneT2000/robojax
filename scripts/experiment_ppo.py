@@ -1,4 +1,5 @@
 import os.path as osp
+import sys
 import warnings
 
 import jax
@@ -52,16 +53,18 @@ def main(cfg):
     # 64,64 for cartpole comparison
     # actor = MLP([64, 64, act_dims], output_activation=None)
     # critic = MLP([64, 64, 1], output_activation=None)
+    # 32, 32, 32, 32 for brax
+    # 256, 256, 256, 256, 256 for brax
     actor = MLP([256, 256, act_dims], output_activation=nn.tanh, final_ortho_scale=0.01)
     critic = MLP([256, 256, 1], output_activation=None, final_ortho_scale=1)
 
-    ac = ActorCritic(
+    ac = ActorCritic.create(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,
         critic=critic,
         explorer=explorer,
         sample_obs=sample_obs,
-        act_dims=act_dims,
+        sample_acts=sample_acts,
         actor_optim=optax.adam(learning_rate=cfg.model.actor_lr),
         critic_optim=optax.adam(learning_rate=cfg.model.critic_lr),
     )
@@ -78,14 +81,12 @@ def main(cfg):
         cfg=ppo_cfg,
     )
 
-    model_path = "weights.jx"  # osp.join(logger.exp_path, "weights.jx")
-    # model_path = "robojax_exps/LiftCube-v0_test5/models/best_train_ep_ret_avg_ckpt.jx"
-    # algo.load_from_path(model_path)
+    model_path = osp.join(algo.logger.exp_path, "latest.jx")
 
     algo.train(rng_key=jax.random.PRNGKey(cfg.seed), steps=cfg.train.steps, verbose=1)
     ac.save(model_path)
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=osp.join(osp.dirname(__file__), "cfgs/ppo_halfcheetah.yml"))
+    cfg = parse_cfg(default_cfg_path=sys.argv[1])
     main(cfg)

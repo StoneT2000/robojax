@@ -26,6 +26,14 @@ class CriticAux:
     critic_loss: chex.Array = 0.0
 
 
+@struct.dataclass
+class UpdateAux:
+    critic_aux: CriticAux
+    actor_aux: ActorAux
+    actor_updates: int
+    critic_updates: int
+
+
 def actor_loss_fn(clip_ratio: float, entropy_coef: float, actor_apply_fn: Callable, batch: TimeStep):
     def loss_fn(actor_params: Params):
         obs, act, adv, logp_old = batch.env_obs, batch.action, batch.adv, batch.log_p
@@ -60,7 +68,7 @@ def critic_loss_fn(critic_apply_fn: Callable, batch: TimeStep):
         obs, ep_ret = batch.env_obs, batch.ep_ret
         v = critic_apply_fn(critic_params, obs)
         v = jnp.squeeze(v, -1)
-        critic_loss = jnp.mean(jnp.square(v - ep_ret), axis=0)
+        critic_loss = jnp.mean(jnp.square(v - ep_ret), axis=0) * 0.5 * 0.5
         return critic_loss, CriticAux(critic_loss=critic_loss)
 
     return loss_fn

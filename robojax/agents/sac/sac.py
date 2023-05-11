@@ -76,7 +76,7 @@ class SAC(BasePolicy):
 
         self.state: SACTrainState = SACTrainState(
             ac=ac,
-            loop_state=EnvLoopState(env_obs=None, env_state=None, ep_len=None, ep_ret=None),
+            loop_state=EnvLoopState(),
             total_env_steps=0,
             training_steps=0,
             rng_key=None,
@@ -203,7 +203,7 @@ class SAC(BasePolicy):
             self.logger.store(tag="train_stats", **train_step_metrics.train_stats)
             # log time information
             total_time = time.time() - train_start_time
-            if tools.reached_freq(self.state.total_env_steps, self.cfg.log_freq):
+            if tools.reached_freq(self.state.total_env_steps, self.cfg.log_freq, step_size=env_rollout_size):
                 self.logger.store(tag="time", **train_step_metrics.time)
                 self.logger.store(
                     tag="time",
@@ -217,7 +217,7 @@ class SAC(BasePolicy):
             self.logger.reset()
 
             # save checkpoints. Note that the logger auto saves upon metric improvements
-            if tools.reached_freq(self.state.total_env_steps, self.cfg.save_freq):
+            if tools.reached_freq(self.state.total_env_steps, self.cfg.save_freq, env_rollout_size):
                 self.save(
                     os.path.join(self.logger.model_path, f"ckpt_{self.state.total_env_steps}.jx"),
                     with_buffer=self.cfg.save_buffer_in_checkpoints,
