@@ -30,6 +30,18 @@ sac:
   learnable_temp: True
   initial_temperature: 1.0
 
+network:
+  actor:
+    type: "mlp"
+    arch_cfg:
+      features: [256, 256, 256]
+      output_activation: "relu"
+  critic:
+    type: "mlp"
+    arch_cfg:
+      features: [256, 256, 256]
+      output_activation: "relu"
+
 train:
   actor_lr: 3e-4
   critic_lr: 3e-4

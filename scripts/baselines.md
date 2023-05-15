@@ -47,3 +47,23 @@ python scripts/experiment_ppo.py env.env_id="CartPole-v1" env.max_episode_steps=
 collects data in shape (batch_size * num_minibatches, unroll_length)
 
 during sgd step (which has num_minibatches steps), this is reshaped to (num_minibatches, -1) + unroll_length? then scanover num_minibatches and mini batch step of size 2048 each.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```
+python scripts/experiment_sac.py scripts/cfgs/sac/hopper_mujoco.yml logger.exp_name="mujoco/Hopper-v4_sac_s0" logger.wandb=True seed=0 logger.clear_out=True
+
+python scripts/experiment_sac.py scripts/cfgs/sac/hopper_brax.yml logger.exp_name="mujoco/hopper-brax_sac_s0" logger.wandb=True seed=0 logger.clear_out=True
+```
