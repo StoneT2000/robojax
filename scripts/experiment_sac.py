@@ -2,22 +2,22 @@ import os.path as osp
 import sys
 import warnings
 
-import flax.linen as nn
 import jax
 import numpy as np
 import optax
+from omegaconf import OmegaConf
 
 from robojax.agents.sac import SAC, ActorCritic, SACConfig
 from robojax.agents.sac.networks import DiagGaussianActor, DoubleCritic
 from robojax.cfg.parse import parse_cfg
 from robojax.logger import LoggerConfig
-from robojax.models import MLP
+from robojax.models import NetworkConfig, build_network_from_cfg
 from robojax.utils.make_env import EnvConfig, make_env_from_cfg
 from robojax.utils.spaces import get_action_dim
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 
 @dataclass
@@ -28,14 +28,24 @@ class TrainConfig:
 
 
 @dataclass
+class SACNetworkConfig:
+    actor: NetworkConfig
+    critic: NetworkConfig
+
+
+@dataclass
 class SACExperiment:
     seed: int
     sac: SACConfig
     env: EnvConfig
     eval_env: EnvConfig
     train: TrainConfig
+    network: SACNetworkConfig
     logger: LoggerConfig
     algo: str = "sac"
+
+
+from dacite import from_dict
 
 
 def main(cfg: SACExperiment):
@@ -47,6 +57,7 @@ def main(cfg: SACExperiment):
     if "env_kwargs" not in env_cfg:
         env_cfg["env_kwargs"] = dict()
     cfg.eval_env = {**env_cfg, **cfg.eval_env}
+    cfg = from_dict(data_class=SACExperiment, data=OmegaConf.to_container(cfg))
     eval_env_cfg = cfg.eval_env
 
     video_path = osp.join(cfg.logger.workspace, cfg.logger.exp_name, "videos")
@@ -80,10 +91,10 @@ def main(cfg: SACExperiment):
 
     # create actor and critics models
     act_dims = get_action_dim(env_meta.act_space)
-    actor_feature_extractor = MLP(features=[256, 256, 256], output_activation=nn.relu)
-    critic_feature_extractor = MLP(features=[256, 256, 256], output_activation=nn.relu)
-    actor = DiagGaussianActor(feature_extractor=actor_feature_extractor, act_dims=act_dims, state_dependent_std=True)
-    critic = DoubleCritic(feature_extractor=critic_feature_extractor)
+    actor = DiagGaussianActor(
+        feature_extractor=build_network_from_cfg(cfg.network.actor), act_dims=act_dims, state_dependent_std=True
+    )
+    critic = DoubleCritic(feature_extractor=build_network_from_cfg(cfg.network.critic))
     ac = ActorCritic.create(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,
@@ -102,15 +113,12 @@ def main(cfg: SACExperiment):
         jax_env=cfg.env.jax_env,
         ac=ac,
         seed_sampler=seed_sampler,
-        logger_cfg=dict(cfg=cfg, **cfg.logger),
-        cfg=SACConfig(**cfg.sac),
+        logger_cfg=dict(cfg=cfg, **asdict(cfg.logger)),
+        cfg=SACConfig(**asdict(cfg.sac)),
     )
 
     # train our algorithm with an initial seed
-    algo.train(
-        steps=cfg.train.steps,
-        rng_key=jax.random.PRNGKey(cfg.seed),
-    )
+    algo.train(steps=cfg.train.steps, rng_key=jax.random.PRNGKey(cfg.seed))
 
 
 if __name__ == "__main__":

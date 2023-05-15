@@ -30,6 +30,6 @@ def clean_and_transform(cfg):
             clean_and_transform(cfg[k])
         if isinstance(v, str):
             if v[0] == "(" and v[-1] == ")":
-                cfg[k] = eval(v)  # TODO: FIX
+                cfg[k] = eval(v)
             elif v == "None":
                 cfg[k] = None

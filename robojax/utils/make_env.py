@@ -31,6 +31,8 @@ class EnvMeta:
 
 
 def make_env_from_cfg(cfg: EnvConfig, seed: int = None, video_path: str = None):
+    if not isinstance(cfg.env_kwargs, dict):
+        cfg.env_kwargs = OmegaConf.to_container(cfg.env_kwargs)
     return make_env(
         env_id=cfg.env_id,
         jax_env=cfg.jax_env,
@@ -38,7 +40,7 @@ def make_env_from_cfg(cfg: EnvConfig, seed: int = None, video_path: str = None):
         num_envs=cfg.num_envs,
         seed=seed,
         record_video_path=video_path,
-        env_kwargs=OmegaConf.to_container(cfg.env_kwargs),
+        env_kwargs=cfg.env_kwargs,
     )
 
 

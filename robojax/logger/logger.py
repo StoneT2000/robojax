@@ -49,6 +49,7 @@ class LoggerConfig:
     workspace: str
     project_name: str
     wandb_cfg: Dict
+    exp_name: str
 
 
 class Logger:

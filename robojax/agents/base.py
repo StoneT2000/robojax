@@ -138,7 +138,6 @@ class BasePolicy:
             apply_fn=apply_fn,
             steps_per_env=steps_per_env,
         )
-        # TODO use eval_buffer info['stats'] to log custom stats
         if not self.jax_env:
             final_infos = eval_buffer["final_info"]
             del eval_buffer["final_info"]
@@ -149,7 +148,6 @@ class BasePolicy:
         eval_ep_lens = eval_buffer.ep_len[eval_episode_ends].flatten()
         stats_list = []
         if not self.jax_env:
-            # TODO handle final info metrics
             for info in final_infos:
                 if "stats" in info:
                     stats_list.append(info["stats"])

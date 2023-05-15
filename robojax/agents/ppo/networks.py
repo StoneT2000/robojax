@@ -18,7 +18,7 @@ from robojax.models.model import Model
 Params = flax.core.FrozenDict[str, Any]
 
 
-def mlp(sizes, activation, output_activation=None):  # TODO
+def mlp(sizes, activation, output_activation=None):
     layers = []
     for j in range(len(sizes) - 1):
         layers += [nn.Dense(sizes[j], sizes[j + 1])]

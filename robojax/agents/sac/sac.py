@@ -279,7 +279,6 @@ class SAC(BasePolicy):
                         if "stats" in final_info:
                             for k in final_info["stats"]:
                                 train_custom_stats[k].append(final_info["stats"][k])
-            # TODO make batch version where multiple timesteps are stored at once
             self.replay_buffer.store(
                 env_obs=data.env_obs, reward=data.reward, action=data.action, mask=masks, next_env_obs=data.next_env_obs
             )
