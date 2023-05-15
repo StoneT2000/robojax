@@ -17,7 +17,7 @@ from robojax.utils.spaces import get_action_dim
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 
 @dataclass
@@ -113,8 +113,8 @@ def main(cfg: SACExperiment):
         jax_env=cfg.env.jax_env,
         ac=ac,
         seed_sampler=seed_sampler,
-        logger_cfg=dict(cfg=cfg, **asdict(cfg.logger)),
-        cfg=SACConfig(**asdict(cfg.sac)),
+        logger_cfg=cfg.logger,
+        cfg=cfg.sac,
     )
 
     # train our algorithm with an initial seed

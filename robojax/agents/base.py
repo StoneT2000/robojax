@@ -17,7 +17,7 @@ from robojax.data.loop import (
     GymLoop,
     JaxLoop,
 )
-from robojax.logger.logger import Logger
+from robojax.logger.logger import Logger, LoggerConfig
 from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
 
@@ -30,7 +30,7 @@ class BasePolicy:
         eval_env=None,
         num_envs: int = 1,
         num_eval_envs: int = 1,
-        logger_cfg: Any = None,
+        logger_cfg: LoggerConfig = None,
     ) -> None:
         """
         Base class for a policy
@@ -79,17 +79,16 @@ class BasePolicy:
 
         # auto generate an experiment name based on the environment name and current time
         if logger_cfg is not None:
-            if "exp_name" not in logger_cfg:
+            if logger_cfg.exp_name is None:
                 exp_name = f"{round(time.time_ns() / 1000)}"
                 if hasattr(env, "name"):
                     exp_name = f"{env.name}/{exp_name}"
-                logger_cfg["exp_name"] = exp_name
-
-            if "best_stats_cfg" not in logger_cfg:
-                logger_cfg["best_stats_cfg"] = {"test/ep_ret_avg": 1, "train/ep_ret_avg": 1}
-            if "save_fn" not in logger_cfg:
-                logger_cfg["save_fn"] = self.save
-            self.logger = Logger(**logger_cfg)
+                logger_cfg.exp_name = exp_name
+            if not logger_cfg.best_stats_cfg:
+                logger_cfg.best_stats_cfg = {"test/ep_ret_avg": 1, "train/ep_ret_avg": 1}
+            if logger_cfg.save_fn is None:
+                logger_cfg.save_fn = self.save
+            self.logger = Logger.create_from_cfg(logger_cfg)
 
     def state_dict(self):
         """

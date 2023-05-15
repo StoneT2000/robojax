@@ -44,12 +44,16 @@ from dataclasses import dataclass
 
 @dataclass
 class LoggerConfig:
-    tensorboard: bool
-    wandb: bool
     workspace: str
-    project_name: str
-    wandb_cfg: Dict
-    exp_name: str
+    exp_name: Union[str, None] = None
+    clear_out: bool = False
+    project_name: Union[str, None] = None
+    tensorboard: bool = False
+    wandb: bool = False
+    wandb_cfg: Union[Dict, None] = None
+    cfg: Dict = None
+    best_stats_cfg: Dict = None
+    save_fn: Union[Callable, None] = None
 
 
 class Logger:
@@ -59,15 +63,15 @@ class Logger:
 
     def __init__(
         self,
-        wandb=False,
-        tensorboard=True,
         workspace: str = "default_workspace",
         exp_name: str = "default_exp",
         clear_out: bool = False,
         project_name: str = None,
-        wandb_cfg=None,
-        cfg: Union[Dict, OmegaConf] = {},
-        best_stats_cfg={},
+        tensorboard=True,
+        wandb=False,
+        wandb_cfg: Union[Dict, None] = None,
+        cfg: Union[Dict, OmegaConf, None] = {},
+        best_stats_cfg: Union[Dict, None] = {},
         save_fn: Callable = None,
     ) -> None:
         """
@@ -112,6 +116,10 @@ class Logger:
         self.wandb = wandb
         if wandb_cfg is None:
             wandb_cfg = {}
+        if cfg is None:
+            cfg = {}
+        if best_stats_cfg is None:
+            best_stats_cfg = {}
         self.tensorboard = tensorboard
         self.tb_writer = None
 
@@ -156,6 +164,21 @@ class Logger:
         self.best_stats = {}
         self.best_stats_cfg = best_stats_cfg
         self.save_fn = save_fn
+
+    @classmethod
+    def create_from_cfg(cls, cfg: LoggerConfig):
+        return cls(
+            workspace=cfg.workspace,
+            exp_name=cfg.exp_name,
+            clear_out=cfg.clear_out,
+            project_name=cfg.project_name,
+            tensorboard=cfg.tensorboard,
+            wandb=cfg.wandb,
+            wandb_cfg=cfg.wandb_cfg,
+            cfg=cfg.cfg,
+            best_stats_cfg=cfg.best_stats_cfg,
+            save_fn=cfg.save_fn,
+        )
 
     def init_tb(self):
         if self.tensorboard and self.tb_writer is None:

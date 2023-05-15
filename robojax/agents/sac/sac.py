@@ -20,6 +20,7 @@ from robojax.agents.sac.config import SACConfig, TimeStep
 from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
 from robojax.data.buffer import GenericBuffer
 from robojax.data.loop import DefaultTimeStep, EnvAction, EnvLoopState
+from robojax.logger import LoggerConfig
 from robojax.utils import tools
 
 
@@ -63,7 +64,7 @@ class SAC(BasePolicy):
         env,
         seed_sampler: Callable[[PRNGKey], EnvAction] = None,
         eval_env=None,
-        logger_cfg=dict(),
+        logger_cfg: LoggerConfig = None,
         cfg: SACConfig = {},
     ):
         if isinstance(cfg, dict):
@@ -288,11 +289,9 @@ class SAC(BasePolicy):
         rollout_time = time.time() - rollout_time_start
         time_metrics["rollout_time"] = rollout_time
         time_metrics["rollout_fps"] = self.cfg.num_envs * self.cfg.steps_per_env / rollout_time
-
         for k in train_metrics:
             if len(train_metrics[k]) > 0:
-                train_metrics[k] = np.stack(train_metrics[k]).flatten()
-
+                train_metrics[k] = np.concatenate(train_metrics[k]).flatten()
         # update policy
         if self.state.total_env_steps >= self.cfg.num_seed_steps:
             update_time_start = time.time()
