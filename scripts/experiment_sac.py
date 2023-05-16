@@ -10,48 +10,70 @@ from omegaconf import OmegaConf
 from robojax.agents.sac import SAC, ActorCritic, SACConfig
 from robojax.agents.sac.networks import DiagGaussianActor, DoubleCritic
 from robojax.cfg.parse import parse_cfg
-from robojax.utils.make_env import make_env
+from robojax.logger import LoggerConfig
+from robojax.models import NetworkConfig, build_network_from_cfg
+from robojax.utils.make_env import EnvConfig, make_env_from_cfg
 from robojax.utils.spaces import get_action_dim
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
+from dataclasses import dataclass
 
-def main(cfg):
+
+@dataclass
+class TrainConfig:
+    steps: int
+    actor_lr: float
+    critic_lr: float
+
+
+@dataclass
+class SACNetworkConfig:
+    actor: NetworkConfig
+    critic: NetworkConfig
+
+
+@dataclass
+class SACExperiment:
+    seed: int
+    sac: SACConfig
+    env: EnvConfig
+    eval_env: EnvConfig
+    train: TrainConfig
+    network: SACNetworkConfig
+    logger: LoggerConfig
+    algo: str = "sac"
+
+
+from dacite import from_dict
+
+
+def main(cfg: SACExperiment):
     np.random.seed(cfg.seed)
-    # Setup the experiment parameters
+    ### Setup the experiment parameters ###
+
+    # Setup training and evaluation environment configs
     env_cfg = cfg.env
     if "env_kwargs" not in env_cfg:
         env_cfg["env_kwargs"] = dict()
     cfg.eval_env = {**env_cfg, **cfg.eval_env}
+    cfg = from_dict(data_class=SACExperiment, data=OmegaConf.to_container(cfg))
     eval_env_cfg = cfg.eval_env
 
     video_path = osp.join(cfg.logger.workspace, cfg.logger.exp_name, "videos")
 
+    cfg.sac.num_envs = cfg.env.num_envs
+    cfg.sac.num_eval_envs = cfg.eval_env.num_envs
+
     # create envs
-    env, env_meta = make_env(
-        env_id=env_cfg.env_id,
-        jax_env=cfg.jax_env,
-        max_episode_steps=env_cfg.max_episode_steps,
-        num_envs=cfg.sac.num_envs,
-        seed=cfg.seed,
-        env_kwargs=OmegaConf.to_container(env_cfg.env_kwargs),
-    )
+    env, env_meta = make_env_from_cfg(env_cfg, seed=cfg.seed)
     eval_env = None
     if cfg.sac.num_eval_envs > 0:
-        eval_env, _ = make_env(
-            env_id=eval_env_cfg.env_id,
-            jax_env=cfg.jax_env,
-            max_episode_steps=eval_env_cfg.max_episode_steps,
-            num_envs=cfg.sac.num_eval_envs,
-            seed=cfg.seed + 1000000,
-            record_video_path=video_path,
-            env_kwargs=OmegaConf.to_container(eval_env_cfg.env_kwargs),
-        )
-
+        eval_env, _ = make_env_from_cfg(eval_env_cfg, seed=cfg.seed + 1_000_000, video_path=video_path)
     sample_obs, sample_acts = env_meta.sample_obs, env_meta.sample_acts
 
     # for SAC, we need a function to randomly sample actions, we write one for jax based and non jax based envs
-    if cfg.jax_env:
+    if cfg.env.jax_env:
 
         def seed_sampler(rng_key):
             return env.action_space().sample(rng_key)
@@ -67,47 +89,40 @@ def main(cfg):
                 dtype=float,
             )
 
-    # define hyperparameters for SAC
-    sac_cfg = SACConfig(**cfg.sac)
-    import dataclasses
-
-    cfg.sac = dataclasses.asdict(sac_cfg)
-
     # create actor and critics models
     act_dims = get_action_dim(env_meta.act_space)
-    actor = DiagGaussianActor(features=[256, 256, 256], act_dims=act_dims, state_dependent_std=True)
-    critic = DoubleCritic(features=[256, 256, 256])
+    actor = DiagGaussianActor(
+        feature_extractor=build_network_from_cfg(cfg.network.actor), act_dims=act_dims, state_dependent_std=True
+    )
+    critic = DoubleCritic(feature_extractor=build_network_from_cfg(cfg.network.critic))
     ac = ActorCritic.create(
         jax.random.PRNGKey(cfg.seed),
         actor=actor,
         critic=critic,
         sample_obs=sample_obs,
         sample_acts=sample_acts,
-        initial_temperature=sac_cfg.initial_temperature,
-        actor_optim=optax.adam(learning_rate=cfg.model.actor_lr),
-        critic_optim=optax.adam(learning_rate=cfg.model.critic_lr),
+        initial_temperature=cfg.sac.initial_temperature,
+        actor_optim=optax.adam(learning_rate=cfg.train.actor_lr),
+        critic_optim=optax.adam(learning_rate=cfg.train.critic_lr),
     )
 
     # create our algorithm
     algo = SAC(
         env=env,
         eval_env=eval_env,
-        num_envs=cfg.sac.num_envs,
-        num_eval_envs=cfg.sac.num_eval_envs,
-        jax_env=cfg.jax_env,
+        jax_env=cfg.env.jax_env,
         ac=ac,
         seed_sampler=seed_sampler,
-        logger_cfg=dict(cfg=cfg, **cfg.logger),
-        cfg=sac_cfg,
+        logger_cfg=cfg.logger,
+        cfg=cfg.sac,
     )
 
     # train our algorithm with an initial seed
-    algo.train(
-        steps=cfg.train.steps,
-        rng_key=jax.random.PRNGKey(cfg.seed),
-    )
+    algo.train(steps=cfg.train.steps, rng_key=jax.random.PRNGKey(cfg.seed))
 
 
 if __name__ == "__main__":
-    cfg = parse_cfg(default_cfg_path=sys.argv[1])
+    cfg_path = sys.argv[1]
+    del sys.argv[1]
+    cfg = parse_cfg(default_cfg_path=cfg_path)
     main(cfg)

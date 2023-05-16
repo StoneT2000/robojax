@@ -1,9 +1,25 @@
 """MLP class"""
 
-from typing import Callable, Optional, Sequence
+from dataclasses import dataclass
+from typing import Callable, List, Optional, Sequence, Union
 
 import flax.linen as nn
 import jax.numpy as jnp
+
+from .types import NetworkConfig
+
+
+@dataclass
+class MLPArchConfig:
+    features: List[int]
+    activation: Union[Callable, str] = "relu"
+    output_activation: Union[Callable, str] = None
+
+
+@dataclass
+class MLPConfig(NetworkConfig):
+    type = "mlp"
+    arch_cfg: MLPArchConfig
 
 
 def default_init(scale: Optional[float] = jnp.sqrt(2)):

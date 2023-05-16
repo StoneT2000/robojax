@@ -59,7 +59,6 @@ def gae_advantages(rewards, dones, values, discount: float, gae_lambda: float):
     return jax.lax.stop_gradient(advantages)
 
 
-# TODO: Create a algo state / training state with separaable non-jax component (e.g. replay buffer) for easy saving and continuing runs
 @struct.dataclass
 class TrainStepMetrics:
     train_stats: Any
@@ -213,7 +212,6 @@ class PPO(BasePolicy):
 
         while self.state.total_env_steps < start_step + steps:
             rng_key, train_rng_key = jax.random.split(self.state.rng_key)
-            # TODO where should apply_fn go?
             state, train_step_metrics = self.train_step(train_rng_key, self.state, self.cfg)
             self.state: PPOTrainState = state.replace(rng_key=rng_key)
 
@@ -270,8 +268,6 @@ class PPO(BasePolicy):
         rng_key, buffer_rng_key = jax.random.split(rng_key)
         rollout_s_time = time.time()
 
-        # TODO can we prevent compilation here where init_env_states=None the first time for reset_env=False?
-
         # if we don't reset the environment after each rollout, then we generate environment states if we don't have any yet
         # for non jax envs this just resets the environments
         loop_state = state.loop_state
@@ -294,7 +290,6 @@ class PPO(BasePolicy):
         )
 
         update_time = time.time() - update_s_time
-        # TODO convert the dict below to a flax.struct.dataclass to improve speed
         state = state.replace(
             ac=ac,
             loop_state=loop_state,

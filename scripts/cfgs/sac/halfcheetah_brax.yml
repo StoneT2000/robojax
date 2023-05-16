@@ -3,14 +3,12 @@ algo: sac
 
 # Environment configuration
 env:
-  env_id: "HalfCheetah-v4"
-  num_envs: 4
+  env_id: "halfcheetah"
+  num_envs: 16
   max_episode_steps: 1000
-  jax_env: False
-  env_kwargs:
-    render_mode: "rgb_array"
+  jax_env: True
 eval_env:
-  num_envs: 4
+  num_envs: 16
   max_episode_steps: 1000
 
 sac:
@@ -18,7 +16,7 @@ sac:
   replay_buffer_capacity: 1_000_000
   batch_size: 256
   
-  steps_per_env: 4
+  steps_per_env: 1
   grad_updates_per_step: 16
 
   eval_freq: 100_000

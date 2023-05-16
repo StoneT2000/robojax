@@ -20,6 +20,7 @@ from robojax.agents.sac.config import SACConfig, TimeStep
 from robojax.agents.sac.networks import ActorCritic, DiagGaussianActor
 from robojax.data.buffer import GenericBuffer
 from robojax.data.loop import DefaultTimeStep, EnvAction, EnvLoopState
+from robojax.logger import LoggerConfig
 from robojax.utils import tools
 
 
@@ -60,19 +61,17 @@ class SAC(BasePolicy):
         self,
         jax_env: bool,
         ac: ActorCritic,
-        num_envs,
         env,
         seed_sampler: Callable[[PRNGKey], EnvAction] = None,
         eval_env=None,
-        num_eval_envs=1,
-        logger_cfg=dict(),
+        logger_cfg: LoggerConfig = None,
         cfg: SACConfig = {},
     ):
-        super().__init__(jax_env, env, eval_env, num_envs, num_eval_envs, logger_cfg)
         if isinstance(cfg, dict):
             self.cfg = SACConfig(**cfg)
         else:
             self.cfg = cfg
+        super().__init__(jax_env, env, eval_env, cfg.num_envs, cfg.num_eval_envs, logger_cfg)
 
         self.state: SACTrainState = SACTrainState(
             ac=ac,
@@ -281,7 +280,6 @@ class SAC(BasePolicy):
                         if "stats" in final_info:
                             for k in final_info["stats"]:
                                 train_custom_stats[k].append(final_info["stats"][k])
-            # TODO make batch version where multiple timesteps are stored at once
             self.replay_buffer.store(
                 env_obs=data.env_obs, reward=data.reward, action=data.action, mask=masks, next_env_obs=data.next_env_obs
             )
@@ -291,11 +289,9 @@ class SAC(BasePolicy):
         rollout_time = time.time() - rollout_time_start
         time_metrics["rollout_time"] = rollout_time
         time_metrics["rollout_fps"] = self.cfg.num_envs * self.cfg.steps_per_env / rollout_time
-
         for k in train_metrics:
             if len(train_metrics[k]) > 0:
-                train_metrics[k] = np.stack(train_metrics[k]).flatten()
-
+                train_metrics[k] = np.concatenate(train_metrics[k]).flatten()
         # update policy
         if self.state.total_env_steps >= self.cfg.num_seed_steps:
             update_time_start = time.time()
