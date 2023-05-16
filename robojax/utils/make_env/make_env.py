@@ -10,9 +10,8 @@ from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv, VectorEnv
 from gymnasium.wrappers import RecordVideo, TimeLimit
 from omegaconf import OmegaConf
 
-import robojax.utils.make_env.dm_control as dm_control
-import robojax.utils.make_env.mani_skill2 as mani_skill2
-import robojax.wrappers.maniskill2 as ms2wrappers
+import robojax.utils.make_env._dm_control as _dm_control
+import robojax.utils.make_env._mani_skill2 as _mani_skill2
 
 
 @dataclass
@@ -64,7 +63,7 @@ def make_env(
         import gymnax
         from brax import envs
 
-        from robojax.wrappers.brax import BraxGymWrapper
+        from robojax.wrappers._brax import BraxGymWrapper
         from robojax.wrappers.gymnax import GymnaxWrapper
 
         if env_id in gymnax.registered_envs:
@@ -85,45 +84,33 @@ def make_env(
         sample_obs = obs_space.sample(jax.random.PRNGKey(0))
         act_space = env.action_space()
     else:
-        wrappers = []
 
-        def make_env(env_id, idx, record_video, wrappers):
+        def env_factory(env_id, idx, record_video, wrappers):
             def _init():
                 env = gymnasium.make(env_id, disable_env_checker=True, **env_kwargs)
-                if record_video and idx == 0:
-                    env = RecordVideo(env, record_video_path)
                 for wrapper in wrappers:
                     env = wrapper(env)
+                if record_video and idx == 0:
+                    env = RecordVideo(env, record_video_path, episode_trigger=lambda x: True)
                 return env
 
             return _init
 
-        if mani_skill2.is_mani_skill2_env(env_id):
-            wrappers.append(lambda x: ms2wrappers.ManiSkill2Wrapper(x))
-            wrappers.append(lambda x: ms2wrappers.ContinuousTaskWrapper(x))
+        if _mani_skill2.is_mani_skill2_env(env_id):
+            env_factory = _mani_skill2.env_factory(seed, env_kwargs, record_video_path)
 
-            def make_env(env_id, idx, record_video, wrappers):
-                def _init():
-                    env = gymnasium.make(env_id, disable_env_checker=True, **env_kwargs)
-                    if record_video and idx == 0:
-                        env = RecordVideo(env, record_video_path)
-                    for wrapper in wrappers:
-                        env = wrapper(env)
-                    return env
+        elif _dm_control.is_dm_control_env(env_id):
+            env_factory = _dm_control.env_factory(seed, env_kwargs, record_video_path)
 
-                return _init
-
-        elif dm_control.is_dm_control_env(env_id):
-            pass
+        wrappers = []
         wrappers.append(lambda x: TimeLimit(x, max_episode_steps=max_episode_steps))
 
         # create a vector env parallelized across CPUs with the given timelimit and auto-reset
-        # env: VectorEnv = gymnasium.vector.make(env_id, num_envs=num_envs, wrappers=wrappers, disable_env_checker=True)
         vector_env_cls = AsyncVectorEnv
         if num_envs == 1:
             vector_env_cls = SyncVectorEnv
         env: VectorEnv = vector_env_cls(
-            [make_env(env_id, idx, record_video=record_video_path is not None, wrappers=wrappers) for idx in range(num_envs)]
+            [env_factory(env_id, idx, record_video=record_video_path is not None, wrappers=wrappers) for idx in range(num_envs)]
         )
         obs_space = env.single_observation_space
         act_space = env.single_action_space

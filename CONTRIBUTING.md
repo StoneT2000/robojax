@@ -14,3 +14,11 @@ Install it and set it up by running
 ```
 pre-commit
 ```
+
+To test on different gym environments, to ensure no conflicts different conda envs are recommended. First run
+
+```
+conda env create -n "robojax_dmc" -f environment.yml
+```
+
+Then run #TODO

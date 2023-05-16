@@ -38,10 +38,10 @@ dependencies:
     - optax
 
     # Simulators
-    - mujoco-py<2.2,>=2.1
-    - gymnax
-    - brax
-    - dm_control
+    # - mujoco-py<2.2,>=2.1
+    # - gymnax
+    # - brax
+    # - dm_control
 
     # Video generation
     - moviepy
