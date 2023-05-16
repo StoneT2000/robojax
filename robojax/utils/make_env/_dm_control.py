@@ -1,13 +1,16 @@
 from gymnasium.wrappers import RecordVideo, TimeLimit
 
-from robojax.wrappers._dm_control import DMContolEnv
+try:
+    from robojax.wrappers._dm_control import DMContolEnv
+except ImportError:
+    pass
 
 
 def is_dm_control_env(env_id: str):
     try:
         from dm_control import suite
-    except:
-        return False
+    except ImportError:
+        pass
     domain_name, task_name = env_id.split("-")
     return (domain_name, task_name) in suite.BENCHMARKING
 

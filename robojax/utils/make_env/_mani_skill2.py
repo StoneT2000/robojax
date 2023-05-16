@@ -5,14 +5,14 @@ try:
     import mani_skill2.envs  # NOQA
 
     import robojax.wrappers._mani_skill2 as ms2wrappers
-except:
+except ImportError:
     pass
 
 
 def is_mani_skill2_env(env_id: str):
     try:
         import mani_skill2.envs  # NOQA
-    except:
+    except ImportError:
         return False
     from mani_skill2.utils.registration import REGISTERED_ENVS
 
