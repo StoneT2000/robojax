@@ -1,4 +1,5 @@
-from gymnasium.wrappers import RecordVideo, TimeLimit
+from gymnasium.wrappers import RecordVideo
+
 
 try:
     from robojax.wrappers._dm_control import DMContolEnv
@@ -29,14 +30,3 @@ def env_factory(env_id, idx, seed, env_kwargs=dict(), record_video_path: str = N
         return env
 
     return _init
-
-
-wrappers = []
-wrappers.append(lambda x: TimeLimit(x, max_episode_steps=10))
-env = env_factory("cartpole-swingup", 0, 0, record_video_path="videos", wrappers=wrappers)()
-env.reset(seed=0)
-while True:
-    o, r, terminated, truncated, info = env.step(env.action_space.sample())
-    if terminated or truncated:
-        env.reset()
-    env.render()

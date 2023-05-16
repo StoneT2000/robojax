@@ -137,6 +137,9 @@ class DMContolEnv(gym.Env):
         self._observation_space.seed(seed)
 
     def step(self, action):
+        action = np.clip(
+            action, -1, 1
+        )  # TODO - temp fix for when using tanh bijector from tfp/distrax sometimes values are < -1
         assert self._norm_action_space.contains(action)
         action = self._convert_action(action)
         assert self._true_action_space.contains(action)

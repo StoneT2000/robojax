@@ -85,22 +85,22 @@ def make_env(
         act_space = env.action_space()
     else:
 
-        def env_factory(env_id, idx, record_video, wrappers):
+        def env_factory(env_id, idx, seed, record_video_path, env_kwargs, wrappers=[]):
             def _init():
                 env = gymnasium.make(env_id, disable_env_checker=True, **env_kwargs)
                 for wrapper in wrappers:
                     env = wrapper(env)
-                if record_video and idx == 0:
+                if record_video_path is not None and idx == 0:
                     env = RecordVideo(env, record_video_path, episode_trigger=lambda x: True)
                 return env
 
             return _init
 
         if _mani_skill2.is_mani_skill2_env(env_id):
-            env_factory = _mani_skill2.env_factory(seed, env_kwargs, record_video_path)
+            env_factory = _mani_skill2.env_factory
 
         elif _dm_control.is_dm_control_env(env_id):
-            env_factory = _dm_control.env_factory(seed, env_kwargs, record_video_path)
+            env_factory = _dm_control.env_factory
 
         wrappers = []
         wrappers.append(lambda x: TimeLimit(x, max_episode_steps=max_episode_steps))
@@ -110,7 +110,12 @@ def make_env(
         if num_envs == 1:
             vector_env_cls = SyncVectorEnv
         env: VectorEnv = vector_env_cls(
-            [env_factory(env_id, idx, record_video=record_video_path is not None, wrappers=wrappers) for idx in range(num_envs)]
+            [
+                env_factory(
+                    env_id, idx, seed=seed, env_kwargs=env_kwargs, record_video_path=record_video_path, wrappers=wrappers
+                )
+                for idx in range(num_envs)
+            ]
         )
         obs_space = env.single_observation_space
         act_space = env.single_action_space

@@ -1,7 +1,7 @@
 # Package ######################################################################
 
 [build-system]
-requires = ["setuptools >= 61.0.0"]
+requires = ["setuptools >= 62.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -29,6 +29,7 @@ dependencies = [
 
     # RL
     "gymnasium",
+    "gymnax",
 
     # Jax Related
     "chex",
@@ -41,6 +42,7 @@ dependencies = [
 
     # Exp tracking
     "tensorboard",
+    "tensorboardX",
     "wandb",
     "omegaconf",
 
@@ -74,7 +76,7 @@ Repository = "https://github.com/StoneT2000/robojax"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["gymnasium", "gymnasium.*"]
+include = ["robojax", "robojax.*"]
 
 # [tool.setuptools.package-data]
 
