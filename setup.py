@@ -1,20 +1,19 @@
-import os
-
 from setuptools import setup
 
 
-def read(fname):
-    return open(os.path.join(os.path.dirname(__file__), fname)).read()
+def get_description():
+    """Gets the description from the readme."""
+    with open("README.md") as fh:
+        long_description = ""
+        header_count = 0
+        for line in fh:
+            if line.startswith("##"):
+                header_count += 1
+            if header_count < 2:
+                long_description += line
+            else:
+                break
+    return long_description
 
 
-setup(
-    name="robojax",
-    version="0.0.1",
-    author="Stone Tao",
-    description="An RL library in Jax built for robotic learning",
-    license="MIT",
-    keywords=["reinforcement-learning", "machine-learning", "ai"],
-    url="http://packages.python.org/robojax",
-    packages=["robojax", "tests"],
-    long_description=read("README.md"),
-)
+setup(name="robojax", version="0.0.1", long_description=get_description())

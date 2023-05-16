@@ -12,3 +12,5 @@ imgui.ini
 demos
 
 external/isaacgym
+
+build/

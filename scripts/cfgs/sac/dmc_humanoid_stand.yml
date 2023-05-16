@@ -1,0 +1,62 @@
+seed: 0
+algo: sac
+
+# Environment configuration
+env:
+  env_id: "humanoid-stand"
+  num_envs: 1
+  max_episode_steps: 1000
+  jax_env: False
+  env_kwargs:
+    render_mode: "rgb_array"
+    width: 256
+    height: 256
+eval_env:
+  num_envs: 4
+  max_episode_steps: 1000
+
+sac:
+  num_seed_steps: 5000
+  replay_buffer_capacity: 10_000_000
+  batch_size: 1024
+  
+  steps_per_env: 1
+  grad_updates_per_step: 1
+  actor_update_freq: 1
+  target_update_freq: 2
+
+  eval_freq: 100_000
+  eval_steps: 1_000
+
+  log_freq: 1_000
+  save_freq: 100_000
+
+  learnable_temp: True
+  initial_temperature: 0.1
+
+network:
+  actor:
+    type: "mlp"
+    arch_cfg:
+      features: [1024, 1024]
+      output_activation: "relu"
+  critic:
+    type: "mlp"
+    arch_cfg:
+      features: [1024, 1024]
+      output_activation: "relu"
+
+train:
+  actor_lr: 1e-4
+  critic_lr: 1e-4
+  steps: 10_000_000
+
+logger:
+  tensorboard: True
+  wandb: False
+
+  workspace: "robojax_exps"
+  project_name: "robojax"
+  wandb_cfg:
+    tags: ["dm_control"]
+    group: "benchmark"

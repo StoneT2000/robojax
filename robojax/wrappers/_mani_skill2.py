@@ -1,9 +1,6 @@
 import gym
 import gymnasium
 import gymnasium.spaces as spaces
-
-# try:
-# from robojax.experimental.envs.peginsertion import PegInsertionSideEnv
 import numpy as np
 
 
