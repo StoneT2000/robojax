@@ -142,17 +142,20 @@ class DMContolEnv(gym.Env):
         assert self._true_action_space.contains(action)
         reward = 0
         info = {"internal_state": self._env.physics.get_state().copy()}
-
+        terminated, truncated = False, False  # Note that all DM control envs run for 1000 steps max per episode.
         for _ in range(self._frame_skip):
             time_step = self._env.step(action)
             reward += time_step.reward or 0
-            truncated = time_step.last()
-            if truncated:
+            terminated = time_step.last()  # terminated signal is both termination and truncation
+            if terminated:
                 break
         obs = self._get_obs(time_step)
         self.current_state = _flatten_obs(time_step.observation)
         info["discount"] = time_step.discount
-        terminated = False  # DM Control environments never terminate early
+        if terminated and time_step.discount != 0:
+            # if discount is not 0 and episode terminated, this is a truncation
+            truncated = True
+            terminated = False
         return obs, reward, terminated, truncated, info
 
     def reset(self, seed: int = None, options=dict()):
