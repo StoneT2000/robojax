@@ -4,7 +4,7 @@ algo: sac
 # Environment configuration
 env:
   env_id: "humanoid-stand"
-  num_envs: 4
+  num_envs: 1
   max_episode_steps: 1000
   jax_env: False
   env_kwargs:
@@ -16,12 +16,14 @@ eval_env:
   max_episode_steps: 1000
 
 sac:
-  num_seed_steps: 2048
-  replay_buffer_capacity: 1_000_000
-  batch_size: 256
+  num_seed_steps: 5000
+  replay_buffer_capacity: 10_000_000
+  batch_size: 1024
   
-  steps_per_env: 4
-  grad_updates_per_step: 16
+  steps_per_env: 1
+  grad_updates_per_step: 1
+  actor_update_freq: 1
+  target_update_freq: 2
 
   eval_freq: 100_000
   eval_steps: 1_000
@@ -30,24 +32,24 @@ sac:
   save_freq: 100_000
 
   learnable_temp: True
-  initial_temperature: 1.0
+  initial_temperature: 0.1
 
 network:
   actor:
     type: "mlp"
     arch_cfg:
-      features: [128, 128, 128]
+      features: [1024, 1024]
       output_activation: "relu"
   critic:
     type: "mlp"
     arch_cfg:
-      features: [128, 128, 128]
+      features: [1024, 1024]
       output_activation: "relu"
 
 train:
-  actor_lr: 3e-4
-  critic_lr: 3e-4
-  steps: 1_000_000
+  actor_lr: 1e-4
+  critic_lr: 1e-4
+  steps: 10_000_000
 
 logger:
   tensorboard: True
