@@ -10,6 +10,7 @@ from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv, VectorEnv
 from gymnasium.wrappers import RecordVideo, TimeLimit
 from omegaconf import OmegaConf
 
+import robojax.utils.make_env._brax as _brax
 import robojax.utils.make_env._dm_control as _dm_control
 import robojax.utils.make_env._mani_skill2 as _mani_skill2
 
@@ -57,27 +58,20 @@ def make_env(
     """
     Utility function to create a jax/non-jax based environment given an env_id
     """
-    is_brax_env = False
-    is_gymnax_env = False
     if jax_env:
         import gymnax
-        from brax import envs
 
-        from robojax.wrappers._brax import BraxGymWrapper
+        # from brax import envs
         from robojax.wrappers.gymnax import GymnaxWrapper
 
-        if env_id in gymnax.registered_envs:
-            is_gymnax_env = True
-        elif env_id in envs._envs:
-            is_brax_env = True
-        else:
-            raise ValueError(f"Could not find environment {env_id} in gymnax or brax")
-        if is_gymnax_env:
+        if _brax.is_brax_env(env_id):
+            env = _brax.env_factory(
+                env_id=env_id, env_kwargs=env_kwargs, record_video_path=None, max_episode_steps=max_episode_steps
+            )
+        elif env_id in gymnax.registered_envs:
             env, env_params = gymnax.make(env_id)
             env = GymnaxWrapper(env, env_params, max_episode_steps=max_episode_steps, auto_reset=True)
-        elif is_brax_env:
-            env = envs.create(env_id, episode_length=None, auto_reset=False)
-            env = BraxGymWrapper(env, max_episode_steps=max_episode_steps, auto_reset=True)
+            raise ValueError(f"Could not find environment {env_id} in gymnax or brax")
         # sample_obs = #env.reset(jax.random.PRNGKey(0))[0]
         sample_acts = env.action_space().sample(jax.random.PRNGKey(0))
         obs_space = env.observation_space()
