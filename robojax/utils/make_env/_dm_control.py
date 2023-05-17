@@ -11,7 +11,7 @@ def is_dm_control_env(env_id: str):
     try:
         from dm_control import suite
     except ImportError:
-        pass
+        return False
     domain_name, task_name = env_id.split("-")
     return (domain_name, task_name) in suite.BENCHMARKING
 

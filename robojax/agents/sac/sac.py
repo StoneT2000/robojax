@@ -264,7 +264,7 @@ class SAC(BasePolicy):
                 final_infos = None  # TODO handle final infos in jax envs
 
             # move data to numpy
-            data: DefaultTimeStep = jax.tree_map(lambda x: np.array(x)[0], data)
+            data: DefaultTimeStep = jax.tree_map(lambda x: np.array(x)[:, 0], data)
             terminations = data.terminated
             truncations = data.truncated
             dones = terminations | truncations

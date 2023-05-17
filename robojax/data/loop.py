@@ -16,6 +16,7 @@ from flax import struct
 
 from robojax.utils import tools
 
+
 EnvObs = TypeVar("EnvObs")
 EnvState = TypeVar("EnvState")
 EnvAction = TypeVar("EnvAction")
@@ -193,6 +194,8 @@ class GymLoop(BaseEnvLoop):
         # stack data
         for k in data:
             data[k] = np.stack(data[k])
+            if k != "final_info":
+                data[k] = data[k].reshape(self.num_envs, steps_per_env, -1)  # (num_envs, steps, D)
 
         loop_state = EnvLoopState(env_obs=next_observations, env_state=None, ep_ret=ep_returns, ep_len=ep_lengths)
         return data, loop_state
