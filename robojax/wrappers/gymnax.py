@@ -1,5 +1,5 @@
 """
-Wrappers for Gymnax
+Wrappers for Gymnax to make them into the Gymnasium API with added state
 """
 
 from typing import Optional
@@ -13,10 +13,10 @@ from gymnax.environments.environment import Environment, EnvParams, EnvState
 
 class GymnaxWrapper(gym.Env):
     """
-    A wrapper that converts a Gymnax Env to one that follows Gym API with state
+    A wrapper that converts a Gymnax Env to one that follows Gymnasium API with state
 
     Note that Gymnax envs auto reset themselves. They call their own reset function every step and return the new obs and state
-    so there are no terminal observations
+    so there are no terminal observations by default so this wrapper adds that.
     """
 
     def __init__(

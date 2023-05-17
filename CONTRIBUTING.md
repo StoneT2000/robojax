@@ -6,7 +6,7 @@ Thanks for contributing to Robojax! To get started make sure to setup your devel
 git clone https://github.com/StoneT2000/robojax
 conda create -n "robojax" "python==3.9"
 conda activate robojax
-pip install -e .[dev]
+pip install -e .[dev] --config-settings editable_mode=strict
 ```
 
 Jax must be separately installed. To install jax with cuda support, follow the instructions on their [README](https://github.com/google/jax).
