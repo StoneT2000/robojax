@@ -37,6 +37,7 @@ class GymnaxWrapper(gym.Env):
         self.metadata = {
             "render.modes": ["rgb_array"],
         }
+        self.render_mode = "rgb_array"
         self.backend = backend
         self.env_params = env_params
         self._observation_space = env.observation_space(env_params)
@@ -102,14 +103,13 @@ class GymnaxToVectorGymWrapper(gym.vector.VectorEnv):
         Args:
             env: Gymnax Environment instance
             num_envs: Desired number of environments to run in parallel
-            params: If provided, gymnax EnvParams for environment (otherwise uses default)
             seed: If provided, seed for JAX PRNG (otherwise picks 0)
         """
         self._env = env
         self.num_envs = num_envs
         self.is_vector_env = True
         self.closed = False
-        self.viewer = None
+        self.render_mode = "rgb_array"
 
         # Jit-of-vmap is faster than vmap-of-jit. Map over leading axis of all but env params
         self._env.reset = jax.jit(jax.vmap(self._env.reset))

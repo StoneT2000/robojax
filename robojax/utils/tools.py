@@ -1,9 +1,14 @@
+import jax
 import numpy as np
 from chex import Array
 
 
-def any_to_numpy(x: Array):
+def any_to_np(x: Array):
     return np.array(x)
+
+
+def is_jax_arr(x: Array):
+    return isinstance(x, jax.numpy.ndarray)
 
 
 def copy_arr(x: Array):

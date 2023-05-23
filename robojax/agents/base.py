@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from chex import PRNGKey
+from gymnasium.wrappers.record_video import RecordVideo
 
 from robojax.data.loop import (
     BaseEnvLoop,
@@ -20,7 +21,6 @@ from robojax.data.loop import (
 from robojax.logger.logger import Logger, LoggerConfig
 from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
-from robojax.wrappers._gymnax import GymnaxToVectorGymWrapper
 
 
 class BasePolicy:
@@ -71,9 +71,10 @@ class BasePolicy:
         if eval_env is not None:
             self.eval_env = eval_env
             use_jax_loop = self.jax_env
-            # in order to record videos, we must use the GymLoop which saves on memory as it is costly to save all rgb_arrays
-            if isinstance(eval_env, GymnaxToVectorGymWrapper):
+            # in order to record videos, we must use the GymLoop which does not use GPU memory as it is costly to save all rgb_arrays
+            if isinstance(eval_env, RecordVideo):
                 use_jax_loop = False
+            print(eval_env, use_jax_loop)
             if use_jax_loop:
                 self.eval_loop = JaxLoop(
                     eval_env.reset,
@@ -142,9 +143,11 @@ class BasePolicy:
             apply_fn=apply_fn,
             steps_per_env=steps_per_env,
         )
+        # TODO handle jax env infos
         if not self.jax_env:
             final_infos = eval_buffer["final_info"]
             del eval_buffer["final_info"]
+        if isinstance(eval_buffer, dict):
             eval_buffer = DefaultTimeStep(**eval_buffer)
         eval_buffer: DefaultTimeStep = jax.tree_map(lambda x: np.array(x), eval_buffer)
         eval_episode_ends = eval_buffer.truncated | eval_buffer.terminated
