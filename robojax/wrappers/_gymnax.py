@@ -31,7 +31,7 @@ class GymnaxWrapper(gym.Env):
         self.auto_reset = auto_reset
         self.max_episode_steps = max_episode_steps
         self.metadata = {
-            "render.modes": ["human", "rgb_array"],
+            "render.modes": ["rgb_array"],
         }
         self.backend = backend
 
@@ -69,11 +69,6 @@ class GymnaxWrapper(gym.Env):
 
     def reset(self, rng_reset_key: PRNGKey):
         obs, state = self._reset(rng_reset_key)
-        # TODO verify keeping track of a first state is faster than resetting any time.
-        state: EnvState
-        # state.info["first_state"] = state
-        # state.info["first_obs"] = obs
-        # state.info["steps"] = 0
         return obs, state, {}
 
     def step(self, rng_key: PRNGKey, state: EnvState, action: Array):
@@ -81,22 +76,8 @@ class GymnaxWrapper(gym.Env):
         obs, state, reward, done, info = self._step(rng_key, state, action)
         # steps = state.info["steps"] + 1
         truncated = False  # shouldn't always be false but at the moment gymnax does not support proper gymnasium api
-        # truncated = jnp.where(steps >= self.max_episode_steps, True, False)
         terminated = done != 0.0
-
-        # info["final_observation"] = obs
-        # info["_final_observation"] = done
-
-        # gymnax_state = jax.tree_map(
-        #     lambda x, y: jnp.where(done, x, y), state.info["first_state"], state.state
-        # )
-        # obs = jnp.where(done, state.info["first_obs"], obs)
-        # steps = jnp.where(done, 0, steps)
-        # state.info["steps"] = steps
-        # state = state.replace(state=gymnax_state, obs=obs)
-
         return obs, state, reward, terminated, truncated, info
 
-    def render(self, state: EnvState, mode="human"):
-        # TODO
-        raise NotImplementedError()
+    def render(self, state: EnvState):
+        return self._env.render(state)

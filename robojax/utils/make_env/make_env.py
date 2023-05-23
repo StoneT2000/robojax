@@ -62,7 +62,7 @@ def make_env(
         import gymnax
 
         # from brax import envs
-        from robojax.wrappers.gymnax import GymnaxWrapper
+        from robojax.wrappers._gymnax import GymnaxWrapper
 
         if _brax.is_brax_env(env_id):
             env = _brax.env_factory(
