@@ -20,6 +20,7 @@ from robojax.data.loop import (
 from robojax.logger.logger import Logger, LoggerConfig
 from robojax.models.model import Params
 from robojax.utils.spaces import get_action_dim, get_obs_shape
+from robojax.wrappers._gymnax import GymnaxToVectorGymWrapper
 
 
 class BasePolicy:
@@ -69,7 +70,11 @@ class BasePolicy:
         self.eval_loop: BaseEnvLoop = None
         if eval_env is not None:
             self.eval_env = eval_env
-            if self.jax_env:
+            use_jax_loop = self.jax_env
+            # in order to record videos, we must use the GymLoop which saves on memory as it is costly to save all rgb_arrays
+            if isinstance(eval_env, GymnaxToVectorGymWrapper):
+                use_jax_loop = False
+            if use_jax_loop:
                 self.eval_loop = JaxLoop(
                     eval_env.reset,
                     eval_env.step,
