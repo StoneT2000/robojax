@@ -109,9 +109,10 @@ class GymnaxToVectorGymWrapper(gym.vector.VectorEnv):
         self.num_envs = num_envs
         self.is_vector_env = True
         self.closed = False
+        self.viewer = None
         self.render_mode = "rgb_array"
 
-        # Jit-of-vmap is faster than vmap-of-jit. Map over leading axis of all but env params
+        # Jit-of-vmap is faster than vmap-of-jit.
         self._env.reset = jax.jit(jax.vmap(self._env.reset))
         self._env.step = jax.jit(
             jax.vmap(
