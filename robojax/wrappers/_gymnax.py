@@ -34,6 +34,7 @@ class GymnaxWrapper(gym.Env):
         self._env = env
         self.auto_reset = auto_reset
         self.max_episode_steps = max_episode_steps
+        env_params = env_params.replace(max_steps_in_episode=max_episode_steps)
         self.metadata = {
             "render.modes": ["rgb_array"],
         }
