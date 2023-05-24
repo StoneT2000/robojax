@@ -9,7 +9,7 @@ import numpy as np
 from gymnax.experimental import RolloutWrapper
 
 from robojax.data import JaxLoop
-from robojax.wrappers.gymnax import GymnaxWrapper
+from robojax.wrappers._gymnax import GymnaxWrapper
 
 
 def speed_gymnax_random(env_name, num_env_steps, num_envs, rng, env_kwargs, max_episode_steps):

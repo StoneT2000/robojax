@@ -137,7 +137,7 @@ class GymLoop(BaseEnvLoop):
         for t in range(steps_per_env):
             rng_key, rng_fn_key = jax.random.split(rng_key)
             actions, aux = apply_fn(rng_fn_key, params, observations)
-            actions = tools.any_to_numpy(actions)
+            actions = tools.any_to_np(actions)
             (
                 next_observations,
                 rewards,
@@ -146,16 +146,21 @@ class GymLoop(BaseEnvLoop):
                 infos,
             ) = self.env.step(actions)
             ep_lengths = ep_lengths + 1
-            ep_returns = ep_returns + rewards
+            ep_returns = ep_returns + tools.any_to_np(rewards)
 
             # determine true next observations s_{t+1} if some episodes truncated and not s_0 for terminated or truncated episodes
             true_next_observations = next_observations
-            if "final_observation" in infos:  # TODO with wrapper to replace with next_observation key
-                true_next_observations = next_observations.copy()
-                for idx, (terminated, truncated) in enumerate(zip(terminations, truncations)):
-                    final_obs = infos["final_observation"][idx]
-                    if final_obs is not None:
-                        true_next_observations[idx] = final_obs
+            if tools.is_jax_arr(true_next_observations):
+                # for envs returning jax arrays, we expect consistency and a final_observation/next_obs to always be returned
+                true_next_observations = infos["final_observation"]
+            else:
+                if "final_observation" in infos:  # TODO with wrapper to replace with next_observation key
+                    true_next_observations = next_observations.copy()
+                    for idx, (terminated, truncated) in enumerate(zip(terminations, truncations)):
+                        final_obs = infos["final_observation"][idx]
+                        if final_obs is not None:
+                            true_next_observations[idx] = final_obs
+
             if self.rollout_callback is not None:
                 rb = self.rollout_callback(
                     action=actions,  # a_{t}
@@ -189,6 +194,7 @@ class GymLoop(BaseEnvLoop):
                 data[k].append(v)
             observations = next_observations
             dones = terminations | truncations
+
             ep_returns[dones] = 0
             ep_lengths[dones] = 0
         # stack data

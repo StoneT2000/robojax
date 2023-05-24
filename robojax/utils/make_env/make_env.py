@@ -62,21 +62,35 @@ def make_env(
         import gymnax
 
         # from brax import envs
-        from robojax.wrappers.gymnax import GymnaxWrapper
+        from robojax.wrappers._gymnax import GymnaxToVectorGymWrapper, GymnaxWrapper
 
         if _brax.is_brax_env(env_id):
             env = _brax.env_factory(
-                env_id=env_id, env_kwargs=env_kwargs, record_video_path=None, max_episode_steps=max_episode_steps
-            )
+                env_id=env_id,
+                env_kwargs=env_kwargs,
+                record_video_path=None,
+                max_episode_steps=max_episode_steps,
+            )()
         elif env_id in gymnax.registered_envs:
             env, env_params = gymnax.make(env_id)
             env = GymnaxWrapper(env, env_params, max_episode_steps=max_episode_steps, auto_reset=True)
+        else:
             raise ValueError(f"Could not find environment {env_id} in gymnax or brax")
-        # sample_obs = #env.reset(jax.random.PRNGKey(0))[0]
-        sample_acts = env.action_space().sample(jax.random.PRNGKey(0))
-        obs_space = env.observation_space()
-        sample_obs = obs_space.sample(jax.random.PRNGKey(0))
-        act_space = env.action_space()
+
+        if record_video_path is not None:
+            print(f"Creating Jax-based env {env_id} as a normal VectorEnv for video recording")
+            env = GymnaxToVectorGymWrapper(env, num_envs=num_envs)
+            env = RecordVideo(env, video_folder=record_video_path, episode_trigger=lambda x: True)
+            obs_space = env.single_observation_space
+            act_space = env.single_action_space
+            env.reset(seed=seed)
+            sample_obs = obs_space.sample()
+            sample_acts = act_space.sample()
+        else:
+            sample_acts = env.action_space().sample(jax.random.PRNGKey(0))
+            obs_space = env.observation_space()
+            sample_obs = obs_space.sample(jax.random.PRNGKey(0))
+            act_space = env.action_space()
     else:
 
         def env_factory(env_id, idx, seed, record_video_path, env_kwargs, wrappers=[]):
@@ -106,7 +120,12 @@ def make_env(
         env: VectorEnv = vector_env_cls(
             [
                 env_factory(
-                    env_id, idx, seed=seed, env_kwargs=env_kwargs, record_video_path=record_video_path, wrappers=wrappers
+                    env_id,
+                    idx,
+                    seed=seed,
+                    env_kwargs=env_kwargs,
+                    record_video_path=record_video_path,
+                    wrappers=wrappers,
                 )
                 for idx in range(num_envs)
             ]
