@@ -54,6 +54,7 @@ def make_env(
     seed: Optional[int] = 0,
     record_video_path: str = None,
     env_kwargs=dict(),
+    wrappers=[],
 ):
     """
     Utility function to create a jax/non-jax based environment given an env_id
@@ -76,7 +77,8 @@ def make_env(
             env = GymnaxWrapper(env, env_params, max_episode_steps=max_episode_steps, auto_reset=True)
         else:
             raise ValueError(f"Could not find environment {env_id} in gymnax or brax")
-
+        for wrapper in wrappers:
+            env = wrapper(env)
         if record_video_path is not None:
             print(f"Creating Jax-based env {env_id} as a normal VectorEnv for video recording")
             env = GymnaxToVectorGymWrapper(env, num_envs=num_envs)
@@ -110,7 +112,6 @@ def make_env(
         elif _dm_control.is_dm_control_env(env_id):
             env_factory = _dm_control.env_factory
 
-        wrappers = []
         wrappers.append(lambda x: TimeLimit(x, max_episode_steps=max_episode_steps))
 
         # create a vector env parallelized across CPUs with the given timelimit and auto-reset

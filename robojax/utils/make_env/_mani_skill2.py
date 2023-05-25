@@ -1,9 +1,9 @@
 import gymnasium as gym
-from gymnasium.wrappers import RecordVideo
 
 
 try:
     import mani_skill2.envs  # NOQA
+    from mani_skill2.utils.wrappers import RecordEpisode
 
     import robojax.wrappers._mani_skill2 as ms2wrappers
 except ImportError:
@@ -17,7 +17,7 @@ def is_mani_skill2_env(env_id: str):
         return False
     from mani_skill2.utils.registration import REGISTERED_ENVS
 
-    return env_id in REGISTERED_ENVS
+    return env_id in REGISTERED_ENVS or env_id in ["PickCube-v1", "PegInsertion-v1"]
 
 
 def env_factory(env_id: str, idx: int, seed: int, env_kwargs=dict(), record_video_path: str = None, wrappers=[]):
@@ -27,12 +27,12 @@ def env_factory(env_id: str, idx: int, seed: int, env_kwargs=dict(), record_vide
 
     def _init():
         env = gym.make(env_id, disable_env_checker=True, **env_kwargs)
+        if record_video_path is not None and idx == 0:
+            env = RecordEpisode(env, record_video_path, save_trajectory=False, info_on_video=True)
         for wrapper in internal_wrappers:
             env = wrapper(env)
         for wrapper in wrappers:
             env = wrapper(env)
-        if record_video_path is not None and idx == 0:
-            env = RecordVideo(env, record_video_path)
         return env
 
     return _init
