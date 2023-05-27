@@ -2,6 +2,7 @@ import gym
 import gymnasium
 import gymnasium.spaces as spaces
 import numpy as np
+from mani_skill2.envs.sapien_env import BaseEnv
 
 
 class ManiSkill2Wrapper(gymnasium.Wrapper):
@@ -22,8 +23,12 @@ class ManiSkill2Wrapper(gymnasium.Wrapper):
         )
 
     def reset(self, *, seed=None, options=None):
-        self.env.seed(seed)
-        obs = self.env.reset()
+        self.env: BaseEnv
+        if seed is not None:
+            self.env.seed(
+                seed
+            )  # this call is necessary as maniskill maintains a seed generator per episode that defaults to a fixed value unless seed
+        obs = self.env.reset(seed=seed)
         return obs, {}
 
     def step(self, action):
