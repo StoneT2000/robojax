@@ -3,9 +3,11 @@ import gymnasium as gym
 
 try:
     import mani_skill2.envs  # NOQA
-    from mani_skill2.utils.wrappers import RecordEpisode
 
     import robojax.wrappers._mani_skill2 as ms2wrappers
+
+    # from mani_skill2.utils.wrappers import RecordEpisode
+    from robojax.wrappers._mani_skill2_record_gymnasium import RecordEpisode
 except ImportError:
     pass
 
@@ -27,12 +29,12 @@ def env_factory(env_id: str, idx: int, seed: int, env_kwargs=dict(), record_vide
 
     def _init():
         env = gym.make(env_id, disable_env_checker=True, **env_kwargs)
-        if record_video_path is not None and idx == 0:
-            env = RecordEpisode(env, record_video_path, save_trajectory=False, info_on_video=True)
         for wrapper in internal_wrappers:
             env = wrapper(env)
         for wrapper in wrappers:
             env = wrapper(env)
+        if record_video_path is not None and idx == 0:
+            env = RecordEpisode(env, record_video_path, save_trajectory=False, info_on_video=True)
         return env
 
     return _init

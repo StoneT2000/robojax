@@ -5,8 +5,9 @@ import numpy as np
 
 
 class ManiSkill2Wrapper(gymnasium.Wrapper):
-    def __init__(self, env: gym.Env):
+    def __init__(self, env: gym.Env, render_mode: str = "rgb_array"):
         super().__init__(env)
+        self.wrapper_render_mode = render_mode
         self._action_space = spaces.Box(
             env.action_space.low,
             env.action_space.high,
@@ -30,6 +31,13 @@ class ManiSkill2Wrapper(gymnasium.Wrapper):
         terminated = done
         truncated = False
         return observation, reward, terminated, truncated, info
+
+    @property
+    def render_mode(self):
+        return self.wrapper_render_mode
+
+    def render(self):
+        return self.env.render(self.wrapper_render_mode)
 
 
 class PegInsertionSideStats(gymnasium.Wrapper):
