@@ -74,7 +74,6 @@ class BasePolicy:
             # in order to record videos, we must use the GymLoop which does not use GPU memory as it is costly to save all rgb_arrays
             if isinstance(eval_env, RecordVideo):
                 use_jax_loop = False
-            print(eval_env, use_jax_loop)
             if use_jax_loop:
                 self.eval_loop = JaxLoop(
                     eval_env.reset,
