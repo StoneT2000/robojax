@@ -22,10 +22,11 @@ def is_mani_skill2_env(env_id: str):
     return env_id in REGISTERED_ENVS or env_id in ["PickCube-v1", "PegInsertionSide-v1"]
 
 
-def env_factory(env_id: str, idx: int, seed: int, env_kwargs=dict(), record_video_path: str = None, wrappers=[]):
+def env_factory(env_id: str, idx: int, seed: int, env_kwargs=dict(), record_video_path: str = None, wrappers=[], render_mode="rgb_array"):
     internal_wrappers = []
-    internal_wrappers.append(lambda x: ms2wrappers.ManiSkill2Wrapper(x))
-    internal_wrappers.append(lambda x: ms2wrappers.ContinuousTaskWrapper(x))
+    internal_wrappers.append(lambda x: ms2wrappers.ManiSkill2Wrapper(x, render_mode=render_mode))
+    if "continuous_task" not in env_kwargs or env_kwargs["continuous_task"]:
+        internal_wrappers.append(lambda x: ms2wrappers.ContinuousTaskWrapper(x))
 
     def _init():
         env = gym.make(env_id, disable_env_checker=True, **env_kwargs)
