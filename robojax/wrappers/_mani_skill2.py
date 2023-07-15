@@ -96,6 +96,27 @@ class PegInsertionSideStats(gymnasium.Wrapper):
         return observation, reward, terminated, truncated, info
 
 
+class MS2Stats(gymnasium.Wrapper):
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        self.success_once = False
+
+    def reset(self, *, seed=None, options=None):
+        obs, info = super().reset(seed=seed, options=options)
+        self.success_once = False
+        return obs, info
+
+    def step(self, action):
+        observation, reward, terminated, truncated, info = super().step(action)
+        # add useful stats to aggregate
+        self.success_once = self.success_once | info["success"]
+        info["stats"] = dict(
+            success_at_end=int(info["success"]),
+            success=self.success_once,
+        )
+        return observation, reward, terminated, truncated, info
+
+
 class PickCubeStats(gymnasium.Wrapper):
     def __init__(self, env: gym.Env):
         super().__init__(env)
