@@ -122,6 +122,7 @@ class Logger:
             best_stats_cfg = {}
         self.tensorboard = tensorboard
         self.tb_writer = None
+        self.wandb_run = None
 
         self.start_step = 0
         self.last_log_step = 0
@@ -154,7 +155,7 @@ class Logger:
                 )
             else:
                 wandb_id = wb.util.generate_id()
-                wb.init(project=project_name, name=exp_name, id=wandb_id, **wandb_cfg)
+                self.wandb_run = wb.init(project=project_name, name=exp_name, id=wandb_id, **wandb_cfg)
                 cfg["wandb_id"] = wandb_id
         self.save_config(cfg)
 
@@ -316,7 +317,7 @@ class Logger:
                         self.tb_writer.add_scalar(name, scalar, self.start_step + step)
                     self.stats[name] = scalar
                 if self.wandb and not local_only:
-                    wb.log(data=key_vals, step=self.start_step + step)
+                    self.wandb_run.log(data=key_vals, step=self.start_step + step)
 
         return self.stats
 
