@@ -94,6 +94,8 @@ class BasePolicy:
             if logger_cfg.save_fn is None:
                 logger_cfg.save_fn = self.save
             self.logger = Logger.create_from_cfg(logger_cfg)
+        else:
+            self.logger = None
 
     def state_dict(self):
         """
@@ -155,8 +157,9 @@ class BasePolicy:
         stats_list = []
         if not self.jax_env:
             for info in final_infos:
-                if "stats" in info:
-                    stats_list.append(info["stats"])
+                if info is not None:
+                    if "stats" in info:
+                        stats_list.append(info["stats"])
         stats = defaultdict(list)
         {stats[key].append(sub[key]) for sub in stats_list for key in sub}
         return dict(eval_ep_rets=eval_ep_rets, eval_ep_lens=eval_ep_lens, stats=stats)

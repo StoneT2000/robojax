@@ -190,6 +190,8 @@ class GymLoop(BaseEnvLoop):
                 for info, keep in zip(infos["final_info"], infos["_final_info"]):
                     if keep:
                         data["final_info"].append(info)
+                    else:
+                        data["final_info"].append(None) # TEMP TODO
             for k, v in rb.items():
                 data[k].append(v)
             observations = next_observations
