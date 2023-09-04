@@ -40,47 +40,11 @@ class BasePolicy:
         """
         assert env is not None
         self.jax_env = jax_env
-        self.loop: BaseEnvLoop = None
-        if jax_env:
-            import gymnax.environments.environment
-
-            # TODO see when gymnax upgrades to gymnasium
-            self.env: gymnax.environments.environment.Environment = env
-            self.env_step: Callable[
-                [PRNGKey, EnvState, EnvAction],
-                Tuple[EnvObs, EnvState, float, bool, bool, Any],
-            ] = self.env.step
-            self.env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState, Any]] = self.env.reset
-
-            self.loop = JaxLoop(env_reset=self.env.reset, env_step=self.env.step, num_envs=num_envs)
-            self.observation_space = self.env.observation_space()
-            self.action_space = self.env.action_space()
-        else:
-            import gymnasium
-
-            self.env: gymnasium.vector.VectorEnv = env
-
-            self.loop = GymLoop(self.env, num_envs=num_envs)
-            self.observation_space = self.env.single_observation_space
-            self.action_space = self.env.single_action_space
+        self.num_envs = num_envs
+        self.num_eval_envs = num_eval_envs
+        self.setup_envs(env, eval_env)
         self.obs_shape = get_obs_shape(self.observation_space)
         self.action_dim = get_action_dim(self.action_space)
-
-        # setup evaluation loop
-        self.eval_loop: BaseEnvLoop = None
-        if eval_env is not None:
-            self.eval_env = eval_env
-            use_jax_loop = self.jax_env
-            # in order to record videos, we must use the GymLoop which does not use GPU memory as it is costly to save all rgb_arrays
-            if isinstance(eval_env, RecordVideo):
-                use_jax_loop = False
-            if use_jax_loop:
-                self.eval_loop = JaxLoop(
-                    eval_env.reset,
-                    eval_env.step,
-                )
-            else:
-                self.eval_loop = GymLoop(eval_env, num_eval_envs)
 
         # auto generate an experiment name based on the environment name and current time
         if logger_cfg is not None:
@@ -96,6 +60,47 @@ class BasePolicy:
             self.logger = Logger.create_from_cfg(logger_cfg)
         else:
             self.logger = None
+
+    def setup_envs(self, env, eval_env=None):
+        self.loop: BaseEnvLoop = None
+        if self.jax_env:
+            import gymnax.environments.environment
+
+            # TODO see when gymnax upgrades to gymnasium
+            self.env: gymnax.environments.environment.Environment = env
+            self.env_step: Callable[
+                [PRNGKey, EnvState, EnvAction],
+                Tuple[EnvObs, EnvState, float, bool, bool, Any],
+            ] = self.env.step
+            self.env_reset: Callable[[PRNGKey], Tuple[EnvObs, EnvState, Any]] = self.env.reset
+
+            self.loop = JaxLoop(env_reset=self.env.reset, env_step=self.env.step, num_envs=self.num_envs)
+            self.observation_space = self.env.observation_space()
+            self.action_space = self.env.action_space()
+        else:
+            import gymnasium
+
+            self.env: gymnasium.vector.VectorEnv = env
+
+            self.loop = GymLoop(self.env, num_envs=self.num_envs)
+            self.observation_space = self.env.single_observation_space
+            self.action_space = self.env.single_action_space
+
+        # setup evaluation loop
+        self.eval_loop: BaseEnvLoop = None
+        if eval_env is not None:
+            self.eval_env = eval_env
+            use_jax_loop = self.jax_env
+            # in order to record videos, we must use the GymLoop which does not use GPU memory as it is costly to save all rgb_arrays
+            if isinstance(eval_env, RecordVideo):
+                use_jax_loop = False
+            if use_jax_loop:
+                self.eval_loop = JaxLoop(
+                    eval_env.reset,
+                    eval_env.step,
+                )
+            else:
+                self.eval_loop = GymLoop(eval_env, self.num_eval_envs)
 
     def state_dict(self):
         """
